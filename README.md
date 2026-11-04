@@ -5,148 +5,109 @@
   </picture>
 </p>
 
-# Trowl
 
-**See what actually shipped.** Trowl is an offline, static analyser for embedded Linux
-images. Point it at a firmware image, and optionally the SBOM your build produced, and it tells
-you:
+Trowl is a static security analyser for embedded Linux images. It unpacks a rootfs to detect hardening gaps, known CVEs, and hidden secrets to 
+provide a comprehensive post-build security posture analysis. 
 
-- **where the image's hardening falls short**: binaries built without PIE, NX, RELRO, stack
-  canaries or `_FORTIFY_SOURCE`, and writable mounts missing `nodev`/`nosuid`/`noexec`
-- **what secrets were left in it**: private keys, SSH host keys baked into the image, and cloud
-  or CI tokens
-- **where the SBOM and the image disagree**: packages the SBOM lists but the image doesn't
-  contain, and the CVEs attached to components that never reach the device
+When provided with an SBOM, it can also perform dependency analysis.
 
-The results come as a JSON report for machines and a single self-contained HTML page for people,
-including an interactive SBOM dependency graph.
 
-trowl never boots, mounts or executes the image. It needs no root, no network and no device,
-so it runs the same on a laptop as in a CI job.
+## What it checks
+- Hardening gaps (binaries, kernel, filesystems)
+- Secrets and private keys
+- Software-Bill-of-Materials (SBOM) analysis, including graph-based relationships and image discrepancies
+- Known CVEs
 
-> **Status:** early development (pass 1). Yocto / AGL images are the first target; Buildroot and
-> OpenWrt follow. Output formats may still change.
+
+## Currently supported
+- **Distro:** Yocto 
+- **Filesystems:** ext2/3/4, squashfs, tar, or an unpacked directory.
+- **Disk images:** `.wic` and other MBR/GPT images; one detected root filesystem is analysed (ext or squashfs partitions only; extended MBR partitions are skipped).
+- **Compression:** zstd, xz, gzip, bzip2.
+- **SBOMs:** SPDX 3.0 JSON-LD from Yocto, including `sbom-cve-check` output.
 
 ## Quick start
 
-```sh
-docker run --rm -p 8765:8765 -v "$PWD:/work" -v trowl-cache:/cache \
-  ghcr.io/corefense/trowl:latest \
-  scan core-image-minimal-qemux86-64.rootfs.ext4.zst \
-  --sbom core-image-minimal-qemux86-64.rootfs.sbom-cve-check.spdx.json \
-  -o report --serve
-```
-
-Each scan writes a static dashboard: `report/index.html` (one self-contained file) and
-`report/report.json` for your own tooling. With `--serve` the container then serves the folder at
-http://localhost:8765; without it, the scan just writes the files (the usual CI case). Open the
-HTML directly, or publish the folder on any static host (GitLab/GitHub Pages, an artifact browser,
-S3).
-
-During the scan the container fetches what it needs: the CISA KEV catalogue, EPSS scores, a check
-that each advisory link exists, and on first use the local model that writes the Overview summary
-(Qwen3 4B by default, about 2.5 GB, run on CPU with llama.cpp). All of it is cached in `/cache`; mount a
-volume there, as above, so later runs reuse it. `--no-network` skips the fetches.
-
-Without Docker:
+From a directory containing your image and SBOM:
 
 ```sh
-go install github.com/corefense/trowl/cmd/trowl@latest
-# needs debugfs (e2fsprogs), unsquashfs, zstd on PATH; llama.cpp's llama-server for the model
-trowl scan IMAGE [--sbom SBOM.spdx.json] [-o DIR] [--fail-on high] [--serve]
-                 [--kernel-config FILE] [--kernel-src DIR] [--kernel-policy FILE]
-                 [--model qwen3-4b|qwen3-1.7b] [--links open|all|none] [--no-network] [--cache-dir DIR]
-trowl unpack IMAGE DEST      # just extract the root filesystem
-trowl view [DIR]             # preview a report folder at http://127.0.0.1:8765 (no caching)
+docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  -p 127.0.0.1:8765:8765 -v "$PWD:/work" \
+  ghcr.io/corefense-security/trowl:latest \
+  scan <image>.ext4.zst --sbom <image>.spdx.json \
+  -o report --cache-dir /work/.trowl-cache --serve
 ```
 
-## Inputs
+Reports are saved under `report/index.html` and `report/report.json`.
 
-| Input | Supported |
-|---|---|
-| Root filesystem | ext2/3/4, squashfs, tar, or an already-unpacked directory |
-| Disk images | `.wic` and other MBR/GPT images; the partition that looks like a rootfs is analysed |
-| Compression | zstd, xz, gzip, bzip2 (detected from the file's contents, not its name) |
-| SBOM | SPDX 3.0 JSON-LD (Yocto `create-spdx`, including the `sbom-cve-check` variant) |
+HTML reports can be viewed independently of Trowl, either locally or through static hosting (GitHub Pages, Cloudflare Pages, S3).
 
-The image is unpacked with `debugfs`/`unsquashfs` in user space. Device nodes, and archive
-entries that would escape the output directory, are skipped.
+For example, serve the report locally using Python:
 
-## What it checks (pass 1)
+```sh
+python3 -m http.server 8765 --directory report
+```
 
-| Area | Check |
-|---|---|
-| Binaries | PIE, NX stack, RELRO (none / partial / full), stack protector, `_FORTIFY_SOURCE`, insecure RPATH/RUNPATH; CET (x86) and BTI/PAC (arm64) properties are shown in the report |
-| Secrets | PEM/OpenSSH/PuTTY private keys (encrypted vs not), SSH host keys baked into the image, AWS/GitHub/GitLab/Slack/Google tokens. Matches are redacted to a short preview plus a SHA-256 |
-| Mounts | `/etc/fstab`: missing `nodev`/`nosuid`/`noexec` on writable mounts, read-write root |
-| SBOM vs image | Each package's declared files (path and SHA-256) are checked against the image, so no package database is needed in the image. Packages are reported as present, changed, partial or absent; recipes as shipped or build-time only. CVEs attached to absent or build-only components are listed as VEX `component_not_present` candidates |
+Then open `http://localhost:8765` in your browser.
 
-The SBOM comparison works at package level. A package being absent says nothing about copies of
-its code that were statically linked or vendored into another package.
+## External data
+Trowl queries various resources both before and during a scan.
+- CISA KEV,
+- EPSS,
+- Advisories (NVD, CNA)
 
-## The dashboard
+## Local LLM usage (experimental)
 
-`index.html` is a static, offline dashboard built from the scan. It follows the viewer's light or
-dark preference and has a toggle to switch.
+We intend to run local LLM inferencing for a variety of use cases.
 
-- **Overview**: up to four key points on the image's security status, written by the local model
-  from this scan's results only; KPI tiles (fully hardened binaries, secrets, SBOM drift, CVEs not in
-  image), hardening coverage per protection and the SBOM-vs-image breakdown
-- **Filesystems**: the `/etc/fstab` mounts with their `ro`/`nodev`/`nosuid`/`noexec` flags, and every
-  private key, baked-in host key or token found, listed under the mount point that holds it
-- **Kernel**: the kernel config (read from `/boot/config-*`, or the copy embedded in the kernel
-  image) checked against trowl's baseline in `internal/checks/kconfig/baseline/`, per subsystem
-  (security, fs, mm, net) in two lists: attack surface reduction and hardening. Teams accept
-  deviations, with a required reason, or add their own checks with `--kernel-policy`
-- **Binary**: sortable hardening matrix for every executable and library
-- **SBOM**: an interactive workspace for recipes and packages
-  - nodes coloured by whether they reached the image and sized by file count, with a ring on
-    nodes that have open CVEs
-  - layered, radial and force layouts
-  - search with suggestions, status filters, and optional build-time recipes and build
-    dependencies
-  - click a node to highlight what it depends on (blue) and what requires it (orange), and to
-    open a detail panel with its relations, file differences, CVEs and identifiers
-  - a table view of the same data, and PNG export
-- **CVEs**: every CVE the SBOM attaches to a component, with its status from the SBOM
-  (unpatched, ignored, fixed), CVSS score and attack vector, whether its package ships or is
-  build-time only, and whether it is in CISA KEV. A CVE only stops mattering for the image when
-  none of the packages that carry it ship. Clicking a row opens the SBOM's description, EPSS and
-  verified NVD / OSV / CNA links
+- Impact summaries
+- Image and report diffing summaries
 
-## In CI
+### Supported models: 
+- Qwen 3-4B (default and preferred)
+- Qwen 3.5-4B
+- Qwen 3.5-9B 
 
-Scans are static: each run produces files and nothing needs to stay running. `--fail-on <severity>`
-exits with code 1 when any finding is at or above that severity. Keep the output folder as a
-build artifact, or publish it with Pages so every pipeline has a browsable dashboard.
-Ready-to-copy jobs:
+Model downloads are cached. `--no-network` disables feed and link requests but currently
+does not prevent an uncached model download.
 
-- GitHub Actions: [`ci/github-actions.example.yml`](ci/github-actions.example.yml)
-- GitLab CI: [`ci/gitlab-ci.example.yml`](ci/gitlab-ci.example.yml)
+Run `trowl scan --help` for kernel configuration, policy, model, and other options.
+
 
 ## Development
 
+Requires Go 1.23+, Node.js and npm. Image extraction uses `debugfs`,
+`unsquashfs`, and `zstd` as needed. Reading an rpm database uses `sqlite3`.
+
 ```sh
-cd ui && npm ci && npm run build && cd ..   # writes internal/report/ui/index.html (embedded by go build)
+cd ui && npm ci && npm run build && cd ..
 go build -o bin/trowl ./cmd/trowl
-bin/trowl scan path/to/rootfs -o /tmp/report
+bin/trowl scan path/to/rootfs -o report
 ```
 
-`go install` gives a binary without the dashboard unless the UI was built first; the release
-binaries and the container image always include it. The model runs through llama.cpp's
-`llama-server`, found on `PATH` or at `$TROWL_LLAMA_SERVER`.
-
-Layout: `cmd/trowl` (CLI), `internal/unpack` (image → directory), `internal/checks/` (one
-package per check family; the kernel baseline lists live in `internal/checks/kconfig/baseline/`),
-`internal/sbom` (SPDX 3.0 reader, SBOM-vs-image comparison, CVE rows), `internal/feeds` (KEV,
-EPSS, advisory links), `internal/llm` (local model), `internal/scan` (orchestration),
-`internal/report` (JSON + HTML), `ui/` (React + Cytoscape.js viewer, built into one HTML file).
+Build the UI before the Go binary to include the dashboard.
+The local summary additionally requires llama.cpp’s `llama-server`.
 
 ## Roadmap
+- CI Integration
+- Image and report diffing
+- License scanning
+- Terminal reporting
+- SBOM and VEX generation
+- Backport detection (Kernel CVEs)
+- Buildroot & OpenWrt support
 
-Next passes add more checks (accounts, enabled services, kernel config and command line,
-boot chain), and adapters for Buildroot and OpenWrt images.
+## Community
+
+Trowl is under active development, and some features do not yet have automated tests. Test coverage will be expanded as the project matures.
+
+Contributions and feedback are welcome.
+
+- [Open an issue](https://github.com/corefense-security/trowl/issues) for bugs or feature requests.
+- Include reproduction steps and sanitized examples.
+- Submit pull requests with a clear description of the changes.
 
 ## License
 
-Apache License 2.0. See [LICENSE](LICENSE).
+[Apache License 2.0](LICENSE).
