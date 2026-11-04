@@ -1,0 +1,9 @@
+- option: COMPAT_BRK
+  expect: n
+  why: Turns off heap (brk) randomisation for old binaries
+  ref: mainline
+- option: USERFAULTFD
+  expect: n
+  since: "4.3"
+  why: Lets unprivileged code stall kernel page faults, a common race-exploit aid (needed by CRIU and live migration)
+  ref: KSPP

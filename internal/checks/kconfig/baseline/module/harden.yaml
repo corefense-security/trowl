@@ -1,0 +1,10 @@
+- option: MODULE_SIG
+  expect: y
+  since: "3.7"
+  why: Checks the signature of every module the kernel loads
+  ref: KSPP
+- option: MODULE_SIG_FORCE
+  expect: y
+  since: "3.7"
+  why: Refuses to load modules without a valid signature
+  ref: KSPP

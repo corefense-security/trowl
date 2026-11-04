@@ -1,0 +1,8 @@
+.git
+bin
+ui/node_modules
+internal/report/ui/index.html
+tests
+*.img
+*.ext4*
+*.wic*

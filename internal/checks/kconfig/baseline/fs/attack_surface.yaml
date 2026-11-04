@@ -1,0 +1,8 @@
+- option: PROC_KCORE
+  expect: n
+  why: /proc/kcore exposes kernel memory as an ELF core file
+  ref: mainline
+- option: BINFMT_MISC
+  expect: n
+  why: Lets user-registered interpreters run arbitrary file formats
+  ref: KSPP

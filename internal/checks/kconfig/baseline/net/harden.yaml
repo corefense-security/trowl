@@ -1,0 +1,4 @@
+- option: SYN_COOKIES
+  expect: y
+  why: Keeps TCP accepting connections during a SYN flood
+  ref: mainline

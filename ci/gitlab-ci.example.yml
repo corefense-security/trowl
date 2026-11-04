@@ -1,0 +1,23 @@
+# Scan a firmware image and keep the static dashboard as an artifact.
+trowl:
+  stage: test
+  image:
+    name: ghcr.io/corefense/trowl:latest
+    entrypoint: [""]
+  script:
+    - trowl scan image.ext4.zst --sbom image.spdx.json -o trowl-report --fail-on high
+  artifacts:
+    when: always
+    expose_as: trowl dashboard
+    paths: [trowl-report/]
+
+# Optional: publish the latest dashboard from the default branch on GitLab Pages.
+pages:
+  stage: deploy
+  needs: [trowl]
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - mv trowl-report public
+  artifacts:
+    paths: [public]

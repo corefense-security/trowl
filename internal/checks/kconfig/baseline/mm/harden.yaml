@@ -1,0 +1,34 @@
+- option: SLAB_FREELIST_RANDOM
+  expect: y
+  why: Randomises slab freelist order, making heap layout harder to predict
+  ref: mainline
+- option: SLAB_FREELIST_HARDENED
+  expect: y
+  since: "4.14"
+  why: Obfuscates and checks slab freelist pointers against corruption
+  ref: mainline
+- option: SLAB_BUCKETS
+  expect: y
+  since: "6.11"
+  why: Separates user-controlled allocations from other kmalloc caches
+  ref: mainline
+- option: RANDOM_KMALLOC_CACHES
+  expect: y
+  since: "6.6"
+  why: Spreads kmalloc allocations over several caches to frustrate heap spraying
+  ref: mainline
+- option: SHUFFLE_PAGE_ALLOCATOR
+  expect: y
+  since: "5.2"
+  why: Randomises the page allocator's free lists
+  ref: mainline
+- option: DEFAULT_MMAP_MIN_ADDR
+  expect: {min: 65536}
+  arch: [x86]
+  why: Keeps low virtual addresses unmappable, so NULL-pointer bugs can't be exploited
+  ref: KSPP
+- option: DEFAULT_MMAP_MIN_ADDR
+  expect: {min: 32768}
+  arch: [arm64, arm]
+  why: Keeps low virtual addresses unmappable, so NULL-pointer bugs can't be exploited
+  ref: KSPP

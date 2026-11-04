@@ -1,0 +1,16 @@
+# Scan a firmware image and keep the static dashboard (index.html + report.json) as an artifact.
+name: image-scan
+on: [push]
+jobs:
+  trowl:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      # ... build or download your image and SBOM here ...
+      - name: Scan image
+        run: |
+          docker run --rm -v "$PWD:/work" ghcr.io/corefense/trowl:latest \
+            scan image.ext4.zst --sbom image.spdx.json -o trowl-report --fail-on high
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: trowl-report, path: trowl-report/ }

@@ -1,0 +1,43 @@
+- option: HARDENED_USERCOPY
+  expect: y
+  since: "4.8"
+  why: Bounds-checks copies between kernel and user memory against the object's real size
+  ref: mainline
+- option: FORTIFY_SOURCE
+  expect: y
+  since: "4.13"
+  why: Compile- and run-time bounds checks on kernel string and memory functions
+  ref: mainline
+- option: LIST_HARDENED
+  expect: y
+  since: "6.6"
+  why: Detects corrupted linked-list pointers before they are followed
+  ref: mainline
+- option: INIT_ON_ALLOC_DEFAULT_ON
+  expect: y
+  since: "5.3"
+  why: Zeroes heap and page allocations, so stale data can't leak through new objects
+  ref: mainline
+- option: INIT_ON_FREE_DEFAULT_ON
+  expect: y
+  since: "5.3"
+  why: Wipes memory when freed, shrinking use-after-free and info-leak windows
+  ref: mainline
+- option: INIT_STACK_ALL_ZERO
+  expect: y
+  since: "5.9"
+  why: Zero-initialises stack variables, removing uninitialised-stack leaks (needs compiler support)
+  ref: mainline
+- option: KSTACK_ERASE
+  expect: y
+  since: "6.17"
+  why: Clears the kernel stack on return to user space
+  ref: mainline
+- option: SECURITY_DMESG_RESTRICT
+  expect: y
+  why: Hides the kernel log from unprivileged users, who could read kernel addresses from it
+  ref: KSPP
+- option: SECURITY_YAMA
+  expect: y
+  why: Restricts ptrace to a process's own descendants by default
+  ref: KSPP
