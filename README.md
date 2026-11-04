@@ -6,8 +6,8 @@
 </p>
 
 
-Trowl is a static security analyser for embedded Linux images. It unpacks a rootfs to detect hardening gaps, known CVEs, and hidden secrets to 
-provide a comprehensive post-build security posture analysis. 
+Trowl is a static analyser for embedded Linux images. It unpacks a rootfs to detect hardening gaps, known CVEs, and hidden secrets to 
+provide a comprehensive post-build security analysis. 
 
 When provided with an SBOM, it can also perform dependency analysis.
 
@@ -53,13 +53,13 @@ Then open `http://localhost:8765` in your browser.
 
 ## External data
 Trowl queries various resources both before and during a scan.
-- CISA KEV,
-- EPSS,
+- CISA KEV
+- EPSS
 - Advisories (NVD, CNA)
 
 ## Local LLM usage (experimental)
 
-We intend to run local LLM inferencing for a variety of use cases.
+Trowl is experimenting local LLM inference for:
 
 - Impact summaries
 - Image and report diffing summaries
@@ -69,7 +69,7 @@ We intend to run local LLM inferencing for a variety of use cases.
 - Qwen 3.5-4B
 - Qwen 3.5-9B 
 
-Model downloads are cached. `--no-network` disables feed and link requests but currently
+Model downloads are cached. `--no-network` disables feed and link requests, but
 does not prevent an uncached model download.
 
 Run `trowl scan --help` for kernel configuration, policy, model, and other options.
@@ -77,17 +77,30 @@ Run `trowl scan --help` for kernel configuration, policy, model, and other optio
 
 ## Development
 
-Requires Go 1.23+, Node.js and npm. Image extraction uses `debugfs`,
-`unsquashfs`, and `zstd` as needed. Reading an rpm database uses `sqlite3`.
+### Local dependencies
+
+To build and run outside Docker on Debian or Ubuntu (x86-64), paste this into a terminal:
+
+```sh
+sudo apt-get update
+sudo apt-get install -y curl e2fsprogs squashfs-tools zstd sqlite3 nodejs npm
+curl -fsSL https://go.dev/dl/go1.23.0.linux-amd64.tar.gz | sudo tar -C /usr/local -xz
+export PATH="$PATH:/usr/local/go/bin:/usr/sbin"
+```
+
+The last line lasts for the current terminal; add it to `~/.profile` to keep it. It also makes `debugfs` findable, which Debian installs in `/usr/sbin`.
+
+The LLM scan summary is optional and needs llama.cpp's `llama-server` on `PATH`, or its path in `TROWL_LLAMA_SERVER`.
+
+### Build
+
+Build the UI first: without it `go build` still succeeds, but the binary has no dashboard report.
 
 ```sh
 cd ui && npm ci && npm run build && cd ..
 go build -o bin/trowl ./cmd/trowl
 bin/trowl scan path/to/rootfs -o report
 ```
-
-Build the UI before the Go binary to include the dashboard.
-The local summary additionally requires llama.cpp’s `llama-server`.
 
 ## Roadmap
 - CI Integration
