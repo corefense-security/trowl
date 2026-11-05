@@ -146,7 +146,12 @@ func enc(b *bytes.Buffer, v any, indent, level int, itemSep, keySep string) {
 	case uint64:
 		b.WriteString(strconv.FormatUint(x, 10))
 	case float64:
-		b.WriteString(Float(x))
+		// JSON has no Infinity or NaN, and one would make the whole report unreadable.
+		if math.IsNaN(x) || math.IsInf(x, 0) {
+			b.WriteString("null")
+		} else {
+			b.WriteString(Float(x))
+		}
 	case *Obj:
 		if x == nil {
 			b.WriteString("null")

@@ -36,10 +36,13 @@ function ShippedCell({ r }: { r: CveRow }) {
   return <span className="muted">–</span>;
 }
 
+/** Whether a CVE's package may be on the device: an unknown one can't be ruled out. */
+const onDevice = (r: CveRow) => r.shipped !== "build" && r.shipped !== "no";
+
 /** Where the CVEs on installed packages come from: listed in the SBOM (with its VEX status), or
  *  found only by matching package versions against NVD and the kernel CNA, as Trivy and Grype do. */
 export function cveSources(rows: CveRow[]) {
-  const installed = rows.filter((r) => r.shipped === "yes");
+  const installed = rows.filter(onDevice);
   const sbom = installed.filter((r) => r.carriers.some((c) => c.source !== "version-match")).length;
   return { total: installed.length, sbom, matched: installed.length - sbom };
 }
@@ -61,7 +64,7 @@ export function SourceNote({ rows, feed, inventory }: { rows: CveRow[]; feed: Cv
  *  CVSS 7+ and KEV inside it. */
 function Attention({ s, rows, sources }: { s: CveSection["summary"]; rows: CveRow[]; sources: CveSection["sources"] }) {
   const kevChecked = !!sources.kev;
-  const installed = rows.filter((r) => r.shipped === "yes");
+  const installed = rows.filter(onDevice);
   const fixed = installed.filter((r) => r.status === "fixed").length;
   const ignored = installed.filter((r) => r.status === "ignored").length;
   const open = s.unpatched_shipped;
@@ -268,8 +271,10 @@ export default function Cves({ section, params }: { section: CveSection; params:
   // Without an SBOM every row is a version match, so the mark would say nothing.
   const outsideSbom = (r: CveRow) => !section.sources.inventory && r.carriers.every((c) => c.source === "version-match");
 
-  const byStatus = useMemo(() => rows.filter((r) => (status === "all" || r.status === status) &&
-    (!offImage || r.shipped === "build" || r.shipped === "no")), [rows, status, offImage]);
+  // An unpatched CVE only counts on the device; the ones off it show under "CVEs not in image".
+  const inScope = (r: CveRow) => (offImage ? !onDevice(r) : r.status !== "unpatched" || onDevice(r));
+  const byStatus = useMemo(() => rows.filter((r) => (status === "all" ? !offImage || !onDevice(r) : r.status === status && inScope(r))),
+    [rows, status, offImage]);
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return byStatus.filter((r) => (vector === "all" || r.vector === vector) && (!kevOnly || r.kev) && (!kernelOnly || r.kernel) &&
@@ -281,8 +286,8 @@ export default function Cves({ section, params }: { section: CveSection; params:
   const listed: (CveRow | { name: string; version: string })[] = useMemo(() => [...shown, ...mapRows], [shown, mapRows.length]);
   const page = usePage(listed, listed);
 
-  const scoped = offImage ? rows.filter((r) => r.shipped === "build" || r.shipped === "no") : rows;
-  const count = (k: CveStatus) => scoped.filter((r) => r.status === k).length;
+  const scoped = offImage ? rows.filter((r) => !onDevice(r)) : rows;
+  const count = (k: CveStatus) => rows.filter((r) => r.status === k && inScope(r)).length;
   const statusOpts = [
     { value: "unpatched", label: "Unpatched", n: count("unpatched") },
     ...(section.sources.inventory ? [] : [
