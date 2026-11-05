@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -11,13 +12,14 @@ import (
 )
 
 // extractTar extracts regular files, dirs and symlinks only, and refuses anything escaping dest.
-func extractTar(img, dest string) (int, error) {
+func extractTar(img, dest string) (int, map[string]Perm, error) {
 	skipped := 0
+	perms := map[string]Perm{}
 	os.MkdirAll(dest, 0o755)
 	root := py.Resolve(dest)
 	f, err := os.Open(img)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	defer f.Close()
 	tr := tar.NewReader(f)
@@ -33,7 +35,7 @@ func extractTar(img, dest string) (int, error) {
 			break
 		}
 		if err != nil {
-			return skipped, err
+			return skipped, nil, err
 		}
 		name := strings.TrimLeft(h.Name, "/")
 		target := py.Resolve(filepath.Join(root, name))
@@ -60,6 +62,7 @@ func extractTar(img, dest string) (int, error) {
 			os.Remove(out)
 			os.Symlink(h.Linkname, out)
 		case reg:
+			perms[path.Clean("/"+name)] = Perm{int(h.Mode & 0o7777), h.Uid, h.Gid}
 			os.MkdirAll(filepath.Dir(out), 0o755)
 			os.Remove(out)
 			w, err := os.OpenFile(out, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
@@ -78,5 +81,5 @@ func extractTar(img, dest string) (int, error) {
 		os.Chmod(dirs[i].path, dirs[i].mode)
 		os.Chtimes(dirs[i].path, dirs[i].hdr.ModTime, dirs[i].hdr.ModTime)
 	}
-	return skipped, nil
+	return skipped, perms, nil
 }

@@ -14,10 +14,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/corefense-security/trowl/internal/py"
 	"github.com/ulikunitz/xz"
@@ -35,7 +40,12 @@ type Unpacked struct {
 	Rootfs       string
 	SourceFormat string
 	Notes        []string
+	Perms        map[string]Perm // regular files by image path; nil if they couldn't be read
 }
+
+// Perm is a file's owner and mode as the image records them. The extracted copy can't keep them:
+// without root, every file ends up owned by whoever runs trowl.
+type Perm struct{ Mode, UID, GID int }
 
 func magic(path string, n int) []byte {
 	f, err := os.Open(path)
@@ -205,18 +215,120 @@ func carve(path string, offset, size int64, dst string) error {
 	return err
 }
 
-func extractExt(img, dest string) error {
+func extractExt(img, dest string) (map[string]Perm, error) {
 	if _, err := exec.LookPath("debugfs"); err != nil {
-		return errorf("debugfs (e2fsprogs) is required to read ext2/3/4 images")
+		return nil, errorf("debugfs (e2fsprogs) is required to read ext2/3/4 images")
 	}
 	os.MkdirAll(dest, 0o755)
 	var stderr bytes.Buffer
 	cmd := exec.Command("debugfs", "-R", "rdump / "+dest, img)
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return errorf("debugfs failed: %s", strings.TrimSpace(stderr.String()))
+		return nil, errorf("debugfs failed: %s", strings.TrimSpace(stderr.String()))
 	}
-	return nil
+	return extPerms(img, dest), nil
+}
+
+// extPermRe matches a line of debugfs "ls -p": /inode/mode/uid/gid/name/size/.
+var extPermRe = regexp.MustCompile(`^/\d+/(\d+)/(\d+)/(\d+)/(.*)/\d*/$`)
+
+// extPerms lists every directory rdump extracted, in one debugfs run.
+func extPerms(img, dest string) map[string]Perm {
+	var cmds strings.Builder
+	filepath.WalkDir(dest, func(p string, d fs.DirEntry, err error) error {
+		if err == nil && d.IsDir() {
+			rel, _ := filepath.Rel(dest, p)
+			fmt.Fprintf(&cmds, "ls -p \"/%s\"\n", strings.TrimPrefix(filepath.ToSlash(rel), "."))
+		}
+		return nil
+	})
+	cmd := exec.Command("debugfs", "-f", "-", img)
+	cmd.Stdin = strings.NewReader(cmds.String())
+	out, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+	return parseExtPerms(string(out))
+}
+
+func parseExtPerms(out string) map[string]Perm {
+	perms := map[string]Perm{}
+	dir := "/"
+	for _, line := range strings.Split(out, "\n") {
+		if s, ok := strings.CutPrefix(line, `debugfs: ls -p "`); ok {
+			dir = strings.TrimSuffix(s, `"`)
+			continue
+		}
+		m := extPermRe.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		mode, _ := strconv.ParseInt(m[1], 8, 32)
+		if mode&0o170000 != 0o100000 {
+			continue
+		}
+		uid, _ := strconv.Atoi(m[2])
+		gid, _ := strconv.Atoi(m[3])
+		perms[path.Join(dir, m[4])] = Perm{int(mode & 0o7777), uid, gid}
+	}
+	return perms
+}
+
+// squashPerms reads owners and modes from unsquashfs's numeric listing.
+func squashPerms(img string) map[string]Perm {
+	out, err := exec.Command("unsquashfs", "-lln", img).Output()
+	if err != nil {
+		return nil
+	}
+	return parseSquashPerms(string(out))
+}
+
+// parseSquashPerms reads lines such as
+// "-rwsr-xr-x 0/0 59520 2026-10-27 10:00 squashfs-root/bin/su".
+func parseSquashPerms(out string) map[string]Perm {
+	perms := map[string]Perm{}
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.Fields(line)
+		if len(f) < 6 || len(f[0]) != 10 || f[0][0] != '-' {
+			continue
+		}
+		var uid, gid int
+		if n, _ := fmt.Sscanf(f[1], "%d/%d", &uid, &gid); n != 2 {
+			continue
+		}
+		name := strings.TrimPrefix(strings.Join(f[5:], " "), "squashfs-root")
+		perms[name] = Perm{symbolicMode(f[0]), uid, gid}
+	}
+	return perms
+}
+
+// symbolicMode turns "-rwsr-xr-x" into 0o4755.
+func symbolicMode(s string) int {
+	mode := 0
+	for i, c := range s[1:] {
+		if c != '-' && c != 'S' && c != 'T' {
+			mode |= 1 << (8 - i)
+		}
+	}
+	for i, bit := range map[int]int{3: 0o4000, 6: 0o2000, 9: 0o1000} {
+		if s[i] == 's' || s[i] == 'S' || s[i] == 't' || s[i] == 'T' {
+			mode |= bit
+		}
+	}
+	return mode
+}
+
+// dirPerms reads an unpacked directory, which keeps whatever owners it was unpacked with.
+func dirPerms(root string) map[string]Perm {
+	perms := map[string]Perm{}
+	IterFiles(root, func(imagePath, real string) {
+		if st, err := os.Lstat(real); err == nil {
+			if sys, ok := st.Sys().(*syscall.Stat_t); ok {
+				perms[imagePath] = Perm{int(sys.Mode & 0o7777), int(sys.Uid), int(sys.Gid)}
+			}
+		}
+	})
+	return perms
 }
 
 func extractSquashfs(img, dest string) error {
@@ -236,20 +348,24 @@ func looksLikeRootfs(path string) bool {
 		(py.IsDir(filepath.Join(path, "usr")) || py.Exists(filepath.Join(path, "bin")))
 }
 
-func extractFilesystem(img, dest string) (string, error) {
+func extractFilesystem(img, dest string) (string, map[string]Perm, error) {
 	if isExt(img) {
-		return "ext", extractExt(img, dest)
+		perms, err := extractExt(img, dest)
+		return "ext", perms, err
 	}
 	if isSquashfs(img) {
-		return "squashfs", extractSquashfs(img, dest)
+		if err := extractSquashfs(img, dest); err != nil {
+			return "squashfs", nil, err
+		}
+		return "squashfs", squashPerms(img), nil
 	}
-	return "", nil
+	return "", nil, nil
 }
 
 // Unpack unpacks image under workdir (a temp dir if empty) and returns the rootfs path.
 func Unpack(image, workdir string) (*Unpacked, error) {
 	if py.IsDir(image) {
-		return &Unpacked{Rootfs: image, SourceFormat: "directory"}, nil
+		return &Unpacked{Rootfs: image, SourceFormat: "directory", Perms: dirPerms(image)}, nil
 	}
 	if !py.IsFile(image) {
 		return nil, errorf("no such image: %s", py.CleanPath(image))
@@ -279,17 +395,17 @@ func Unpack(image, workdir string) (*Unpacked, error) {
 	}
 
 	dest := filepath.Join(work, "rootfs")
-	fs, err := extractFilesystem(current, dest)
+	kind, perms, err := extractFilesystem(current, dest)
 	if err != nil {
 		return nil, err
 	}
-	if fs != "" {
-		formats = append(formats, fs)
-		return &Unpacked{Rootfs: dest, SourceFormat: strings.Join(formats, "+"), Notes: notes}, nil
+	if kind != "" {
+		formats = append(formats, kind)
+		return &Unpacked{Rootfs: dest, SourceFormat: strings.Join(formats, "+"), Notes: notes, Perms: perms}, nil
 	}
 
 	if isTar(current) {
-		skipped, err := extractTar(current, dest)
+		skipped, perms, err := extractTar(current, dest)
 		if err != nil {
 			return nil, err
 		}
@@ -297,7 +413,7 @@ func Unpack(image, workdir string) (*Unpacked, error) {
 		if skipped > 0 {
 			notes = append(notes, fmt.Sprintf("%d tar members skipped (device nodes, links outside root)", skipped))
 		}
-		return &Unpacked{Rootfs: dest, SourceFormat: strings.Join(formats, "+"), Notes: notes}, nil
+		return &Unpacked{Rootfs: dest, SourceFormat: strings.Join(formats, "+"), Notes: notes, Perms: perms}, nil
 	}
 
 	parts := partitions(current)
@@ -306,6 +422,7 @@ func Unpack(image, workdir string) (*Unpacked, error) {
 	}
 	formats = append(formats, "disk")
 	chosen := ""
+	var chosenPerms map[string]Perm
 	for i, p := range parts {
 		n := i + 1
 		partImg := filepath.Join(work, fmt.Sprintf("part%d.img", n))
@@ -313,26 +430,26 @@ func Unpack(image, workdir string) (*Unpacked, error) {
 			return nil, err
 		}
 		partDir := filepath.Join(work, fmt.Sprintf("part%d", n))
-		fs, err := extractFilesystem(partImg, partDir)
+		kind, perms, err := extractFilesystem(partImg, partDir)
 		os.Remove(partImg)
 		if err != nil {
 			return nil, err
 		}
-		if fs == "" {
+		if kind == "" {
 			notes = append(notes, fmt.Sprintf("partition %d: unsupported filesystem, skipped", n))
 			continue
 		}
 		if chosen == "" && looksLikeRootfs(partDir) {
-			chosen = partDir
-			formats = append(formats, fmt.Sprintf("p%d:%s", n, fs))
+			chosen, chosenPerms = partDir, perms
+			formats = append(formats, fmt.Sprintf("p%d:%s", n, kind))
 		} else {
-			notes = append(notes, fmt.Sprintf("partition %d (%s) extracted to %s", n, fs, partDir))
+			notes = append(notes, fmt.Sprintf("partition %d (%s) extracted to %s", n, kind, partDir))
 		}
 	}
 	if chosen == "" {
 		return nil, errorf("no partition looks like a root filesystem")
 	}
-	return &Unpacked{Rootfs: chosen, SourceFormat: strings.Join(formats, "+"), Notes: notes}, nil
+	return &Unpacked{Rootfs: chosen, SourceFormat: strings.Join(formats, "+"), Notes: notes, Perms: chosenPerms}, nil
 }
 
 // IterFiles calls fn(imagePath, realPath) for regular files, never following symlinks, in the
