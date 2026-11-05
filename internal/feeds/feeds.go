@@ -10,6 +10,7 @@ import (
 	"compress/gzip"
 	"encoding/csv"
 	"encoding/json"
+	"fmt"
 	"io"
 	"math"
 	"net/http"
@@ -244,15 +245,25 @@ func fill(pattern, cve string) string {
 	return strings.NewReplacer("{id}", cve, "{year}", year).Replace(pattern)
 }
 
-// checkOne asks which pages exist for this CVE; nil when any answer was unclear (retried next scan).
-func checkOne(cve string, kernel bool) *pyjson.Obj {
+// checkOne finds which pages exist for this CVE; nil when any answer was unclear (retried next
+// scan). inFeed is what the NVD data says, as in CheckLinks: a CVE with a record there is on
+// cve.org, and the record tells whether it has a kernel page, so only OSV has to be asked. A CVE
+// without one is asked of every site.
+func checkOne(cve string, kernel bool, inFeed map[string]bool) *pyjson.Obj {
 	rec := pyjson.New()
 	kinds := []string{"cve", "osv"}
 	if kernel {
 		kinds = append(kinds, "kernel")
 	}
+	kernelPage, known := inFeed[cve]
 	for _, kind := range kinds {
-		ok := exists(fill(probes[kind], cve))
+		var ok *bool
+		if known && kind != "osv" {
+			v := kind == "cve" || kernelPage
+			ok = &v
+		} else {
+			ok = exists(fill(probes[kind], cve))
+		}
 		if ok == nil {
 			return nil
 		}
@@ -275,8 +286,9 @@ func links(cve string, rec map[string]any) []any {
 }
 
 // CheckLinks returns confirmed advisory links per CVE; the kernel CNA page is only tried for
-// kernel CVEs. CVEs whose check failed are left out.
-func CheckLinks(cache string, cves []string, kernel map[string]bool) map[string][]any {
+// kernel CVEs. CVEs whose check failed are left out. inFeed holds the CVEs with an NVD record,
+// each true when it has a kernel CNA page; it is nil without NVD data.
+func CheckLinks(cache string, cves []string, kernel, inFeed map[string]bool) map[string][]any {
 	path := filepath.Join(cache, "links-v2.json")
 	known := map[string]map[string]any{}
 	var order []string
@@ -296,6 +308,7 @@ func CheckLinks(cache string, cves []string, kernel map[string]bool) map[string]
 		}
 	}
 	if len(todo) > 0 {
+		bar := status.StartBar("advisory links", len(todo))
 		results := make([]*pyjson.Obj, len(todo))
 		var wg sync.WaitGroup
 		next := make(chan int)
@@ -304,7 +317,8 @@ func CheckLinks(cache string, cves []string, kernel map[string]bool) map[string]
 			go func() {
 				defer wg.Done()
 				for i := range next {
-					results[i] = checkOne(todo[i], kernel[todo[i]])
+					results[i] = checkOne(todo[i], kernel[todo[i]], inFeed)
+					bar.Tick()
 				}
 			}()
 		}
@@ -335,6 +349,11 @@ func CheckLinks(cache string, cves []string, kernel map[string]bool) map[string]
 		}
 		if failed > 0 {
 			warn("advisory check failed for %d CVE(s); their links are omitted", failed)
+		}
+		if checked := len(todo) - failed; checked > 0 {
+			bar.Ok(fmt.Sprintf("%d CVEs", checked))
+		} else {
+			bar.Fail("none checked")
 		}
 		os.MkdirAll(cache, 0o755)
 		if err := os.WriteFile(path, []byte(encodeOrdered(known, order)), 0o644); err != nil {

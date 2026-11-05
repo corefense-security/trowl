@@ -86,7 +86,10 @@ type Result struct {
 	Info    map[string]*Info
 	Known   map[string]bool // target products that appear in the feed, matched or not
 	Fixes   map[Match]Fix   // upstream fix, where the record gives one
-	Meta    map[string]any  // for the report's sources
+	// InFeed holds the matched and listed CVEs that have a record, each true when the kernel CNA
+	// publishes it. Rejected CVEs are skipped when reading the feed, so they aren't here.
+	InFeed map[string]bool
+	Meta   map[string]any // for the report's sources
 }
 
 func warn(format string, a ...any) { status.Warn(format, a...) }
@@ -302,6 +305,7 @@ type metric struct {
 
 type record struct {
 	ID           string `json:"id"`
+	Source       string `json:"sourceIdentifier"`
 	Published    string `json:"published"`
 	VulnStatus   string `json:"vulnStatus"`
 	Descriptions []struct {
@@ -350,7 +354,7 @@ func match(files []string, targets []Target, listed map[Match]string) *Result {
 	for m := range listed {
 		compsOf[m.CVE] = append(compsOf[m.CVE], m.Comp)
 	}
-	res := &Result{Info: map[string]*Info{}, Known: map[string]bool{}, Fixes: map[Match]Fix{}}
+	res := &Result{Info: map[string]*Info{}, Known: map[string]bool{}, Fixes: map[Match]Fix{}, InFeed: map[string]bool{}}
 	var mu sync.Mutex
 	seen := map[Match]bool{}
 	var wg sync.WaitGroup
@@ -365,6 +369,9 @@ func match(files []string, targets []Target, listed map[Match]string) *Result {
 				hits, products := affects(rec, byProduct)
 				mu.Lock()
 				defer mu.Unlock()
+				if len(hits) > 0 || len(compsOf[rec.ID]) > 0 {
+					res.InFeed[rec.ID] = rec.Source == kernelCNA
+				}
 				for _, comp := range compsOf[rec.ID] {
 					for _, t := range targetsOf[comp] {
 						m := Match{comp, rec.ID}

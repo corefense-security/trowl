@@ -83,6 +83,36 @@ func TestWarnKeepsTheLiveLine(t *testing.T) {
 	}
 }
 
+func TestBarInALog(t *testing.T) {
+	buf := capture(t, false)
+	s := StartBar("advisory links", 8)
+	for i := 0; i < 8; i++ {
+		s.Tick()
+	}
+	s.Ok("8 CVEs")
+	want := "  advisory links ━━━━━─────────────── 2/8\n" +
+		"  advisory links ━━━━━━━━━━────────── 4/8\n" +
+		"  advisory links ━━━━━━━━━━━━━━━───── 6/8\n" +
+		"✓ advisory links: 8 CVEs\n"
+	if got := buf.String(); got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestBarOnATerminal(t *testing.T) {
+	buf := capture(t, true)
+	s := StartBar("advisory links", 2)
+	s.Tick()
+	Warn("slow")
+	s.Ok("")
+	got := buf.String()
+	for _, want := range []string{erase + "  advisory links ━━━━━━━━━━────────── 1/2", erase + "trowl: slow\n", erase + "✓ advisory links\n"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("no %q in %q", want, got)
+		}
+	}
+}
+
 func TestColourOptIn(t *testing.T) {
 	t.Setenv("NO_COLOR", "")
 	t.Setenv("FORCE_COLOR", "")

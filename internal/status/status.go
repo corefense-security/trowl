@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -21,6 +22,11 @@ const (
 	red   = "\x1b[31m"
 	reset = "\x1b[0m"
 	erase = "\r\x1b[K" // back to the start of the line and clear it
+
+	barWidth  = 20
+	barFilled = "━"
+	barEmpty  = "─"
+	redrawGap = 100 * time.Millisecond
 )
 
 var (
@@ -62,9 +68,24 @@ type Step struct {
 	label   string
 	started time.Time
 	timer   *time.Timer
+
+	// For a step with a progress bar.
+	total, done int
+	quarter     int       // the last quarter printed to a log
+	drawn       time.Time // when the live line was last redrawn
 }
 
-func (s *Step) pending() string { return "  " + s.label + ".." }
+func (s *Step) pending() string {
+	if s.total == 0 {
+		return "  " + s.label + ".."
+	}
+	filled := barWidth * s.done / s.total
+	bar := strings.Repeat(barFilled, filled)
+	if colour {
+		bar = green + bar + reset
+	}
+	return fmt.Sprintf("  %s %s%s %d/%d", s.label, bar, strings.Repeat(barEmpty, barWidth-filled), s.done, s.total)
+}
 
 // Start begins a step, named as a short status such as "unpacking filesystem".
 func Start(label string) *Step {
@@ -84,6 +105,35 @@ func Start(label string) *Step {
 		})
 	}
 	return s
+}
+
+// StartBar begins a step of total units of work, shown as a progress bar. Call Tick after each
+// unit. A log gets a line at each quarter, so a long step shows it's moving without flooding it.
+func StartBar(label string, total int) *Step {
+	mu.Lock()
+	defer mu.Unlock()
+	s := &Step{label: label, started: time.Now(), total: total}
+	if interactive {
+		live = s
+		fmt.Fprint(out, s.pending())
+	}
+	return s
+}
+
+// Tick records one finished unit of a bar step. Workers may call it at the same time.
+func (s *Step) Tick() {
+	mu.Lock()
+	defer mu.Unlock()
+	s.done++
+	if live == s {
+		if time.Since(s.drawn) >= redrawGap {
+			s.drawn = time.Now()
+			fmt.Fprint(out, erase+s.pending())
+		}
+	} else if q := 4 * s.done / s.total; !interactive && q > s.quarter && q < 4 {
+		s.quarter = q
+		fmt.Fprintln(out, s.pending())
+	}
 }
 
 // Ok ends the step with a green tick: the thing was found and checked.
