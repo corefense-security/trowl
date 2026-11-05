@@ -493,6 +493,11 @@ tr.sel td { background: var(--accent-soft); }
 .sbom-card .share + .share { border-top: 1px solid var(--grid); }
 .sbom-card .share-top { padding-top: 0; }
 .sbom-card .share-note { margin: 0; padding: 0 0 0 20px; border-left: 1px solid var(--grid); }
+/* Without a Key summary the bottom row takes all the spare height: share it out so the cards
+   fill it, rather than centring their content between blank bands. */
+.ov:not(.has-summary) .sbom-card .shares { grid-auto-rows: 1fr; align-content: stretch; }
+.ov:not(.has-summary) .donut-svg { width: clamp(150px, min(28vh, 15vw), 300px); }
+.ov:not(.has-summary) .ov-rail .pie-legend li { padding-top: clamp(5px, 1.4vh, 14px); padding-bottom: clamp(5px, 1.4vh, 14px); }
 
 /* Kernel page */
 .kt { width: 100%; font-size: 12.8px; }
