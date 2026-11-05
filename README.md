@@ -90,7 +90,7 @@ Trowl fetches data from these sources during a scan:
 
 ## Roadmap
 - CI integration
-- Image and report diffing
+- Build diffing for security regression
 - License scanning
 - Terminal reporting
 - SBOM/VEX report generation
