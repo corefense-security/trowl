@@ -97,7 +97,9 @@ func cached(cache, name string, urls []string, maxAge float64) []byte {
 		}
 		if code == 200 && len(body) > 0 {
 			os.MkdirAll(cache, 0o755)
-			os.WriteFile(path, body, 0o644)
+			if err := os.WriteFile(path, body, 0o644); err != nil {
+				warn("can't cache %s: %v", name, err)
+			}
 			return body
 		}
 		warn("%s: HTTP %d", url, code)
@@ -335,7 +337,9 @@ func CheckLinks(cache string, cves []string, kernel map[string]bool) map[string]
 			warn("advisory check failed for %d CVE(s); their links are omitted", failed)
 		}
 		os.MkdirAll(cache, 0o755)
-		os.WriteFile(path, []byte(encodeOrdered(known, order)), 0o644)
+		if err := os.WriteFile(path, []byte(encodeOrdered(known, order)), 0o644); err != nil {
+			warn("can't cache the advisory links: %v", err)
+		}
 	}
 	out := map[string][]any{}
 	for _, c := range cves {
