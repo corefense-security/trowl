@@ -3,13 +3,11 @@
 //
 // The model is fetched into the cache directory at scan time (pinned revision, SHA-256
 // checked) and runs on CPU. It is only given numbers and titles this scan already computed and
-// is told to use nothing else, so it describes the report rather than adding to it. Output is
-// cached per model, prompt version and input, so rescanning an unchanged image costs nothing.
+// is told to use nothing else, so it describes the report rather than adding to it.
 package llm
 
 import (
 	"bytes"
-	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -38,15 +36,18 @@ var Models = map[string]spec{
 	"qwen3-4b": {"Qwen3 4B", "Qwen3-4B-Q4_K_M.gguf",
 		"https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/bc640142c66e1fdd12af0bd68f40445458f3869b/Qwen3-4B-Q4_K_M.gguf",
 		"7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5"},
-	"qwen3-1.7b": {"Qwen3 1.7B", "Qwen3-1.7B-Q8_0.gguf",
-		"https://huggingface.co/Qwen/Qwen3-1.7B-GGUF/resolve/90862c4b9d2787eaed51d12237eafdfe7c5f6077/Qwen3-1.7B-Q8_0.gguf",
-		"061b54daade076b5d3362dac252678d17da8c68f07560be70818cace6590cb1a"},
+	"qwen3.5-4b": {"Qwen3.5 4B", "Qwen3.5-4B-Q4_K_M.gguf",
+		"https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/e87f176479d0855a907a41277aca2f8ee7a09523/Qwen3.5-4B-Q4_K_M.gguf",
+		"00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4"},
+	"qwen3.5-9b": {"Qwen3.5 9B", "Qwen3.5-9B-Q4_K_M.gguf",
+		"https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/3885219b6810b007914f3a7950a8d1b469d598a5/Qwen3.5-9B-Q4_K_M.gguf",
+		"03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8"},
 }
 
 const (
-	DefaultModel  = "qwen3-4b"
-	promptVersion = 8
-	maxPoints     = 5
+	DefaultModel   = "qwen3.5-4b"
+	maxPoints      = 5
+	overviewTokens = 600
 )
 
 func ModelNames() []string {
@@ -58,22 +59,58 @@ func ModelNames() []string {
 	return out
 }
 
-const overviewSystem = "You write one bullet for the key-points panel of a security dashboard about an embedded " +
-	"Linux root filesystem image. You get the scan facts for one topic as JSON. Reply with a " +
-	"single line of at most 18 words giving the one concrete, meaningful takeaway for that topic: " +
-	"lead with the most important number, and add one or two supporting numbers only if they " +
-	"change the picture. Terse dashboard style, no topic label, no full stop. Copy numbers " +
-	"exactly and keep each number with its own label; never call anything fully hardened, and " +
-	"do not call anything secure unless every value says so. Use only these facts: never guess " +
-	"causes, invent findings or give advice."
+const overviewSystem = `You are an embedded Linux security analyst.
 
-// topicInstructions narrow the bullet for topics where the general rule is not specific enough.
-var topicInstructions = map[string]string{
-	"Vulnerabilities": "Lead with unpatched CVEs on shipped packages; then CVSS 7.0+ and CISA KEV counts. Example: 5 CVEs unpatched, 2 CVSS 7.0+, 1 KEV in shipped packages",
-	"Kernel":          "Lead with total kernel configs failed baseline, how many increase attack-surface, how many decrease hardening (parts of that total, not added to it).",
-	"Filesystems":     "Lead with the number of insecure mounts (and whether / (say rootfs) is missing RO flag), secrets found, then unencrypted private keys",
-	"Hardening":       "Lead with only executables that are missing PIE, stack protector (canary), or RELRO (any kind- partial or full). Where all three flags are missing, count as one instance",
-}
+/no_think
+
+Review the provided static firmware scan results and produce
+a concise security assessment.
+
+Rules:
+- Always generate 7 bullet points, each under 30 words.
+- Identify the most important security concerns and patterns.
+- Explain the finding, its security implication and useful next action.
+- Do not simply repeat statistics shown elsewhere.
+- Do not invent vulnerabilities, claim reachability or exploitability.
+- Avoid generic advice, marketing language, and alarmism.
+- Avoid repeating similar observations.
+- Use plain, precise technical English.
+- Never generate a colon or semi-colon anywhere in the bullet points, unless it comes from a fact handed to you
+- Omit categories without meaningful observations.
+- Open each bullet with the concrete risk or affected component, so an engineer sees the impact at once.
+- Write one bullet each for the kernel config, binaries, secrets, mounts and Userland and Kernel CVEs, and SBOM (if facts are available)
+- Use a number only with the flag it belongs to; never merge two flags into one number.
+- Describe impact as what an attacker could do if they reach that weakness, not as a certainty.
+- Do not use words like "immediate", "urgent", "massive", "exploitable" or that imply them when summarising CVE impacts. Use "critical" only to describe CVE severity.
+- Do not deviate from the instructions on how to interpret the facts.
+
+How to read the facts: 
+- Binaries: the flag counts overlap. Describe the potential impact of the gaps; do not list the counts.
+
+- Kernel: pick the one most security-impactful option from each list, name it, and state its impact
+  tersely, using the Why given with it. Then advise to either disable it (if the Fix says CONFIG_*_*=n), or enable it (if the Fix says CONFIG_*_*=y) 
+
+- Secrets: Directories and files containing "ptest", "test", "tests" or "installed-tests" are probably not real deployments. Carefully
+  judge whether such secrets are dev or test fixtures, or real deployment material,
+  and raise a concern only for real ones.
+
+- Mounts:
+  Describe the most consequential reported insecure mount configuration.
+  Name the mount path and missing protection.
+  Suggest the potential impact on runtime security.
+
+- Userland Package CVEs:
+  Focus on unpatched vulnerabilities in installed packages, highlighting high-severity ones.
+  Quote the "Userland package most affected" fact as written, and name any
+  CISA KEV entries if applicable. 
+
+- Kernel CVEs: if the facts give them, state the number of unpatched kernel CVEs and how many have a
+  backport for this kernel's stable series, both copied exactly, in the CVE bullet.
+
+- SBOM: highlight inconsistencies between the SBOM and installed packages, and their impact on CVE
+  analysis. If no SBOM was supplied, write no separate SBOM bullet;
+
+  Return only the bullet points.`
 
 func warn(format string, a ...any) { fmt.Fprintf(os.Stderr, "trowl: "+format+"\n", a...) }
 
@@ -131,7 +168,7 @@ func ensureModel(name, cache string) string {
 	return path
 }
 
-// Runner holds the llama-server process for one scan; started on the first cache miss.
+// Runner holds the llama-server process for one scan; started on first use.
 type Runner struct {
 	name, cache string
 	cmd         *exec.Cmd
@@ -209,10 +246,12 @@ func (r *Runner) complete(system, user string, maxTokens int) string {
 		return ""
 	}
 	body, _ := json.Marshal(map[string]any{
-		// "/no_think" turns off Qwen3's reasoning block.
+		// Reasoning off and greedy sampling: on these small models reasoning was slower, less
+		// accurate and could use up the token limit, and the summary should repeat run to run.
 		"messages": []map[string]string{{"role": "system", "content": system},
-			{"role": "user", "content": user + "\n/no_think"}},
-		"temperature": 0, "max_tokens": maxTokens, "seed": 0,
+			{"role": "user", "content": user}},
+		"chat_template_kwargs": map[string]any{"enable_thinking": false},
+		"temperature":          0, "max_tokens": maxTokens, "seed": 0,
 	})
 	resp, err := http.Post(r.url+"/v1/chat/completions", "application/json", bytes.NewReader(body))
 	if err != nil {
@@ -233,80 +272,34 @@ func (r *Runner) complete(system, user string, maxTokens int) string {
 	return *out.Choices[0].Message.Content
 }
 
-var thinkRe = regexp.MustCompile(`(?s)<think>.*?</think>`)
+// thinkRe matches the reasoning block, including one cut off by the token limit.
+var thinkRe = regexp.MustCompile(`(?s)<think>.*?(?:</think>|$)`)
 
-// chat is one cached completion; ok is false if llama.cpp or the model isn't available.
-func (r *Runner) chat(system, user string, maxTokens int) (string, bool) {
-	store := filepath.Join(r.cache, "llm-cache.json")
-	sum := sha1.Sum([]byte(system + user))
-	key := fmt.Sprintf("%s:%d:%s", r.name, promptVersion, hex.EncodeToString(sum[:]))
-	known := pyjson.New()
-	if raw, err := os.ReadFile(store); err == nil {
-		known = decodeStringMap(raw)
-	}
-	if v, ok := known.Get(key); ok {
-		s, _ := v.(string)
-		return s, true
-	}
-	text := strings.TrimSpace(thinkRe.ReplaceAllString(r.complete(system, user, maxTokens), ""))
-	if text == "" {
-		return "", false
-	}
-	known.Set(key, text)
-	os.MkdirAll(filepath.Dir(store), 0o755)
-	os.WriteFile(store, []byte(pyjson.Default(known)), 0o644)
-	return text, true
+// chat is one completion; "" if llama.cpp or the model isn't available.
+func (r *Runner) chat(system, user string, maxTokens int) string {
+	return strings.TrimSpace(thinkRe.ReplaceAllString(r.complete(system, user, maxTokens), ""))
 }
 
-// decodeStringMap reads a JSON object of strings keeping its key order.
-func decodeStringMap(raw []byte) *pyjson.Obj {
-	o := pyjson.New()
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	if tok, err := dec.Token(); err != nil || tok != json.Delim('{') {
-		return o
-	}
-	for dec.More() {
-		kt, err := dec.Token()
-		if err != nil {
-			break
-		}
-		var v string
-		if dec.Decode(&v) != nil {
-			break
-		}
-		o.Set(kt.(string), v)
-	}
-	return o
-}
+// labelRe matches the priority headings and section names, which small models copy as prefixes.
+var labelRe = regexp.MustCompile(`(?i)^(?:systemic hardening weaknesses|vulnerability triage implications|` +
+	`potential credential or private-key exposure|sbom inconsistencies affecting cve analysis|` +
+	`kernel|mounts?|secrets?|cves?|sbom|binaries|hardening)\s*:\s*`)
 
-var topicPrefix = regexp.MustCompile(`^\d+\.\s*`)
+// bulletRe matches a bullet line ("- ", "* ", "• " or "1. ") and captures its text.
+var bulletRe = regexp.MustCompile(`^\s*(?:[-*\x{2022}]|\d+[.)])\s+(.+)$`)
 
-// Overview returns key points for the Overview page, as [{topic, text}]: one bullet per facts
-// section. Each section is its own request, so a bullet can only use its own section's facts
-// and no two bullets can repeat each other.
+// emphasisRe matches markdown bold and code marks, which the page would show literally.
+var emphasisRe = regexp.MustCompile("\\*\\*|`")
+
+// Overview returns the key points for the Overview page, as [{topic, text}]: one request with
+// every section's facts, so the model can connect findings across them. topic is the bullet's
+// position, since a bullet may span sections.
 func Overview(r *Runner, facts *pyjson.Obj) *pyjson.Obj {
 	name := r.name
 	warn("writing the overview summary with %s", Models[name].Label)
 	points := []any{}
-	for i, section := range facts.Keys() {
-		if i == maxPoints {
-			break
-		}
-		topic := topicPrefix.ReplaceAllString(section, "")
-		user := "Topic: " + topic + "\n"
-		if ins, ok := topicInstructions[topic]; ok {
-			user += ins + "\n"
-		}
-		text, _ := r.chat(overviewSystem, user+pyjson.Indent1(facts.G(section)), 80)
-		line := ""
-		if t := py.Strip(text); t != "" {
-			line = py.Strip(py.SplitLines(t)[0])
-		}
-		clean := regexp.MustCompile(`(?i)^[-*\x{2022}\s]*(?:` + regexp.QuoteMeta(topic) + `\s*:\s*)?`)
-		line = strings.TrimRight(clean.ReplaceAllString(line, ""), ".")
-		if line != "" {
-			points = append(points, pyjson.O("topic", topic, "text", strings.ReplaceAll(line, "**", "")))
-		}
+	for _, line := range Summarise(r, pyjson.Indent1(facts)) {
+		points = append(points, pyjson.O("topic", strconv.Itoa(len(points)+1), "text", line))
 	}
 	if len(points) == 0 {
 		return nil
@@ -314,8 +307,33 @@ func Overview(r *Runner, facts *pyjson.Obj) *pyjson.Obj {
 	return pyjson.O("points", points, "model", name, "label", Models[name].Label)
 }
 
-// Label is the model's display name.
-func (r *Runner) Label() string { return Models[r.name].Label }
+// Summarise returns the key points for facts, already as the JSON text the model is sent.
+func Summarise(r *Runner, facts string) []string {
+	return bullets(r.chat(overviewSystem, "Scan results:\n"+facts, overviewTokens))
+}
 
-// Name is the model's id.
-func (r *Runner) Name() string { return r.name }
+// bullets returns the reply's bullet lines without their markers, labels or markdown emphasis, at
+// most maxPoints of them. Other lines (a heading or preamble) are dropped, unless the reply has no
+// bullet markers at all: then each line that isn't a heading is a point.
+func bullets(text string) []string {
+	var marked, plain []string
+	for _, line := range py.SplitLines(text) {
+		s := py.Strip(line)
+		if m := bulletRe.FindStringSubmatch(line); m != nil {
+			marked = append(marked, m[1])
+		} else if s != "" && !strings.HasSuffix(s, ":") {
+			plain = append(plain, s)
+		}
+	}
+	lines := marked
+	if len(lines) == 0 {
+		lines = plain
+	}
+	var out []string
+	for _, line := range lines {
+		if s := labelRe.ReplaceAllString(py.Strip(emphasisRe.ReplaceAllString(line, "")), ""); s != "" && len(out) < maxPoints {
+			out = append(out, s)
+		}
+	}
+	return out
+}
