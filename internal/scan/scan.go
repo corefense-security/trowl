@@ -173,7 +173,7 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 			"graph", sbom.Graph(sb, cmp.Status),
 		)
 		cves = cveSection(sb, cmp.Status, opt)
-	} else if inv, presence := imageInventory(rootfs); inv != nil {
+	} else if inv, presence := imageInventory(rootfs, kernelVersion(kernelSection)); inv != nil {
 		cves = cveSection(inv, presence, opt)
 	}
 
@@ -650,16 +650,22 @@ func checkKernelVersion(sb *sbom.Sbom, modules string) error {
 	return fmt.Errorf("kernel version mismatch: the SBOM lists %s but /lib/modules has %s", strings.Join(listed, ", "), modules)
 }
 
-// imageInventory builds the component list for CVE matching without an SBOM: the kernel from
-// /lib/modules, the rest from the image's package database. It is nil when the image has neither.
-func imageInventory(rootfs string) (*sbom.Sbom, *sbom.Status) {
+// kernelVersion is the version the kernel check found: from the kernel config's header, else
+// from /lib/modules.
+func kernelVersion(kernel *pyjson.Obj) string {
+	v, _ := kernel.G("version").(string)
+	return v
+}
+
+// imageInventory builds the component list for CVE matching without an SBOM: the kernel at the
+// version given, the rest from the image's package database. It is nil when it finds nothing.
+func imageInventory(rootfs, kernel string) (*sbom.Sbom, *sbom.Status) {
 	st := status.Start("reading package database")
 	var comps []sbom.Package
 	addKernel := func(v string) {
 		comps = append(comps, sbom.Package{Name: "linux", Version: v,
 			Cpes: []string{"cpe:2.3:o:linux:linux_kernel:" + v + ":*:*:*:*:*:*:*"}})
 	}
-	kernel := kconfig.ModulesVersion(rootfs)
 	if kernel != "" {
 		addKernel(kernel)
 	}
@@ -669,7 +675,7 @@ func imageInventory(rootfs string) (*sbom.Sbom, *sbom.Status) {
 			comps = append(comps, sbom.Package{Name: c.Name, Version: c.Version})
 			continue
 		}
-		// /lib/modules decides when it can; a kernel with everything built in has none.
+		// The package's version is the last resort, for an image with no config or modules.
 		if v := kernelRelease.FindString(c.Version); kernel == "" && v != "" {
 			kernel = v
 			addKernel(v)
