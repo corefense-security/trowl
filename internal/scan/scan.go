@@ -3,7 +3,6 @@ package scan
 
 import (
 	"fmt"
-	"os"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -23,6 +22,7 @@ import (
 	"github.com/corefense-security/trowl/internal/py"
 	"github.com/corefense-security/trowl/internal/pyjson"
 	"github.com/corefense-security/trowl/internal/sbom"
+	"github.com/corefense-security/trowl/internal/status"
 	"github.com/corefense-security/trowl/internal/unpack"
 )
 
@@ -56,11 +56,14 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 	rootfs := u.Rootfs
 	var findings []model.Finding
 	binaries := []any{}
-	fileCount := 0
+	fileCount, secretCount := 0, 0
 
+	st := status.Start("trowling binaries")
 	unpack.IterFiles(rootfs, func(imagePath, real string) {
 		fileCount++
-		findings = append(findings, secrets.ScanFile(imagePath, real)...)
+		found := secrets.ScanFile(imagePath, real)
+		secretCount += len(found)
+		findings = append(findings, found...)
 		if props := elfcheck.Analyse(real); props != nil {
 			b := pyjson.O("path", imagePath)
 			for _, k := range props.Keys() {
@@ -75,23 +78,52 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 			findings = append(findings, elfcheck.FindingsFor(imagePath, props)...)
 		}
 	})
+	walked := fmt.Sprintf("%d files, %d ELF, %d secret(s)", fileCount, len(binaries), secretCount)
+	if len(binaries) == 0 {
+		st.Fail(walked)
+	} else {
+		st.Ok(walked)
+	}
 
+	st = status.Start("checking mounts")
 	fstabEntries, fstabFindings := fstab.Check(rootfs)
 	findings = append(findings, fstabFindings...)
+	if len(fstabFindings) > 0 && fstabFindings[0].Check == "fstab.missing" {
+		st.Fail("no /etc/fstab")
+	} else {
+		st.Ok(fmt.Sprintf("%d in fstab", len(fstabEntries)))
+	}
+
+	st = status.Start("digging up kernel config")
 	kernelSection, kernelFindings, err := kconfig.Check(rootfs, opt.KernelConfig, opt.KernelSrc, opt.KernelPolicy)
 	if err != nil {
+		st.Fail("")
 		return nil, err
 	}
 	findings = append(findings, kernelFindings...)
+	if source, _ := kernelSection.G("source").(*pyjson.Obj); source != nil {
+		st.Ok(fmt.Sprint(source.G("path")))
+	} else {
+		st.Fail("not found")
+	}
 
 	var sbomSection, cves *pyjson.Obj
 	var sb *sbom.Sbom
 	if opt.SBOM != "" {
+		st = status.Start("reading SBOM")
 		sb, err = sbom.Load(opt.SBOM)
 		if err != nil {
+			st.Fail("")
 			return nil, err
 		}
+		if len(sb.PackageOrder) == 0 {
+			st.Fail("no components")
+		} else {
+			st.Ok(fmt.Sprintf("%d components", len(sb.PackageOrder)))
+		}
+		st = status.Start("matching SBOM to image")
 		if err := checkKernelVersion(sb, kconfig.ModulesVersion(rootfs)); err != nil {
+			st.Fail("")
 			return nil, err
 		}
 		cmp := sbom.Compare(sb, rootfs)
@@ -120,6 +152,14 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 		for _, k := range keys {
 			statusCounts.Set(k.role+":"+k.status, statusN[k])
 		}
+		// Counted as the Overview counts them: a package with no files can't be seen either way.
+		shipped := statusN[rs{"package", "present"}] + statusN[rs{"package", "modified"}] + statusN[rs{"package", "partial"}]
+		inImage := fmt.Sprintf("%d of %d packages in image", shipped, shipped+statusN[rs{"package", "absent"}])
+		if shipped == 0 {
+			st.Fail(inImage)
+		} else {
+			st.Ok(inImage)
+		}
 		sbomSection = pyjson.O(
 			"file", py.CleanPath(opt.SBOM),
 			"name", sb.Name,
@@ -129,8 +169,8 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 			"graph", sbom.Graph(sb, cmp.Status),
 		)
 		cves = cveSection(sb, cmp.Status, opt)
-	} else if inv, status := imageInventory(rootfs); inv != nil {
-		cves = cveSection(inv, status, opt)
+	} else if inv, presence := imageInventory(rootfs); inv != nil {
+		cves = cveSection(inv, presence, opt)
 	}
 
 	sort.SliceStable(findings, func(i, j int) bool {
@@ -183,10 +223,14 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 		"overview", nil,
 	)
 	if opt.Model != "" && opt.CacheDir != "" {
+		st = status.Start("writing overview")
 		runner := llm.NewRunner(opt.Model, opt.CacheDir)
 		defer runner.Close()
 		if ov := llm.Overview(runner, overviewFacts(findingObjs, binaries, kernelSection, sbomSection, cves)); ov != nil {
 			result.Set("overview", ov)
+			st.Ok(llm.Models[opt.Model].Label)
+		} else {
+			st.Fail("no model output")
 		}
 	}
 	result.G("summary").(*pyjson.Obj).Set("duration_s", py.Round2(time.Since(started).Seconds()))
@@ -605,6 +649,7 @@ func checkKernelVersion(sb *sbom.Sbom, modules string) error {
 // imageInventory builds the component list for CVE matching without an SBOM: the kernel from
 // /lib/modules, the rest from the image's package database. It is nil when the image has neither.
 func imageInventory(rootfs string) (*sbom.Sbom, *sbom.Status) {
+	st := status.Start("reading package database")
 	var comps []sbom.Package
 	if v := kconfig.ModulesVersion(rootfs); v != "" {
 		comps = append(comps, sbom.Package{Name: "linux", Version: v,
@@ -618,27 +663,41 @@ func imageInventory(rootfs string) (*sbom.Sbom, *sbom.Status) {
 		}
 	}
 	if len(comps) == 0 {
-		warn("no SBOM, kernel modules or package database found; CVEs not checked")
+		st.Fail("not found, and no kernel modules; CVEs not checked")
 		return nil, nil
 	}
 	if source == "" {
-		warn("no package database in the image; only the kernel is checked for CVEs")
+		st.Fail("not found; only the kernel is checked for CVEs")
 		source = "kernel only"
+	} else {
+		st.Ok(fmt.Sprintf("%s, %d packages", source, len(found)))
 	}
 	return sbom.FromInventory(source, comps)
 }
 
-func cveSection(sb *sbom.Sbom, status *sbom.Status, opt Options) *pyjson.Obj {
+func cveSection(sb *sbom.Sbom, presence *sbom.Status, opt Options) *pyjson.Obj {
 	matched, known := versionMatch(sb, opt)
-	rows := sbom.BuildCVEs(sb, status)
+	rows := sbom.BuildCVEs(sb, presence)
 	sources := pyjson.O("kev", nil, "epss", nil, "links", "none", "version_match", matched)
 	if opt.Network && opt.CacheDir != "" {
+		st := status.Start("fetching KEV")
 		kev, kevMeta := feeds.KEV(opt.CacheDir)
+		if kevMeta != nil {
+			st.Ok(fmt.Sprintf("%d entries", len(kev)))
+		} else {
+			st.Fail("unavailable")
+		}
 		wanted := map[string]bool{}
 		for _, r := range rows {
 			wanted[r.G("id").(string)] = true
 		}
+		st = status.Start("fetching EPSS")
 		scores, epssMeta := feeds.EPSS(opt.CacheDir, wanted)
+		if epssMeta != nil {
+			st.Ok(fmt.Sprintf("%d of %d CVEs scored", len(scores), len(wanted)))
+		} else {
+			st.Fail("unavailable")
+		}
 		sources.Set("kev", nilIfNone(kevMeta))
 		sources.Set("epss", nilIfNone(epssMeta))
 		for _, r := range rows {
@@ -658,7 +717,13 @@ func cveSection(sb *sbom.Sbom, status *sbom.Status, opt Options) *pyjson.Obj {
 					kernel[id] = true
 				}
 			}
+			st = status.Start("checking advisory links")
 			found := feeds.CheckLinks(opt.CacheDir, scope, kernel)
+			if len(found) == 0 && len(scope) > 0 {
+				st.Fail("none checked")
+			} else {
+				st.Ok(fmt.Sprintf("%d of %d CVEs", len(found), len(scope)))
+			}
 			for _, r := range rows {
 				if l, ok := found[r.G("id").(string)]; ok {
 					r.Set("links", l)
@@ -760,8 +825,6 @@ func hasModuleSuffix(name string) bool {
 	return false
 }
 
-func warn(format string, a ...any) { fmt.Fprintf(os.Stderr, "trowl: "+format+"\n", a...) }
-
 // versionMatch adds the CVEs that NVD and the kernel CNA list for each component's version,
 // as Trivy and Grype do. The SBOM's own VEX statuses are kept. It returns the data's
 // provenance for the report and the products the feed knows, or nil when nothing was matched.
@@ -769,21 +832,23 @@ func versionMatch(sb *sbom.Sbom, opt Options) (any, map[string]bool) {
 	if opt.CacheDir == "" {
 		return nil, nil
 	}
+	st := status.Start("sifting CVEs")
 	cpes := sb.MatchTargets()
 	if len(cpes) == 0 {
+		st.Fail("no components with a CPE")
 		return nil, nil
 	}
 	targets := make([]nvd.Target, len(cpes))
 	for i, c := range cpes {
 		targets[i] = nvd.Target{Comp: c.Comp, Vendor: c.Vendor, Product: c.Product, Version: c.Version}
 	}
-	t0 := time.Now()
 	listed := map[nvd.Match]string{}
 	for _, p := range sb.Listed() {
 		listed[nvd.Match{Comp: p[0], CVE: p[1]}] = sb.StatedFix(p[1], p[0])
 	}
 	res := nvd.Run(opt.CacheDir, opt.Network, targets, listed)
 	if res == nil {
+		st.Fail("no NVD data cached")
 		return nil, nil
 	}
 	for _, m := range res.Matches {
@@ -800,8 +865,7 @@ func versionMatch(sb *sbom.Sbom, opt Options) (any, map[string]bool) {
 	for m, fix := range res.Fixes {
 		sb.SetFix(m.Comp, m.CVE, sbom.Fix(fix))
 	}
-	warn("version match: %d CVE match(es) for %d component CPE(s) in %.1fs", len(res.Matches), len(cpes),
-		time.Since(t0).Seconds())
+	st.Ok(fmt.Sprintf("%d match(es) for %d component CPE(s)", len(res.Matches), len(cpes)))
 	meta := pyjson.New()
 	for _, k := range []string{"source", "updated", "years"} {
 		meta.Set(k, res.Meta[k])

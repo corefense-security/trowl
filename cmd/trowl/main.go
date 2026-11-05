@@ -17,6 +17,7 @@ import (
 	"github.com/corefense-security/trowl/internal/py"
 	"github.com/corefense-security/trowl/internal/report"
 	"github.com/corefense-security/trowl/internal/scan"
+	"github.com/corefense-security/trowl/internal/status"
 	"github.com/corefense-security/trowl/internal/unpack"
 )
 
@@ -241,7 +242,38 @@ func joinPath(dir, name string) string {
 	return d + "/" + name
 }
 
+// scanBanner lists what the scan will look at, so a log starts with the run's inputs.
+func scanBanner(a args) {
+	orNone := func(v, none string) string {
+		if v == "" {
+			return none
+		}
+		return py.CleanPath(v)
+	}
+	kernel := "from the image"
+	for _, fallback := range []string{a["kernel-config"], a["kernel-src"]} {
+		if fallback != "" {
+			kernel += ", else " + py.CleanPath(fallback)
+		}
+	}
+	network := "on"
+	if a.flag("no-network") {
+		network = "off"
+	}
+	rows := [][2]string{
+		{"target", py.CleanPath(a["image"])},
+		{"sbom", orNone(a["sbom"], "not supplied")},
+		{"kernel", kernel},
+	}
+	if a["kernel-policy"] != "" {
+		rows = append(rows, [2]string{"policy", py.CleanPath(a["kernel-policy"])})
+	}
+	rows = append(rows, [2]string{"network", network}, [2]string{"model", llm.Models[a["model"]].Label}, [2]string{"output", py.CleanPath(a["output"])})
+	status.Banner("trowl "+model.Version, rows...)
+}
+
 func cmdScan(a args) int {
+	scanBanner(a)
 	out := a["output"]
 	// Fail before the scan, not after it, when the report can't be saved (in a container this is
 	// usually a mounted folder the container's user may not write to).
@@ -265,8 +297,10 @@ func cmdScan(a args) int {
 				os.RemoveAll(work)
 			}
 		}()
+		st := status.Start("unpacking filesystem")
 		u, err := unpack.Unpack(a["image"], work)
 		if err != nil {
+			st.Fail("")
 			var ue *unpack.Error
 			if errors.As(err, &ue) {
 				fmt.Fprintf(os.Stderr, "trowl: %v\n", err)
@@ -275,6 +309,7 @@ func cmdScan(a args) int {
 			fmt.Fprintf(os.Stderr, "trowl: %v\n", err)
 			return nil, 1
 		}
+		st.Ok(u.SourceFormat)
 		res, err := scan.Run(u, a["image"], scan.Options{
 			SBOM: a["sbom"], Network: !a.flag("no-network"), CacheDir: a["cache-dir"], Links: a["links"],
 			Model: modelName, KernelConfig: a["kernel-config"], KernelSrc: a["kernel-src"], KernelPolicy: a["kernel-policy"],
@@ -291,16 +326,25 @@ func cmdScan(a args) int {
 	}
 
 	jsonPath, htmlPath := joinPath(out, "report.json"), joinPath(out, "index.html")
+	st := status.Start("writing report")
 	if err := report.WriteJSON(res.Report, filepath.Join(out, "report.json")); err != nil {
-		fmt.Fprintf(os.Stderr, "trowl: %v\n", err)
+		st.Fail("")
+		status.Warn("%v", err)
 		return 1
 	}
 	html, err := report.WriteHTML(res.Report, filepath.Join(out, "index.html"))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "trowl: %v\n", err)
+		st.Fail("")
+		status.Warn("%v", err)
 		return 1
 	}
+	if html {
+		st.Ok("")
+	} else {
+		st.Fail("dashboard UI not built")
+	}
 
+	fmt.Fprintln(os.Stderr)
 	fmt.Printf("trowl %s: %d files (%s), %d ELF\n", model.Version, res.Files, res.Format, res.Binaries)
 	var parts []string
 	for i := len(model.Severities) - 1; i >= 0; i-- {
@@ -321,17 +365,21 @@ func cmdScan(a args) int {
 		fmt.Printf("wrote %s (UI not built: no index.html)\n", jsonPath)
 	}
 
-	status := 0
+	exit := 0
 	if f := a["fail-on"]; f != "" {
 		threshold := model.SeverityRank(f)
+		over := 0
 		for _, fd := range res.Findings {
 			if model.SeverityRank(fd.Severity) >= threshold {
-				status = 1
-				break
+				over++
 			}
 		}
+		if over > 0 {
+			status.Warn("failing: %d finding(s) at or above %s (--fail-on)", over, f)
+			exit = 1
+		}
 	}
-	return status
+	return exit
 }
 
 func cmdUnpack(a args) int {

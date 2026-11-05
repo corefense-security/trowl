@@ -5,13 +5,14 @@ package inventory
 import (
 	"encoding/binary"
 	"encoding/hex"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/corefense-security/trowl/internal/status"
 )
 
 // Component is one source component and its upstream version.
@@ -80,12 +81,12 @@ func readRpm(path string) []Component {
 		return nil
 	}
 	if _, err := exec.LookPath("sqlite3"); err != nil {
-		fmt.Fprintln(os.Stderr, "trowl: sqlite3 is required to read the rpm database; packages not checked")
+		status.Warn("sqlite3 is required to read the rpm database; packages not checked")
 		return nil
 	}
 	out, err := exec.Command("sqlite3", "file:"+path+"?immutable=1", "select hex(blob) from Packages").Output()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "trowl: reading the rpm database: %v\n", err)
+		status.Warn("reading the rpm database: %v", err)
 		return nil
 	}
 	found := map[string]string{}
