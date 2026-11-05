@@ -676,7 +676,7 @@ func imageInventory(rootfs string) (*sbom.Sbom, *sbom.Status) {
 }
 
 func cveSection(sb *sbom.Sbom, presence *sbom.Status, opt Options) *pyjson.Obj {
-	matched, known := versionMatch(sb, opt)
+	matched, known, inFeed := versionMatch(sb, opt)
 	rows := sbom.BuildCVEs(sb, presence)
 	sources := pyjson.O("kev", nil, "epss", nil, "links", "none", "version_match", matched)
 	if opt.Network && opt.CacheDir != "" {
@@ -717,13 +717,7 @@ func cveSection(sb *sbom.Sbom, presence *sbom.Status, opt Options) *pyjson.Obj {
 					kernel[id] = true
 				}
 			}
-			st = status.Start("checking advisory links")
-			found := feeds.CheckLinks(opt.CacheDir, scope, kernel)
-			if len(found) == 0 && len(scope) > 0 {
-				st.Fail("none checked")
-			} else {
-				st.Ok(fmt.Sprintf("%d of %d CVEs", len(found), len(scope)))
-			}
+			found := feeds.CheckLinks(opt.CacheDir, scope, kernel, inFeed)
 			for _, r := range rows {
 				if l, ok := found[r.G("id").(string)]; ok {
 					r.Set("links", l)
@@ -827,16 +821,17 @@ func hasModuleSuffix(name string) bool {
 
 // versionMatch adds the CVEs that NVD and the kernel CNA list for each component's version,
 // as Trivy and Grype do. The SBOM's own VEX statuses are kept. It returns the data's
-// provenance for the report and the products the feed knows, or nil when nothing was matched.
-func versionMatch(sb *sbom.Sbom, opt Options) (any, map[string]bool) {
+// provenance for the report, the products the feed knows and the CVEs it has records for, or
+// nil when nothing was matched.
+func versionMatch(sb *sbom.Sbom, opt Options) (any, map[string]bool, map[string]bool) {
 	if opt.CacheDir == "" {
-		return nil, nil
+		return nil, nil, nil
 	}
 	st := status.Start("sifting CVEs")
 	cpes := sb.MatchTargets()
 	if len(cpes) == 0 {
 		st.Fail("no components with a CPE")
-		return nil, nil
+		return nil, nil, nil
 	}
 	targets := make([]nvd.Target, len(cpes))
 	for i, c := range cpes {
@@ -849,7 +844,7 @@ func versionMatch(sb *sbom.Sbom, opt Options) (any, map[string]bool) {
 	res := nvd.Run(opt.CacheDir, opt.Network, targets, listed)
 	if res == nil {
 		st.Fail("no NVD data available")
-		return nil, nil
+		return nil, nil, nil
 	}
 	for _, m := range res.Matches {
 		var vi *sbom.VulnInfo
@@ -871,5 +866,5 @@ func versionMatch(sb *sbom.Sbom, opt Options) (any, map[string]bool) {
 		meta.Set(k, res.Meta[k])
 	}
 	meta.Set("matches", len(res.Matches))
-	return meta, res.Known
+	return meta, res.Known, res.InFeed
 }
