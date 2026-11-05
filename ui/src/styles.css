@@ -610,6 +610,8 @@ tr.sel td { background: var(--accent-soft); }
 
 .cve-star { margin-left: 2px; color: var(--muted); }
 .cve-foot { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+/* Amber alone is too faint on a light page, so it's mixed towards the ink colour. */
+.cve-name-only { color: color-mix(in srgb, var(--warning) 70%, var(--ink)); font-weight: 600; }
 
 .stat-v.stat-warn { color: var(--warning); }
 .stat-v.stat-plain { color: var(--ink); }

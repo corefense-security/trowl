@@ -875,6 +875,10 @@ func versionMatch(sb *sbom.Sbom, opt Options) (any, map[string]bool, map[string]
 			}
 		}
 		sb.AddMatch(m.Comp, m.CVE, vi)
+		// Without an SBOM no package has a vendor, so saying so of each match would say nothing.
+		if !res.Vendored[m] && sb.Inventory == "" {
+			sb.MarkNameOnly(m.Comp, m.CVE)
+		}
 	}
 	for m, fix := range res.Fixes {
 		sb.SetFix(m.Comp, m.CVE, sbom.Fix(fix))

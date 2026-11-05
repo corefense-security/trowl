@@ -87,6 +87,7 @@ type Sbom struct {
 	vexNotes     map[pair]string
 	stated       map[pair]string // fix version named in the VEX text (sbom-cve-check)
 	matched      map[pair]bool   // statuses that came from a version match
+	nameOnly     map[pair]bool   // version matches with no vendor to back them up
 	fixes        map[pair]Fix    // upstream fix, from the CVE record
 	Name         string
 	VulnInfo     map[string]*VulnInfo
@@ -255,7 +256,7 @@ func Load(path string) (*Sbom, error) {
 	}
 
 	sb := &Sbom{Packages: map[string]*Package{}, Generates: newIDList(), RuntimeDeps: newIDList(),
-		BuildDeps: newIDList(), Vulns: newIDList(), vex: map[pair]string{}, vexNotes: map[pair]string{}, stated: map[pair]string{}, matched: map[pair]bool{}, fixes: map[pair]Fix{},
+		BuildDeps: newIDList(), Vulns: newIDList(), vex: map[pair]string{}, vexNotes: map[pair]string{}, stated: map[pair]string{}, matched: map[pair]bool{}, nameOnly: map[pair]bool{}, fixes: map[pair]Fix{},
 		VulnInfo: map[string]*VulnInfo{}}
 	for _, sid := range order {
 		e := byID[sid]
