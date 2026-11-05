@@ -30,6 +30,8 @@ import (
 	"time"
 
 	"github.com/ulikunitz/xz"
+
+	"github.com/corefense-security/trowl/internal/status"
 )
 
 const (
@@ -87,7 +89,7 @@ type Result struct {
 	Meta    map[string]any  // for the report's sources
 }
 
-func warn(format string, a ...any) { fmt.Fprintf(os.Stderr, "trowl: "+format+"\n", a...) }
+func warn(format string, a ...any) { status.Warn(format, a...) }
 
 // Run fetches the feed when network is allowed and the cache is stale, then matches. It returns
 // nil when there is no feed to match against.
@@ -110,7 +112,6 @@ func Run(cacheDir string, network bool, targets []Target, listed map[Match]strin
 		}
 	}
 	if len(files) == 0 {
-		warn("no NVD data cached; CVEs come from the SBOM only")
 		return nil
 	}
 	res := match(files, targets, listed)

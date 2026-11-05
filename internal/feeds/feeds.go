@@ -10,7 +10,6 @@ import (
 	"compress/gzip"
 	"encoding/csv"
 	"encoding/json"
-	"fmt"
 	"io"
 	"math"
 	"net/http"
@@ -23,6 +22,7 @@ import (
 
 	"github.com/corefense-security/trowl/internal/model"
 	"github.com/corefense-security/trowl/internal/pyjson"
+	"github.com/corefense-security/trowl/internal/status"
 )
 
 var ua = "trowl/" + model.Version
@@ -42,7 +42,7 @@ const (
 
 var retryCodes = map[int]bool{429: true, 500: true, 502: true, 503: true, 504: true}
 
-func warn(format string, a ...any) { fmt.Fprintf(os.Stderr, "trowl: "+format+"\n", a...) }
+func warn(format string, a ...any) { status.Warn(format, a...) }
 
 // get is a GET with backoff on rate limits, server errors and timeouts.
 func get(url string, timeout time.Duration) (int, []byte, error) {
@@ -294,7 +294,6 @@ func CheckLinks(cache string, cves []string, kernel map[string]bool) map[string]
 		}
 	}
 	if len(todo) > 0 {
-		fmt.Fprintf(os.Stderr, "trowl: checking advisory links for %d CVE(s)\n", len(todo))
 		results := make([]*pyjson.Obj, len(todo))
 		var wg sync.WaitGroup
 		next := make(chan int)

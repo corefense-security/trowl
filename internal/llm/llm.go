@@ -28,6 +28,7 @@ import (
 	"github.com/corefense-security/trowl/internal/model"
 	"github.com/corefense-security/trowl/internal/py"
 	"github.com/corefense-security/trowl/internal/pyjson"
+	"github.com/corefense-security/trowl/internal/status"
 )
 
 type spec struct{ Label, File, URL, Sha256 string }
@@ -112,7 +113,7 @@ How to read the facts:
 
   Return only the bullet points.`
 
-func warn(format string, a ...any) { fmt.Fprintf(os.Stderr, "trowl: "+format+"\n", a...) }
+func warn(format string, a ...any) { status.Warn(format, a...) }
 
 func fileSha256(path string) string {
 	f, err := os.Open(path)
@@ -296,7 +297,6 @@ var emphasisRe = regexp.MustCompile("\\*\\*|`")
 // position, since a bullet may span sections.
 func Overview(r *Runner, facts *pyjson.Obj) *pyjson.Obj {
 	name := r.name
-	warn("writing the overview summary with %s", Models[name].Label)
 	points := []any{}
 	for _, line := range Summarise(r, pyjson.Indent1(facts)) {
 		points = append(points, pyjson.O("topic", strconv.Itoa(len(points)+1), "text", line))
