@@ -9,11 +9,14 @@ package sbom
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/corefense-security/trowl/internal/py"
 )
 
 var binaryPurposes = map[string]bool{"install": true, "application": true, "library": true, "firmware": true,
@@ -227,8 +230,8 @@ func Load(path string) (*Sbom, error) {
 	var items []json.RawMessage
 	if json.Unmarshal(raw, &doc) == nil && doc.Graph != nil {
 		items = doc.Graph
-	} else {
-		json.Unmarshal(raw, &items)
+	} else if err := json.Unmarshal(raw, &items); err != nil {
+		return nil, fmt.Errorf("%s isn't an SPDX 3.0 JSON-LD SBOM", py.CleanPath(path))
 	}
 	raw = nil
 	graph := make([]*element, 0, len(items))

@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path"
@@ -72,7 +73,7 @@ func decompress(src, work string) (string, string, error) {
 		cmd := exec.Command("zstd", "-dcq", src)
 		cmd.Stdout = out
 		if err := cmd.Run(); err != nil {
-			return "", "", err
+			return "", "", errorf("zstd can't read the image; it may be corrupt")
 		}
 		return dst, "zstd", nil
 	}
@@ -234,12 +235,40 @@ func extractExt(img, dest string) (map[string]Perm, error) {
 	if err := cmd.Run(); err != nil {
 		return nil, errorf("debugfs failed: %s", strings.TrimSpace(stderr.String()))
 	}
+	// debugfs exits 0 after failing to write a file, and escapes names outside plain ASCII.
+	sizes := map[string]int64{}
+	for _, e := range entries {
+		if e.mode&0o170000 == 0o100000 && !strings.Contains(e.path, "M-") && !strings.Contains(e.path, "^") {
+			sizes[e.path] = e.size
+		}
+	}
+	if err := checkExtracted(dest, sizes); err != nil {
+		return nil, err
+	}
 	return extPerms(entries), nil
+}
+
+// checkExtracted compares the extracted files with their listing, by image path and size, as
+// the tools can leave some out or cut short without failing. A file that can't be looked at
+// because of its directory's mode isn't counted.
+func checkExtracted(dest string, sizes map[string]int64) error {
+	lost := 0
+	for p, size := range sizes {
+		st, err := os.Lstat(filepath.Join(dest, p))
+		if errors.Is(err, fs.ErrNotExist) || (err == nil && st.Size() != size) {
+			lost++
+		}
+	}
+	if lost > 0 {
+		return errorf("%d of %d files could not be extracted; the image may be corrupt", lost, len(sizes))
+	}
+	return nil
 }
 
 // extEntry is one line of debugfs "ls -p" with the path it was found at.
 type extEntry struct {
 	inode, mode, uid, gid int
+	size                  int64
 	path                  string
 }
 
@@ -248,7 +277,7 @@ func (e extEntry) isDir() bool { return e.mode&0o170000 == 0o040000 }
 var (
 	extPromptRe = regexp.MustCompile(`^debugfs: ls -p <(\d+)>$`)
 	// extEntryRe matches a line of debugfs "ls -p": /inode/mode/uid/gid/name/size/.
-	extEntryRe = regexp.MustCompile(`^/(\d+)/(\d+)/(\d+)/(\d+)/(.*)/\d*/$`)
+	extEntryRe = regexp.MustCompile(`^/(\d+)/(\d+)/(\d+)/(\d+)/(.*)/(\d*)/$`)
 )
 
 const extRootInode = 2
@@ -333,7 +362,8 @@ func parseExtList(out string, dirs map[int]string) ([]extEntry, error) {
 		mode, _ := strconv.ParseInt(m[2], 8, 32)
 		uid, _ := strconv.Atoi(m[3])
 		gid, _ := strconv.Atoi(m[4])
-		entries = append(entries, extEntry{inode, int(mode), uid, gid, path.Join(dir, name)})
+		size, _ := strconv.ParseInt(m[6], 10, 64)
+		entries = append(entries, extEntry{inode, int(mode), uid, gid, size, path.Join(dir, name)})
 	}
 	return entries, nil
 }
@@ -348,19 +378,10 @@ func extPerms(entries []extEntry) map[string]Perm {
 	return perms
 }
 
-// squashPerms reads owners and modes from unsquashfs's numeric listing.
-func squashPerms(img string) map[string]Perm {
-	out, err := exec.Command("unsquashfs", "-lln", img).Output()
-	if err != nil {
-		return nil
-	}
-	return parseSquashPerms(string(out))
-}
-
-// parseSquashPerms reads lines such as
-// "-rwsr-xr-x 0/0 59520 2026-10-27 10:00 squashfs-root/bin/su".
-func parseSquashPerms(out string) map[string]Perm {
-	perms := map[string]Perm{}
+// parseSquashList reads the owner, mode and size of each regular file from lines of unsquashfs's
+// numeric listing, such as "-rwsr-xr-x 0/0 59520 2026-10-27 10:00 squashfs-root/bin/su".
+func parseSquashList(out string) (map[string]Perm, map[string]int64) {
+	perms, sizes := map[string]Perm{}, map[string]int64{}
 	for _, line := range strings.Split(out, "\n") {
 		f := strings.Fields(line)
 		if len(f) < 6 || len(f[0]) != 10 || f[0][0] != '-' {
@@ -372,8 +393,9 @@ func parseSquashPerms(out string) map[string]Perm {
 		}
 		name := strings.TrimPrefix(strings.Join(f[5:], " "), "squashfs-root")
 		perms[name] = Perm{symbolicMode(f[0]), uid, gid}
+		sizes[name], _ = strconv.ParseInt(f[2], 10, 64)
 	}
-	return perms
+	return perms, sizes
 }
 
 // symbolicMode turns "-rwsr-xr-x" into 0o4755.
@@ -405,16 +427,22 @@ func dirPerms(root string) map[string]Perm {
 	return perms
 }
 
-func extractSquashfs(img, dest string) error {
+func extractSquashfs(img, dest string) (map[string]Perm, error) {
 	if _, err := exec.LookPath("unsquashfs"); err != nil {
-		return errorf("unsquashfs (squashfs-tools) is required to read squashfs images")
+		return nil, errorf("unsquashfs (squashfs-tools) is required to read squashfs images")
 	}
-	// -no-xattrs/-ignore-errors: device nodes and xattrs can't be created without root.
+	out, err := exec.Command("unsquashfs", "-lln", img).Output()
+	if err != nil {
+		return nil, errorf("unsquashfs can't read the image; it may be corrupt")
+	}
+	perms, sizes := parseSquashList(string(out))
+	// -no-xattrs/-ignore-errors: device nodes and xattrs can't be created without root, so the
+	// exit status can't tell those from a lost file. checkExtracted does.
 	exec.Command("unsquashfs", "-no-xattrs", "-ignore-errors", "-quiet", "-f", "-d", dest, img).Run()
 	if !py.IsDir(dest) {
-		return errorf("unsquashfs produced no output")
+		return nil, errorf("unsquashfs produced no output")
 	}
-	return nil
+	return perms, checkExtracted(dest, sizes)
 }
 
 func looksLikeRootfs(path string) bool {
@@ -428,10 +456,8 @@ func extractFilesystem(img, dest string) (string, map[string]Perm, error) {
 		return "ext", perms, err
 	}
 	if isSquashfs(img) {
-		if err := extractSquashfs(img, dest); err != nil {
-			return "squashfs", nil, err
-		}
-		return "squashfs", squashPerms(img), nil
+		perms, err := extractSquashfs(img, dest)
+		return "squashfs", perms, err
 	}
 	return "", nil, nil
 }

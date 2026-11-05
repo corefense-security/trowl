@@ -78,6 +78,10 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 			findings = append(findings, elfcheck.FindingsFor(imagePath, props)...)
 		}
 	})
+	if fileCount == 0 {
+		st.Fail("")
+		return nil, fmt.Errorf("no files found in %s; the image may be corrupt", py.CleanPath(image))
+	}
 	walked := fmt.Sprintf("%d files, %d ELF, %d secret(s)", fileCount, len(binaries), secretCount)
 	if len(binaries) == 0 {
 		st.Fail(walked)
@@ -117,10 +121,10 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 			return nil, err
 		}
 		if len(sb.PackageOrder) == 0 {
-			st.Fail("no components")
-		} else {
-			st.Ok(fmt.Sprintf("%d components", len(sb.PackageOrder)))
+			st.Fail("")
+			return nil, fmt.Errorf("%s lists no components", py.CleanPath(opt.SBOM))
 		}
+		st.Ok(fmt.Sprintf("%d components", len(sb.PackageOrder)))
 		st = status.Start("matching SBOM to image")
 		if err := checkKernelVersion(sb, kconfig.ModulesVersion(rootfs)); err != nil {
 			st.Fail("")
