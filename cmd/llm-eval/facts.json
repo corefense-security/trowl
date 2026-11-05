@@ -1,0 +1,77 @@
+{
+ "1. SBOM and vulnerabilities": {
+  "Packages in the SBOM": 57,
+  "Packages shipped": 49,
+  "SBOM packages not installed": 8,
+  "Packages changed after build": 2,
+  "Packages with files missing": 0,
+  "How CVEs were found": "Matched by package version; not confirmed as exploitable on this image",
+  "Unpatched CVEs by severity": {
+   "critical": 12,
+   "high": 240,
+   "medium": 96,
+   "low": 8,
+   "no CVSS score yet": 476
+  },
+  "Unpatched kernel CVEs": 832,
+  "Unpatched kernel CVEs with a backport for this kernel's stable series": 756,
+  "Critical or high unpatched CVEs in the kernel": 231,
+  "Critical or high unpatched CVEs in userland": 21,
+  "Critical or high unpatched CVEs with a network attack vector": 88,
+  "Packages with the most critical and high unpatched CVEs": [
+   "linux-yocto: 9 critical, 222 high",
+   "openssl: 2 critical, 9 high",
+   "openssh: 1 critical, 6 high"
+  ],
+  "Userland package most affected": "openssl: 2 critical, 9 high",
+  "Unpatched CVEs in the CISA Known Exploited Vulnerabilities list": "none",
+  "Highest-CVSS unpatched CVE": "CVE-2026-99153 (CVSS 9.8, linux-yocto)",
+  "Highest-CVSS unpatched userland CVE": "CVE-2026-11111 (CVSS 9.1, openssl)",
+  "Highest-EPSS unpatched CVE": "CVE-2026-22222 (EPSS 0.30, openssh)"
+ },
+ "2. Kernel": {
+  "Kernel": "Linux 6.18.52 x86",
+  "Attack-surface options enabled that should be off": {
+   "PROC_KCORE": {
+    "Why": "/proc/kcore exposes kernel memory as an ELF core file",
+    "Fix": "CONFIG_PROC_KCORE=n"
+   },
+   "BINFMT_MISC": {
+    "Why": "Lets user-registered interpreters run arbitrary file formats",
+    "Fix": "CONFIG_BINFMT_MISC=n"
+   }
+  },
+  "Hardening options missing that should be on": {
+   "HARDENED_USERCOPY": {
+    "Why": "Bounds-checks copies between kernel and user memory against the object's real size",
+    "Fix": "CONFIG_HARDENED_USERCOPY=y"
+   },
+   "MODULE_SIG_FORCE": {
+    "Why": "Refuses to load modules without a valid signature",
+    "Fix": "CONFIG_MODULE_SIG_FORCE=y"
+   }
+  }
+ },
+ "3. Filesystems": {
+  "Insecure mounts (missing a secure flag)": 2,
+  "Those mounts": [
+   "/proc missing nodev, nosuid, noexec, hidepid=1/2",
+   "/var/volatile missing nodev, nosuid, noexec"
+  ],
+  "Secrets found per directory": {
+   "/etc/ssh": 3,
+   "/usr/lib/openssl/ptest/test/certs": 120
+  }
+ },
+ "4. Hardening": {
+  "Executables and libraries checked": 94,
+  "Note": "A binary can miss several flags, so these numbers overlap and must not be added.",
+  "Executables without PIE": 0,
+  "Without NX": 0,
+  "Without RELRO": 0,
+  "With only partial RELRO": 3,
+  "Without a stack canary": 21,
+  "Without FORTIFY": 40,
+  "Without CFI": 94
+ }
+}
