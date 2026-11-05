@@ -34,13 +34,13 @@ import (
 type spec struct{ Label, File, URL, Sha256 string }
 
 var Models = map[string]spec{
-	"qwen3-4b": {"Qwen3 4B", "Qwen3-4B-Q4_K_M.gguf",
+	"qwen3-4b": {"Qwen3-4B", "Qwen3-4B-Q4_K_M.gguf",
 		"https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/bc640142c66e1fdd12af0bd68f40445458f3869b/Qwen3-4B-Q4_K_M.gguf",
 		"7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5"},
-	"qwen3.5-4b": {"Qwen3.5 4B", "Qwen3.5-4B-Q4_K_M.gguf",
+	"qwen3.5-4b": {"Qwen3.5-4B", "Qwen3.5-4B-Q4_K_M.gguf",
 		"https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/e87f176479d0855a907a41277aca2f8ee7a09523/Qwen3.5-4B-Q4_K_M.gguf",
 		"00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4"},
-	"qwen3.5-9b": {"Qwen3.5 9B", "Qwen3.5-9B-Q4_K_M.gguf",
+	"qwen3.5-9b": {"Qwen3.5-9B", "Qwen3.5-9B-Q4_K_M.gguf",
 		"https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/3885219b6810b007914f3a7950a8d1b469d598a5/Qwen3.5-9B-Q4_K_M.gguf",
 		"03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8"},
 }
