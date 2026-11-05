@@ -74,8 +74,11 @@ func extractTar(img, dest string) (int, map[string]Perm, error) {
 			if err != nil {
 				continue
 			}
-			io.Copy(w, tr)
+			_, err = io.Copy(w, tr)
 			w.Close()
+			if err != nil {
+				return skipped, nil, err
+			}
 			os.Chmod(out, mode)
 			os.Chtimes(out, h.ModTime, h.ModTime)
 		}
