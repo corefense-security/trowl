@@ -2,6 +2,7 @@ package llm
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -19,5 +20,14 @@ func TestBullets(t *testing.T) {
 	want = []string{"first point", "second point"}
 	if got := bullets("Assessment:\n\nfirst point\nsecond point\n"); !reflect.DeepEqual(got, want) {
 		t.Fatalf("bullets() = %q, want %q", got, want)
+	}
+}
+
+// A label is shown to users, so it must be the model's published name, as in its file name.
+func TestLabelsAreModelNames(t *testing.T) {
+	for id, m := range Models {
+		if want := strings.TrimSuffix(m.File, "-Q4_K_M.gguf"); m.Label != want {
+			t.Errorf("%s: label %q, want %q", id, m.Label, want)
+		}
 	}
 }
