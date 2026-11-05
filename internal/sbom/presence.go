@@ -104,13 +104,28 @@ type Comparison struct {
 	Findings   []model.Finding
 }
 
-// Compare returns per-component status, the components not in the image, and findings.
-func Compare(sb *Sbom, rootfs string) *Comparison {
+// onBoot reports whether every file is under /boot.
+func onBoot(files []File) bool {
+	for _, f := range files {
+		if !strings.HasPrefix(strings.TrimLeft(f.Name, "/"), "boot/") {
+			return false
+		}
+	}
+	return len(files) > 0
+}
+
+// Compare returns per-component status, the components not in the image, and findings. With
+// otherPartitions, a package whose files are all under /boot can't be called absent: they may be
+// on a boot partition, as a kernel's usually are.
+func Compare(sb *Sbom, rootfs string, otherPartitions bool) *Comparison {
 	status := &Status{M: map[string]*pyjson.Obj{}}
 	for _, pid := range sb.PackageOrder {
 		pkg := sb.Packages[pid]
 		if pkg.Role == "package" {
 			st, counts := packageStatus(rootfs, pkg.Files)
+			if st == "absent" && otherPartitions && onBoot(pkg.Files) {
+				st = "no-files"
+			}
 			status.set(pid, pyjson.O("status", st, "files", counts))
 		}
 	}

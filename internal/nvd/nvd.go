@@ -464,20 +464,30 @@ func affects(rec *record, byProduct map[string][]Target) (hits []hit, products [
 		blocks := cnaBlocks(rec, product, kernel)
 		if len(blocks) > 0 {
 			products = append(products, product)
+			decided := map[string]bool{}
 			for _, t := range ts {
-				affected := false
 				if kernel {
-					affected = kernelAffected(t.Version, blocks)
-				} else {
-					for _, b := range blocks {
-						if cnaAffected(t.Version, b, false) && vendorAgrees(t.Vendor, b.Vendor) {
-							affected = true
-							break
-						}
+					if kernelAffected(t.Version, blocks) {
+						out = append(out, hit{t.Comp, cnaFix(t.Version, blocks, true), t})
+					}
+					continue
+				}
+				own := blocksFor(t, blocks)
+				if len(own) > 0 {
+					decided[t.Comp] = true
+				}
+				for _, b := range own {
+					if cnaAffected(t.Version, b, false) {
+						out = append(out, hit{t.Comp, cnaFix(t.Version, own, false), t})
+						break
 					}
 				}
-				if affected {
-					out = append(out, hit{t.Comp, cnaFix(t.Version, blocks, kernel), t})
+			}
+			// No block applying to a component isn't the same as it being unaffected. A component
+			// can have several CPEs, and the CNA's word on one of them is enough.
+			for _, t := range ts {
+				if !kernel && !decided[t.Comp] {
+					out = append(out, cpeAffects(rec, []Target{t})...)
 				}
 			}
 			continue
@@ -733,6 +743,31 @@ func cnaBlocks(rec *record, product string, kernel bool) []affectedData {
 	return out
 }
 
+// blocksFor picks the CNA blocks that can decide for t: those from its vendor with an entry that
+// can be compared. Yocto's CPE vendor often isn't the CNA's (haxx and curl), and a CNA may give a
+// version in words ("6.0 and earlier").
+func blocksFor(t Target, blocks []affectedData) []affectedData {
+	var out []affectedData
+	for _, b := range blocks {
+		if !vendorAgrees(t.Vendor, b.Vendor) {
+			continue
+		}
+		for _, v := range b.Versions {
+			if usable(v) && !inWords(v) {
+				out = append(out, b)
+				break
+			}
+		}
+	}
+	return out
+}
+
+// inWords reports whether a version entry is prose rather than a version or constraint.
+func inWords(v cnaVersion) bool {
+	ver := strings.TrimSpace(v.Version)
+	return v.LessThan == "" && v.LessThanOrEqual == "" && strings.Contains(ver, " ") && !strings.ContainsAny(ver, "<>=")
+}
+
 // usable reports whether a CNA version entry can be compared: not a git commit or a distro
 // package version, and not a placeholder such as "n/a" or "unspecified".
 func usable(v cnaVersion) bool {
@@ -944,8 +979,9 @@ func cpeHit(rec *record, t Target) (found bool, fix string) {
 	return found, fix
 }
 
-// distroRe matches a distro build such as 4.18.0-193.el8: not an upstream version to update to.
-var distroRe = regexp.MustCompile(`(?i)\.(el|fc|amzn)\d|ubuntu|deb\d`)
+// distroRe matches a distro build such as 4.18.0-193.el8, or a date as NVD gives for gcc: neither
+// is an upstream version to update to.
+var distroRe = regexp.MustCompile(`(?i)\.(el|fc|amzn)\d|ubuntu|deb\d|^\d{4}-\d{2}-\d{2}$`)
 
 // cpeEnd is the highest exclusive end of any vulnerable range for t's product.
 func cpeEnd(rec *record, t Target) string {

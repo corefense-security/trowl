@@ -22,7 +22,12 @@ var statusOfVex = map[string]string{"affected": "unpatched", "not_affected": "ig
 // Worst first: the row shows the worst status among the carriers that decide it.
 var statusOrder = []string{"unpatched", "unknown", "ignored", "fixed"}
 
-var shippedOfRecipe = map[string]string{"present": "yes", "build-only": "build", "absent": "no", "unknown": "unknown"}
+var shippedOfRecipe = map[string]string{"present": "yes", "modified": "yes", "partial": "yes", "build-only": "build",
+	"absent": "no", "unknown": "unknown"}
+
+// MayShip reports whether a shipped value leaves a CVE in play: "unknown" can't be ruled out.
+func MayShip(shipped string) bool { return shipped != "no" && shipped != "build" }
+
 var vectors = map[string]string{"N": "network", "A": "adjacent", "L": "local", "P": "physical"}
 var avRe = regexp.MustCompile(`\bAV:([NALP])\b`)
 
@@ -163,7 +168,7 @@ func BuildCVEs(sb *Sbom, status *Status) []*pyjson.Obj {
 		})
 		var deciding []*carrier
 		for _, c := range cs {
-			if c.shipped == "yes" {
+			if MayShip(c.shipped) {
 				deciding = append(deciding, c)
 			}
 		}
@@ -246,7 +251,7 @@ func Summary(rows []*pyjson.Obj) *pyjson.Obj {
 	for _, r := range rows {
 		statusCount.Add(r.G("status").(string), 1)
 		if r.G("status") == "unpatched" {
-			if r.G("shipped") == "yes" {
+			if MayShip(r.G("shipped").(string)) {
 				openShipped = append(openShipped, r)
 			} else {
 				notShipped++
@@ -266,7 +271,7 @@ func Summary(rows []*pyjson.Obj) *pyjson.Obj {
 		}
 		for _, c := range r.G("carriers").([]any) {
 			co := c.(*pyjson.Obj)
-			if co.G("shipped") == "yes" && co.G("status") == "unpatched" {
+			if MayShip(co.G("shipped").(string)) && co.G("status") == "unpatched" {
 				name := co.G("name").(string)
 				if _, ok := byComp[name]; !ok {
 					byComp[name] = pyjson.NewCounter()
