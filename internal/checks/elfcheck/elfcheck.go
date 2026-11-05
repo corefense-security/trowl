@@ -350,7 +350,7 @@ func FindingsFor(imagePath string, props *pyjson.Obj) []model.Finding {
 	fortified, unfortified := ff.G("fortified").(int), ff.G("unfortified").(int)
 	// Only judge canaries where the binary handles buffers via libc; stub libraries and the
 	// dynamic loader legitimately have none.
-	if !props.G("canary").(bool) && !props.G("static").(bool) && (unfortified != 0 || fortified != 0) {
+	if !props.G("canary").(bool) && (unfortified != 0 || fortified != 0) {
 		add("elf.canary", "low", fmt.Sprintf("No stack protector symbols (%s)", kind),
 			"Calls buffer-handling libc functions but has no __stack_chk_* references; build with -fstack-protector-strong.", nil)
 	}
