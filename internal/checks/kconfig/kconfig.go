@@ -193,13 +193,14 @@ func globSorted(dir, pattern string) []string {
 }
 
 func FindConfig(rootfs, kernelConfig, kernelSrc string) (string, *pyjson.Obj) {
-	boot := filepath.Join(rootfs, "boot")
+	boot := py.InRoot(rootfs, "boot")
 	if py.IsDir(boot) {
 		configs := globSorted(boot, "config-*")
 		for i := len(configs) - 1; i >= 0; i-- {
-			if py.IsFile(configs[i]) {
-				raw, _ := os.ReadFile(configs[i])
-				return py.DecodeReplace(raw), pyjson.O("kind", "image", "path", "/boot/"+filepath.Base(configs[i]))
+			name := "/boot/" + filepath.Base(configs[i])
+			if c := py.InRoot(rootfs, name); py.IsFile(c) {
+				raw, _ := os.ReadFile(c)
+				return py.DecodeReplace(raw), pyjson.O("kind", "image", "path", name)
 			}
 		}
 		for _, pattern := range kernelImages {
@@ -284,12 +285,12 @@ func verLess(a, b []int) bool {
 }
 
 func ModulesVersion(rootfs string) string {
-	mods := filepath.Join(rootfs, "lib", "modules")
+	mods := py.InRoot(rootfs, "lib/modules")
 	var names []string
 	if py.IsDir(mods) {
 		entries, _ := os.ReadDir(mods)
 		for _, e := range entries {
-			if py.IsDir(filepath.Join(mods, e.Name())) {
+			if py.IsDir(py.InRoot(rootfs, "lib/modules/"+e.Name())) {
 				names = append(names, e.Name())
 			}
 		}

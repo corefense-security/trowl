@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -42,7 +43,8 @@ func packageStatus(rootfs string, files []File) (string, *pyjson.Obj) {
 	modPaths, missPaths := []string{}, []string{}
 	for _, sf := range files {
 		name := strings.TrimLeft(sf.Name, "/")
-		p := filepath.Join(rootfs, name)
+		// The file itself may be a link, which counts as present wherever it points.
+		p := filepath.Join(py.InRoot(rootfs, path.Dir(name)), path.Base(name))
 		switch {
 		case !(py.Exists(p) || py.IsSymlink(p)):
 			missing++

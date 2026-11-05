@@ -13,6 +13,8 @@ import (
 	"strings"
 
 	"github.com/corefense-security/trowl/internal/status"
+
+	"github.com/corefense-security/trowl/internal/py"
 )
 
 // Component is one source component and its upstream version.
@@ -24,14 +26,14 @@ func Read(rootfs string) ([]Component, string) {
 	for _, s := range []struct{ path, name string }{
 		{"var/lib/opkg/status", "opkg"}, {"usr/lib/opkg/status", "opkg"}, {"var/lib/dpkg/status", "dpkg"},
 	} {
-		if raw, err := os.ReadFile(filepath.Join(rootfs, s.path)); err == nil {
+		if raw, err := os.ReadFile(py.InRoot(rootfs, s.path)); err == nil {
 			if c := parseStatus(string(raw)); len(c) > 0 {
 				return c, s.name
 			}
 		}
 	}
 	for _, p := range []string{"var/lib/rpm/rpmdb.sqlite", "usr/lib/sysimage/rpm/rpmdb.sqlite"} {
-		if c := readRpm(filepath.Join(rootfs, p)); len(c) > 0 {
+		if c := readRpm(py.InRoot(rootfs, p)); len(c) > 0 {
 			return c, "rpm"
 		}
 	}

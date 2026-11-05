@@ -11,7 +11,8 @@ import (
 	"github.com/corefense-security/trowl/internal/py"
 )
 
-// extractTar extracts regular files, dirs and symlinks only, and refuses anything escaping dest.
+// extractTar extracts regular files, dirs and symlinks only, and refuses anything escaping dest
+// or replacing dest itself.
 func extractTar(img, dest string) (int, map[string]Perm, error) {
 	skipped := 0
 	perms := map[string]Perm{}
@@ -52,6 +53,10 @@ func extractTar(img, dest string) (int, map[string]Perm, error) {
 			continue
 		}
 		out := filepath.Join(root, filepath.FromSlash(name))
+		if out == root && !dir {
+			skipped++
+			continue
+		}
 		mode := os.FileMode(h.Mode & 0o7777)
 		switch {
 		case dir:
@@ -78,6 +83,10 @@ func extractTar(img, dest string) (int, map[string]Perm, error) {
 	// Like tarfile.extract, directory attributes are applied as each member is extracted;
 	// applying them last keeps a read-only directory from blocking its own contents.
 	for i := len(dirs) - 1; i >= 0; i-- {
+		// A later member may have replaced the directory with a link, which chmod would follow.
+		if st, err := os.Lstat(dirs[i].path); err != nil || !st.IsDir() {
+			continue
+		}
 		os.Chmod(dirs[i].path, dirs[i].mode)
 		os.Chtimes(dirs[i].path, dirs[i].hdr.ModTime, dirs[i].hdr.ModTime)
 	}

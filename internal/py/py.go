@@ -5,6 +5,7 @@ package py
 import (
 	"math"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -163,6 +164,42 @@ func Resolve(p string) string {
 		return abs
 	}
 	return filepath.Join(Resolve(dir), base)
+}
+
+const maxLinks = 40
+
+// InRoot is where path p inside an unpacked image really is. Links are followed as the image
+// would follow them: an absolute link starts again at root and ".." stops there, so no link in
+// the image can lead to the host. A missing part is left as it is. Too many links give a path
+// that can't exist, as the last link may still point out of the image.
+func InRoot(root, p string) string {
+	cur := "/"
+	parts := strings.Split(p, "/")
+	for links := 0; len(parts) > 0; {
+		part := parts[0]
+		parts = parts[1:]
+		switch part {
+		case "", ".":
+			continue
+		case "..":
+			cur = path.Dir(cur)
+			continue
+		}
+		next := path.Join(cur, part)
+		target, err := os.Readlink(filepath.Join(root, next))
+		if err != nil {
+			cur = next
+			continue
+		}
+		if links++; links > maxLinks {
+			return filepath.Join(root, "\x00")
+		}
+		if strings.HasPrefix(target, "/") {
+			cur = "/"
+		}
+		parts = append(strings.Split(target, "/"), parts...)
+	}
+	return filepath.Join(root, cur)
 }
 
 var b64 = func() [256]byte {

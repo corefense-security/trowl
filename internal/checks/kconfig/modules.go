@@ -151,20 +151,20 @@ func hasModuleSuffix(name string) bool {
 }
 
 func ScanModules(rootfs string, config Config, kernelVersion string) *pyjson.Obj {
-	root := filepath.Join(rootfs, "lib", "modules")
+	root := py.InRoot(rootfs, "lib/modules")
 	items := []any{}
 	var paths []string
 	if py.IsDir(root) {
 		for _, p := range rglob(root) {
-			if py.IsFile(p) && hasModuleSuffix(filepath.Base(p)) {
+			if py.IsFile(p) && !py.IsSymlink(p) && hasModuleSuffix(filepath.Base(p)) {
 				paths = append(paths, p)
 			}
 		}
 	}
 	py.SortPaths(paths)
 	for _, path := range paths {
-		rel, _ := filepath.Rel(rootfs, path)
-		rel = "/" + rel
+		rel, _ := filepath.Rel(root, path)
+		rel = "/lib/modules/" + rel
 		fi, _ := os.Stat(path)
 		base := filepath.Base(path)
 		stem := strings.SplitN(base, ".ko", 2)[0]
