@@ -10,15 +10,17 @@ Trowl is a security scanner for embedded Linux images. It detects hardening gaps
 Given an SBOM, it also maps dependencies and flags discrepancies.
 
 ## What it checks
-- Hardening gaps (binaries, kernel configs, filesystems)
+- Privileged binaries and compiler hardening (e.g., NX, CFI, PIE, stack protection)
+- Kernel hardening (configurations, unsigned modules)
+- Filesystem security
 - Secrets and private keys
-- Software Bill of Materials (SBOM) dependency graphs and image discrepancies
-- Known CVEs, fixed versions and available kernel backports.
+- SBOM dependencies and image discrepancies
+- Known CVEs, fixes, available kernel backports
 
 ## Currently supported
 - **Distro:** Yocto
 - **Filesystems:** ext2/3/4, squashfs, tar, or an unpacked directory.
-- **Disk images:** `.wic` and other MBR/GPT images; one detected root filesystem is analysed (ext or squashfs partitions only).
+- **Disk images:** `.wic` and other MBR/GPT images (ext or squashfs partitions). Scans the detected rootfs only.
 - **Compression:** zstd, xz, gzip, bzip2.
 - **SBOMs:** SPDX 3.0 JSON-LD from Yocto, including `sbom-cve-check` output.
 
@@ -46,6 +48,8 @@ docker run --rm \
 ```
 
 Reports are saved under `report/index.html` and `report/report.json`.
+
+Progress goes to stderr as plain `✓` and `✗` lines, so CI logs stay readable. Colour is on only in a terminal; set `FORCE_COLOR=1` to keep it in a log, or `NO_COLOR=1` to turn it off.
 
 HTML reports can be viewed locally or via static hosting (GitHub Pages, Cloudflare Pages, S3). For example:
 
@@ -82,11 +86,11 @@ Run `trowl scan --help` for all options.
 
 ## External data
 
-Trowl fetches data from these sources during a scan:
+Trowl queries and caches relevant external resources (`--no-network` uses the offline cache only):
 
-- CISA KEV
-- EPSS
-- Advisories (NVD, CNA)
+- NVD, OSV and kernel CNA records
+- CISA KEV, EPSS
+- LLM models from Hugging Face
 
 ## Roadmap
 - CI integration
@@ -95,6 +99,7 @@ Trowl fetches data from these sources during a scan:
 - Terminal reporting
 - SBOM/VEX report generation
 - Buildroot & OpenWrt support
+- More filesystems (EROFS, btrfs)
 
 ## Community
 
