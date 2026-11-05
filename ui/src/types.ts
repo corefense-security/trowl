@@ -35,6 +35,10 @@ export interface Binary {
   /** No symbol names at all to check canary/FORTIFY against (a stripped static binary; a
    *  stripped dynamic one keeps .dynsym, so this is almost always a static+stripped case). */
   no_symbols?: boolean;
+  /** From the image itself; absent if it couldn't be read. */
+  mode?: number;
+  uid?: number;
+  gid?: number;
 }
 
 export interface GraphNode {
@@ -62,13 +66,6 @@ export interface GraphEdge {
   kind: "generates" | "runtime" | "build";
 }
 
-export interface NotPresent {
-  component: string;
-  version: string;
-  status: string;
-  cves: { id: string; sbom_vex: string }[];
-}
-
 export type CveStatus = "unpatched" | "ignored" | "fixed" | "unknown";
 export type Shipped = "yes" | "build" | "no" | "unknown";
 
@@ -81,6 +78,17 @@ export interface CveCarrier {
   kernel: boolean;
   /** Where the status comes from: the SBOM's own VEX, or trowl's version match. */
   source?: "sbom" | "version-match";
+  /** First upstream version with the fix, from the CVE record; "" if it gives none. */
+  fixed_in?: string;
+  /** Kernel only: the commit for fixed_in, whether fixed_in is the backport to this kernel's
+   *  stable series, and the mainline fix. */
+  fix_commit?: string;
+  backport?: boolean;
+  mainline?: string;
+  mainline_commit?: string;
+  /** Earliest stable release with the fix, when it isn't a backport to this series. */
+  stable?: string;
+  stable_commit?: string;
 }
 
 export interface CveRow {
@@ -115,8 +123,12 @@ export interface CveSection {
     links: "open" | "all" | "none";
     /** CVEs matched by component version against NVD and the kernel CNA; null when not run. */
     version_match?: { source: string; updated: string; years: number; matches: number } | null;
+    /** Set when there is no SBOM: where the component list came from (rpm, opkg, dpkg, kernel only). */
+    inventory?: string;
   };
   rows: CveRow[];
+  /** Components with no product in NVD, so they couldn't be checked. Only without an SBOM. */
+  unmapped?: { name: string; version: string }[];
 }
 
 export interface KernelEntry {
@@ -136,8 +148,7 @@ export interface Report {
   image: { path: string; format: string; files: number; notes: string[] };
   summary: {
     findings: Partial<Record<Severity, number>>;
-    by_check: Record<string, number>;
-    elf: Record<string, number>;
+    scanned_at?: string;
     duration_s: number;
   };
   findings: Finding[];
@@ -148,9 +159,7 @@ export interface Report {
     name: string;
     components: Record<string, number>;
     status_counts: Record<string, number>;
-    not_present: NotPresent[];
     graph: { nodes: GraphNode[]; edges: GraphEdge[] };
-    cves?: CveSection;
   };
   kernel?: {
     source: { kind: string; path: string } | null;
@@ -164,9 +173,10 @@ export interface Report {
       items: {
         path: string; name: string; size: number; compressed?: boolean; signed: boolean | null;
         signature: { type: string; length: number } | null; vermagic: string; vermagic_match?: boolean;
-        license: string; package: string;
+        package: string;
       }[];
     };
   } | null;
+  cves?: CveSection | null;
   overview?: { points: { topic: string; text: string }[]; model: string; label: string } | null;
 }

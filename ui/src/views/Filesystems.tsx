@@ -6,19 +6,12 @@ type Mount = Report["fstab"][number];
 
 /** What each secure mount flag stops. */
 const FLAGS: [string, string][] = [
-  ["ro", "nothing on it can be changed"],
+  ["ro", "read-only"],
   ["nosuid", "setuid and setgid bits are ignored"],
-  ["nodev", "device files on it can't be opened"],
-  ["noexec", "programs on it can't be run"],
-  ["hidepid", "on /proc, users can't see each other's processes"],
+  ["nodev", "device files can't be created or opened"],
+  ["noexec", "non-executable, prevents malicious code execution"],
+  ["hidepid", "=1 restricts access to other users' /proc entries\n=2 hides them entirely"],
 ];
-
-/** The flags a mount lacks. Reports from before the hidepid check get it added here. */
-function missingOf(e: Mount): string[] {
-  const m = e.missing ?? [];
-  const hides = e.options.some((o) => o.startsWith("hidepid=") && o !== "hidepid=0" && o !== "hidepid=off");
-  return e.fstype === "proc" && !hides && !m.some((x) => x.startsWith("hidepid")) ? [...m, "hidepid=1/2"] : m;
-}
 
 /** The fstab entry whose mount point holds this path (longest prefix); "/" if none matches. */
 function mountOf(path: string, mounts: Mount[]): string {
@@ -46,15 +39,16 @@ export default function Filesystems({ r }: { r: Report }) {
     byMount.set(m, [...(byMount.get(m) ?? []), f]);
   }
 
-  const mountPage = usePage(r.fstab);
+  const mountPage = usePage(r.fstab, null, true);
   const secretRows = [...byMount.entries()].sort(([a], [b]) => a.localeCompare(b)).flatMap(([, fs]) => fs.map((f, i) => ({ f, i })));
-  const secretPage = usePage(secretRows);
+  const secretPage = usePage(secretRows, null, true);
 
   return (
     <div className="grid">
       <section className="card span-12">
         <PageHead title="Mount flags" note={<>Read from <code>/etc/fstab</code></>} />
         {r.fstab.length === 0 ? <div className="empty">No fstab entries.</div> : (<>
+          <div className="fs-legend">{FLAGS.map(([f, what]) => <div key={f}><code>{f}</code>{what}</div>)}</div>
           <table className="mounts">
             <colgroup>
               <col style={{ width: "20%" }} /><col style={{ width: "14%" }} /><col style={{ width: "22%" }} /><col /><col className="flag" />
@@ -68,7 +62,7 @@ export default function Filesystems({ r }: { r: Report }) {
             </thead>
             <tbody ref={mountPage.bodyRef}>
               {mountPage.rows.map((e) => {
-                const missing = missingOf(e);
+                const missing = e.missing ?? [];
                 const n = byMount.get(e.mountpoint.replace(/\/+$/, "") || "/")?.length ?? 0;
                 return (
                   <tr key={e.line}>
@@ -84,9 +78,6 @@ export default function Filesystems({ r }: { r: Report }) {
               })}
             </tbody>
           </table>
-          <div className="fs-legend">
-            {FLAGS.map(([f, what]) => <span key={f}><code>{f}</code> {what}</span>)}
-          </div>
           {mountPage.pager}
         </>)}
       </section>

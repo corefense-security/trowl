@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { ShieldCheck, Unlock } from "lucide-react";
 import type { KernelEntry, Report } from "../types";
-import { Card, PageHead, usePage } from "../ui";
+import { PageHead, usePage } from "../ui";
 
 // An option that isn't in the config is a fail: the protection isn't there either way. The row's
 // note still says why it is absent (dependencies off, or no compiler support).
@@ -39,17 +39,7 @@ export default function Kernel({ r }: { r: Report }) {
   const rows = useMemo(() => [...(k?.entries ?? [])].sort((a, b) => ORDER.indexOf(shownStatus(a.status)) - ORDER.indexOf(shownStatus(b.status)) ||
     a.subsystem.localeCompare(b.subsystem) || a.option.localeCompare(b.option)), [k]);
   const page = usePage(rows);
-  if (!k?.source) {
-    return (
-      <Card title="Kernel configuration" className="span-12">
-        <div className="empty">
-          No kernel config found in the image: no <code>/boot/config-*</code>, and no kernel image with an embedded config
-          (<code>CONFIG_IKCONFIG</code>). Pass one with <code>--kernel-config</code> or <code>--kernel-src</code>.
-          {k?.version && <div style={{ marginTop: 6 }}>Kernel {k.version} (from <code>/lib/modules</code>).</div>}
-        </div>
-      </Card>
-    );
-  }
+  if (!k?.source) return null; // the sidebar disables this page
   const file = k.source.path.split("/").pop();
 
   return (

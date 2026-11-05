@@ -1,6 +1,6 @@
 import { Check, ExternalLink, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { CveRow, CveSection, CveStatus } from "../types";
+import type { CveCarrier, CveRow, CveSection, CveStatus } from "../types";
 import { Card, Dropdown, SearchBox, Switch, usePage } from "../ui";
 
 const SEV_COLOR: Record<string, string> = {
@@ -16,6 +16,8 @@ const STATUS: Record<CveStatus, { label: string; color: string }> = {
 const VECTOR: Record<string, string> = {
   network: "Network", adjacent: "Adjacent network", local: "Local", physical: "Physical", "": "Not specified",
 };
+const OUTSIDE_NOTE = "Not in the SBOM: found by version match (NVD, kernel CNA), possibly published after the build.";
+const BACKPORT_NOTE = "Backport: the fix for this kernel's stable series.";
 const LINK: Record<string, string> = { nvd: "NVD", osv: "OSV", cve: "CNA", kernel: "Kernel CNA" };
 
 function StatusLabel({ s }: { s: CveStatus }) {
@@ -42,8 +44,12 @@ export function cveSources(rows: CveRow[]) {
   return { total: installed.length, sbom, matched: installed.length - sbom };
 }
 
-export function SourceNote({ rows, feed }: { rows: CveRow[]; feed: CveSection["sources"]["version_match"] }) {
+export function SourceNote({ rows, feed, inventory }: { rows: CveRow[]; feed: CveSection["sources"]["version_match"]; inventory?: string }) {
   const s = cveSources(rows);
+  if (inventory) {
+    return <span title="No SBOM, so there are no Fixed or Ignored statuses: every match shows as Unpatched.">
+      No SBOM passed · {inventory === "kernel only" && "kernel CVEs only · "}version matches, backports not checked</span>;
+  }
   return (
     <span title={feed ? `Version match: ${feed.source}, updated ${feed.updated.slice(0, 10)}` : undefined}>
       {s.sbom.toLocaleString()} listed in the SBOM · {s.matched.toLocaleString()} by version match (NVD, kernel CNA)
@@ -63,9 +69,9 @@ function Attention({ s, rows, sources }: { s: CveSection["summary"]; rows: CveRo
   const openShare = fixed + ignored + open ? (100 * open) / (fixed + ignored + open) : 0;
   const lensX = 1000 - (openShare * 10);
   return (
-    <Card title="CVEs in installed packages" hint={<SourceNote rows={rows} feed={sources.version_match} />} className="span-7">
+    <Card title="CVEs in installed packages" hint={<SourceNote rows={rows} feed={sources.version_match} inventory={sources.inventory} />} className="span-7">
       <div className="ig">
-        <div className="ig-row"><span><span><b className="num">{fixed.toLocaleString()}</b>Fixed</span>
+        <div className="ig-row"><span><span><b className="num">{sources.inventory ? "–" : fixed.toLocaleString()}</b>{sources.inventory ? "Fixed: needs an SBOM" : "Fixed"}</span>
           {ignored > 0 && <span className="ig-ign"><b className="num">{ignored.toLocaleString()}</b>Ignored</span>}</span><span><b className="num">{open.toLocaleString()}</b>Unpatched</span></div>
         <div className="ig-strip" role="img" aria-label={`${fixed} fixed, ${ignored} ignored, ${open} unpatched`}>
           <i style={{ flex: fixed, background: "var(--good-soft)" }} title={`${fixed.toLocaleString()} fixed`} />
@@ -155,6 +161,35 @@ function verdict(r: CveRow, notes?: string) {
   return <>The SBOM doesn't show whether <b>{names(r.carriers)}</b> ships (it declares no files).</>;
 }
 
+/** A fix version, linked to its commit when the record gives one. */
+function FixLink({ version, commit }: { version: string; commit?: string }) {
+  if (!commit) return <code>{version}</code>;
+  return <a href={`https://git.kernel.org/stable/c/${commit}`} target="_blank" rel="noreferrer noopener" onClick={(e) => e.stopPropagation()}><code>{version}</code></a>;
+}
+
+function FixCell({ c }: { c?: CveCarrier }) {
+  if (!c?.fixed_in) return <span className="muted">–</span>;
+  return <><FixLink version={c.fixed_in} commit={c.fix_commit} />{c.backport && <sup className="cve-b" title={BACKPORT_NOTE}>B</sup>}</>;
+}
+
+/** Kernel CVEs split the fix into the backport for this series and the mainline fix; a userland
+ *  CVE has one fix version per carrier, named when there are several. */
+function FixRows({ r }: { r: CveRow }) {
+  const c = r.carriers.find((x) => x.kernel);
+  if (c) {
+    return <>
+      <span>Backport</span><span>{c.backport ? <FixLink version={c.fixed_in!} commit={c.fix_commit} /> : <span className="muted">none for this series</span>}</span>
+      <span>Mainline</span><span>{c.mainline ? <FixLink version={c.mainline} commit={c.mainline_commit} /> : <span className="muted">not in the CVE record</span>}</span>
+      {c.stable && <><span>Earliest stable</span><span><FixLink version={c.stable} commit={c.stable_commit} /></span></>}
+    </>;
+  }
+  const fixes = r.carriers.filter((x) => x.fixed_in);
+  return <>
+    <span>Fixed in</span><span>{!fixes.length ? <span className="muted">not in the CVE record</span>
+      : <code>{r.carriers.length === 1 ? fixes[0].fixed_in : fixes.map((x) => `${x.name} ${x.fixed_in}`).join(", ")}</code>}</span>
+  </>;
+}
+
 function CveSheet({ r, sources, onClose }: { r: CveRow; sources: CveSection["sources"]; onClose: () => void }) {
   useEffect(() => {
     const k = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -166,7 +201,6 @@ function CveSheet({ r, sources, onClose }: { r: CveRow; sources: CveSection["sou
     <div className="overlay" onClick={onClose}>
       <aside className="sheet cve-sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={r.id}>
         <button className="icon-btn x" onClick={onClose} aria-label="Close"><X size={15} /></button>
-        <div className="muted" style={{ fontSize: 12 }}>CVE · {r.carriers[0]?.name}</div>
         <h3><code style={{ fontSize: 15 }}>{r.id}</code></h3>
         {r.links && r.links.length > 0 && (
           <div className="adv-pills">
@@ -190,6 +224,7 @@ function CveSheet({ r, sources, onClose }: { r: CveRow; sources: CveSection["sou
           <span>Status</span><span><StatusLabel s={r.status} />{notes && <span className="muted"> · {notes}</span>}
             <span className="muted"> · {r.carriers.find((c) => c.status === r.status)?.source === "version-match"
               ? "match from NVD / kernel CNA" : "from the SBOM"}</span></span>
+          <FixRows r={r} />
           <span>CVSS</span><span>{r.cvss?.vector ? <span className="vs">{r.cvss.vector}</span> : <span className="muted">not scored</span>}</span>
           <span>KEV</span><span>{!sources.kev ? <span className="muted">not checked</span> : r.kev
             ? <><span className="kev-t">KEV</span> added {r.kev.added}{r.kev.ransomware && " · used in ransomware"}</>
@@ -229,6 +264,9 @@ export default function Cves({ section, params }: { section: CveSection; params:
   const [kernelOnly, setKernelOnly] = useState(false);
   const [open, setOpen] = useState<CveRow | null>(null);
   const rows = section.rows;
+  const unmapped = section.unmapped ?? [];
+  // Without an SBOM every row is a version match, so the mark would say nothing.
+  const outsideSbom = (r: CveRow) => !section.sources.inventory && r.carriers.every((c) => c.source === "version-match");
 
   const byStatus = useMemo(() => rows.filter((r) => (status === "all" || r.status === status) &&
     (!offImage || r.shipped === "build" || r.shipped === "no")), [rows, status, offImage]);
@@ -238,16 +276,22 @@ export default function Cves({ section, params }: { section: CveSection; params:
       (!needle || r.id.toLowerCase().includes(needle) || r.carriers.some((c) => c.name.includes(needle)) ||
         (r.summary ?? "").toLowerCase().includes(needle)));
   }, [byStatus, vector, kevOnly, kernelOnly, q]);
-  const page = usePage(shown, shown);
+  const needle = q.trim().toLowerCase();
+  const mapRows = status === "all" || status === "unmapped" ? unmapped.filter((c) => !kevOnly && !kernelOnly && vector === "all" && !offImage && c.name.includes(needle)) : [];
+  const listed: (CveRow | { name: string; version: string })[] = useMemo(() => [...shown, ...mapRows], [shown, mapRows.length]);
+  const page = usePage(listed, listed);
 
   const scoped = offImage ? rows.filter((r) => r.shipped === "build" || r.shipped === "no") : rows;
   const count = (k: CveStatus) => scoped.filter((r) => r.status === k).length;
   const statusOpts = [
     { value: "unpatched", label: "Unpatched", n: count("unpatched") },
-    { value: "ignored", label: "Ignored", n: count("ignored") },
-    { value: "fixed", label: "Fixed", n: count("fixed") },
+    ...(section.sources.inventory ? [] : [
+      { value: "ignored", label: "Ignored", n: count("ignored") },
+      { value: "fixed", label: "Fixed", n: count("fixed") },
+    ]),
     ...(count("unknown") ? [{ value: "unknown", label: "No status", n: count("unknown") }] : []),
-    { value: "all", label: "All", n: scoped.length },
+    ...(unmapped.length ? [{ value: "unmapped", label: "Needs mapping", n: unmapped.length }] : []),
+    { value: "all", label: "All", n: scoped.length + unmapped.length },
   ];
   const vecOpts = [
     { value: "all", label: "All", n: byStatus.length },
@@ -274,21 +318,31 @@ export default function Cves({ section, params }: { section: CveSection; params:
             </button>
           )}
           <span className="spacer" />
-          <span className="muted num">{shown.length.toLocaleString()} CVEs</span>
+          <span className="muted num">{shown.length.toLocaleString()} CVEs{mapRows.length > 0 && ` · ${mapRows.length.toLocaleString()} need mapping`}</span>
         </div>
         <div className="table-wrap">
           <table className="cve-table">
             <thead>
-              <tr><th>CVE</th><th>Component</th><th>Status</th><th>CVSS</th><th>Vector</th><th className="c">Shipped</th><th className="c">KEV</th></tr>
+              <tr><th>CVE</th><th>Component</th><th title="First upstream version with the fix, from the CVE record. It doesn't show whether the fix was backported.">Fixed in</th><th>Status</th><th>CVSS</th><th>Vector</th><th className="c">Shipped</th><th className="c">KEV</th></tr>
             </thead>
             <tbody ref={page.bodyRef}>
-              {page.rows.map((r) => (
+              {page.rows.map((r) => !("id" in r) ? (
+                <tr key={`map:${r.name}`}>
+                  <td><span className="muted">–</span></td>
+                  <td><code>{r.name}</code> <span className="muted">{r.version}</span></td>
+                  <td><span className="muted">–</span></td>
+                  <td title="No NVD product has this name, so it couldn't be checked for CVEs.">Needs mapping</td>
+                  {[0, 1].map((i) => <td key={i}><span className="muted">–</span></td>)}
+                  {[0, 1].map((i) => <td key={i} className="c"><span className="muted">–</span></td>)}
+                </tr>
+              ) : (
                 <tr key={r.id} className={`clickable ${open?.id === r.id ? "sel" : ""}`} onClick={() => setOpen(r)}>
-                  <td><code>{r.id}</code></td>
+                  <td><code>{r.id}</code>{outsideSbom(r) && <span className="cve-star" title={OUTSIDE_NOTE}>*</span>}</td>
                   <td>
                     <code>{r.carriers[0]?.name}</code> <span className="muted">{r.carriers[0]?.version}</span>
                     {r.carriers.length > 1 && <span className="muted"> +{r.carriers.length - 1}</span>}
                   </td>
+                  <td><FixCell c={r.carriers[0]} /></td>
                   <td><StatusLabel s={r.status} /></td>
                   <td><Score r={r} /></td>
                   <td>{r.vector ? VECTOR[r.vector] : <span className="muted">–</span>}</td>
@@ -300,6 +354,8 @@ export default function Cves({ section, params }: { section: CveSection; params:
           </table>
           {shown.length === 0 && <div className="empty">No CVEs match these filters.</div>}
         </div>
+        {shown.some(outsideSbom) && <p className="cve-foot">* {OUTSIDE_NOTE}</p>}
+        {shown.some((r) => r.carriers[0]?.backport) && <p className="cve-foot">B {BACKPORT_NOTE}</p>}
         {page.pager}
       </div>
       {open && <CveSheet r={open} sources={section.sources} onClose={() => setOpen(null)} />}

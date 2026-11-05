@@ -324,8 +324,9 @@ export const PAGE_SIZE = 10; // the minimum; a page grows to fill the window
 /** Paging for a table: the rows of the current page, the pager to show under it, and a ref for
  *  the table's <tbody>. The page size fills the window below the table's top edge (never fewer
  *  than PAGE_SIZE rows) and follows window resizes. The page goes back to the first whenever
- *  `reset` changes (a new filter or search). */
-export function usePage<T>(rows: T[], reset: unknown = null) {
+ *  `reset` changes (a new filter or search). With `stacked`, for tables sharing a page, the size
+ *  stays at PAGE_SIZE and the pager always shows. */
+export function usePage<T>(rows: T[], reset: unknown = null, stacked = false) {
   const [page, setPage] = useState(0);
   const [size, setSize] = useState(PAGE_SIZE);
   const bodyRef = useRef<HTMLTableSectionElement>(null);
@@ -334,7 +335,7 @@ export function usePage<T>(rows: T[], reset: unknown = null) {
     const fit = () => {
       const body = bodyRef.current;
       const first = body?.rows[0];
-      if (!body || !first) return;
+      if (stacked || !body || !first) return;
       // Measure against the scrolling content area, so the result doesn't depend on scroll.
       const scroller = body.closest(".content") as HTMLElement | null;
       const top = body.getBoundingClientRect().top + (scroller?.scrollTop ?? 0);
@@ -350,13 +351,13 @@ export function usePage<T>(rows: T[], reset: unknown = null) {
   const p = Math.min(page, pages - 1);
   return {
     rows: rows.slice(p * size, (p + 1) * size),
-    pager: <Pager page={p} pages={pages} total={rows.length} size={size} onPage={setPage} />,
+    pager: <Pager page={p} pages={pages} total={rows.length} size={size} onPage={setPage} always={stacked} />,
     bodyRef,
   };
 }
 
-function Pager({ page, pages, total, size, onPage }: { page: number; pages: number; total: number; size: number; onPage: (p: number) => void }) {
-  if (pages <= 1) return null;
+function Pager({ page, pages, total, size, onPage, always }: { page: number; pages: number; total: number; size: number; onPage: (p: number) => void; always: boolean }) {
+  if (pages <= 1 && !always) return null;
   const from = page * size + 1, to = Math.min(total, (page + 1) * size);
   return (
     <div className="pager">

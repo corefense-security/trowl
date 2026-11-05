@@ -1,7 +1,7 @@
 import { Check, CircleHelp, Minus, X } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import type { Binary } from "../types";
-import { Dropdown, PageHead, SearchBox, usePage } from "../ui";
+import { Dropdown, PageHead, SearchBox, usePage, Switch } from "../ui";
 
 type SortKey = "kind";
 
@@ -143,9 +143,14 @@ function FortifySheet({ b, onClose }: { b: Binary; onClose: () => void }) {
   );
 }
 
-export default function Binaries({ binaries }: { binaries: Binary[] }) {
+const isSetuid = (b: Binary) => ((b.mode ?? 0) & 0o4000) !== 0;
+
+export default function Binaries({ binaries, params }: { binaries: Binary[]; params: URLSearchParams }) {
   const [q, setQ] = useState("");
-  const [kind, setKind] = useState("");
+  // The Overview's setuid tile opens this page with both set.
+  const [kind, setKind] = useState(params.get("setuid") ? "executable" : "");
+  const [setuid, setSetuid] = useState(!!params.get("setuid"));
+  const [rootOwned, setRootOwned] = useState(!!params.get("setuid"));
   const [sort, setSort] = useState<{ k: SortKey; asc: boolean } | null>(null);
   const [fortify, setFortify] = useState<Binary | null>(null);
 
@@ -153,14 +158,17 @@ export default function Binaries({ binaries }: { binaries: Binary[] }) {
   const cfKeys = useMemo(() => Array.from(new Set(judged.flatMap((b) => Object.keys(b.cf_protection ?? {})))), [judged]);
 
   const shown = judged
-    .filter((b) => (!q || b.path.toLowerCase().includes(q.toLowerCase())) && (!kind || b.kind === kind))
+    .filter((b) => (!q || b.path.toLowerCase().includes(q.toLowerCase())) && (!kind || b.kind === kind) &&
+      (kind === "library" || (!setuid && !rootOwned) ||
+        (b.kind === "executable" && (!setuid || isSetuid(b)) && (!rootOwned || b.uid === 0))))
     .sort((a, b) => {
       const d = a.kind.localeCompare(b.kind) || a.path.localeCompare(b.path);
       return !sort ? a.path.localeCompare(b.path) : sort.asc ? d : -d;
     });
 
-  const page = usePage(shown, `${q}|${kind}|${sort?.k}|${sort?.asc}`);
+  const page = usePage(shown, `${q}|${kind}|${setuid}|${rootOwned}|${sort?.k}|${sort?.asc}`);
 
+  const hasPerms = judged.some((b) => b.mode !== undefined);
   const typeOpts = [
     { value: "", label: "All", n: judged.length },
     { value: "executable", label: "Executables", n: judged.filter((b) => b.kind === "executable").length },
@@ -176,12 +184,16 @@ export default function Binaries({ binaries }: { binaries: Binary[] }) {
   return (
     <>
       <section className="card page-card">
-        <PageHead title="Compiler Hardening"
-          note={`PIE, NX, RELRO, stack canary, FORTIFY_SOURCE${cfKeys.length ? " and CFI" : ""} for each of the ${judged.length} executables and libraries in the image`} />
+        <PageHead title="Binary Hardening"
+          note={`Compile-time hardening, UID 0 and setuid root binaries`} />
       </section>
       <div className="toolbar">
         <SearchBox value={q} onChange={setQ} placeholder="Filter by path" />
         <Dropdown label="Type" value={kind} options={typeOpts} onChange={setKind} />
+        {kind !== "library" && hasPerms && <>
+          <Switch label="uid 0" on={rootOwned} onChange={setRootOwned} title="Only executables owned by root" />
+          <Switch label="setuid" on={setuid} onChange={setSetuid} title="Only executables that run as their owner, whoever starts them" />
+        </>}
         <span className="spacer" />
         <span className="muted">{shown.length} of {judged.length}</span>
       </div>

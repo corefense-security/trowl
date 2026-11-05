@@ -44,7 +44,6 @@ export default function Modules({ r }: { r: Report }) {
   const [signed, setSigned] = useState("");
 
   const head = headline(m?.mode ?? "unknown");
-  const unsigned = items.filter((x) => x.signed === false).length;
   const shown = items.filter((x) => signed === "" || (signed === "signed" ? x.signed === true : x.signed !== true));
   const page = usePage(shown, signed);
   const signedOpts = [
