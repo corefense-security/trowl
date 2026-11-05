@@ -19,8 +19,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/corefense/trowl/internal/py"
-	"github.com/corefense/trowl/internal/pyjson"
+	"github.com/corefense-security/trowl/internal/py"
+	"github.com/corefense-security/trowl/internal/pyjson"
 	"github.com/ulikunitz/xz"
 )
 

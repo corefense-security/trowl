@@ -13,7 +13,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/corefense/trowl/internal/pyjson"
+	"github.com/corefense-security/trowl/internal/pyjson"
 )
 
 var statusOfVex = map[string]string{"affected": "unpatched", "not_affected": "ignored", "fixed": "fixed",

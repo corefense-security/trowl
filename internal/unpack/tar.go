@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/corefense/trowl/internal/py"
+	"github.com/corefense-security/trowl/internal/py"
 )
 
 // extractTar extracts regular files, dirs and symlinks only, and refuses anything escaping dest.

@@ -9,7 +9,7 @@ jobs:
       # ... build or download your image and SBOM here ...
       - name: Scan image
         run: |
-          docker run --rm -v "$PWD:/work" ghcr.io/corefense/trowl:latest \
+          docker run --rm -v "$PWD:/work" ghcr.io/corefense-security/trowl:latest \
             scan image.ext4.zst --sbom image.spdx.json -o trowl-report --fail-on high
       - uses: actions/upload-artifact@v4
         if: always()

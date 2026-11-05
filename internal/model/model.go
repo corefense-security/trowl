@@ -5,7 +5,7 @@ import (
 	"runtime/debug"
 	"strings"
 
-	"github.com/corefense/trowl/internal/pyjson"
+	"github.com/corefense-security/trowl/internal/pyjson"
 )
 
 // version is set at build time with -ldflags "-X .../internal/model.version=v1.2.3"; the

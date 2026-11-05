@@ -11,12 +11,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/corefense/trowl/internal/llm"
-	"github.com/corefense/trowl/internal/model"
-	"github.com/corefense/trowl/internal/py"
-	"github.com/corefense/trowl/internal/report"
-	"github.com/corefense/trowl/internal/scan"
-	"github.com/corefense/trowl/internal/unpack"
+	"github.com/corefense-security/trowl/internal/llm"
+	"github.com/corefense-security/trowl/internal/model"
+	"github.com/corefense-security/trowl/internal/py"
+	"github.com/corefense-security/trowl/internal/report"
+	"github.com/corefense-security/trowl/internal/scan"
+	"github.com/corefense-security/trowl/internal/unpack"
 )
 
 // opt describes one command-line option.

@@ -15,9 +15,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/corefense/trowl/internal/model"
-	"github.com/corefense/trowl/internal/py"
-	"github.com/corefense/trowl/internal/pyjson"
+	"github.com/corefense-security/trowl/internal/model"
+	"github.com/corefense-security/trowl/internal/py"
+	"github.com/corefense-security/trowl/internal/pyjson"
 )
 
 const maxBytes = 4 * 1024 * 1024

@@ -19,7 +19,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/corefense/trowl/internal/py"
+	"github.com/corefense-security/trowl/internal/py"
 	"github.com/ulikunitz/xz"
 )
 

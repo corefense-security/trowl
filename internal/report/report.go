@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/corefense/trowl/internal/pyjson"
+	"github.com/corefense-security/trowl/internal/pyjson"
 )
 
 // The UI is built by `npm run build` in ui/ into ui/index.html here, then compiled into the binary.

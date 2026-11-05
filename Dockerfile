@@ -19,7 +19,7 @@ COPY internal/ ./internal/
 COPY --from=ui /src/internal/report/ui/index.html ./internal/report/ui/index.html
 ARG TROWL_VERSION=""
 RUN CGO_ENABLED=0 go build -trimpath \
-      -ldflags="-s -w -X github.com/corefense/trowl/internal/model.version=${TROWL_VERSION}" \
+      -ldflags="-s -w -X github.com/corefense-security/trowl/internal/model.version=${TROWL_VERSION}" \
       -o /out/trowl ./cmd/trowl
 
 # --- llama.cpp server for the local model (CPU), pinned to a release tag -------

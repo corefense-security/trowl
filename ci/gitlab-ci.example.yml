@@ -2,7 +2,7 @@
 trowl:
   stage: test
   image:
-    name: ghcr.io/corefense/trowl:latest
+    name: ghcr.io/corefense-security/trowl:latest
     entrypoint: [""]
   script:
     - trowl scan image.ext4.zst --sbom image.spdx.json -o trowl-report --fail-on high

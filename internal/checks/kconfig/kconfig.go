@@ -24,9 +24,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/corefense/trowl/internal/model"
-	"github.com/corefense/trowl/internal/py"
-	"github.com/corefense/trowl/internal/pyjson"
+	"github.com/corefense-security/trowl/internal/model"
+	"github.com/corefense-security/trowl/internal/py"
+	"github.com/corefense-security/trowl/internal/pyjson"
 	"github.com/ulikunitz/xz"
 	"gopkg.in/yaml.v3"
 )

@@ -1,4 +1,4 @@
-module github.com/corefense/trowl
+module github.com/corefense-security/trowl
 
 go 1.23
 
