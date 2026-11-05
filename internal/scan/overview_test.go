@@ -138,16 +138,28 @@ func TestKernelFromPackageDatabaseWithoutModules(t *testing.T) {
 	os.MkdirAll(filepath.Join(root, "var/lib/opkg"), 0o755)
 	os.WriteFile(filepath.Join(root, "var/lib/opkg/status"), []byte("Package: kernel-image\nVersion: 6.1.20-r0\n"+
 		"Source: linux-yocto_6.1.bb\nStatus: install ok installed\n"), 0o644)
-	sb, _ := imageInventory(root)
-	if sb == nil {
-		t.Fatal("no inventory")
-	}
-	for _, p := range sb.Packages {
-		for _, c := range p.Cpes {
-			if strings.Contains(c, ":linux_kernel:6.1.20:") {
-				return
+	for known, want := range map[string]string{"": "6.1.20", "6.1.99": "6.1.99"} {
+		sb, _ := imageInventory(root, known)
+		if sb == nil {
+			t.Fatal("no inventory")
+		}
+		var kernels []string
+		for _, p := range sb.Packages {
+			for _, c := range p.Cpes {
+				if strings.Contains(c, ":linux_kernel:") {
+					kernels = append(kernels, c)
+				}
 			}
 		}
+		if len(kernels) != 1 || !strings.Contains(kernels[0], ":"+want+":") {
+			t.Errorf("known version %q: got %v", known, kernels)
+		}
 	}
-	t.Error("the kernel was dropped")
+}
+
+func TestKernelFromConfigWithNothingElse(t *testing.T) {
+	sb, _ := imageInventory(t.TempDir(), "6.18.52")
+	if sb == nil || len(sb.PackageOrder) != 1 {
+		t.Fatalf("got %+v", sb)
+	}
 }
