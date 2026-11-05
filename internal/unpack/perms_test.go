@@ -2,13 +2,31 @@ package unpack
 
 import "testing"
 
-func TestParseExtPerms(t *testing.T) {
-	out := "debugfs 1.46.5\n" +
-		"debugfs: ls -p \"/\"\n/2/040755/0/0/.//\n/9/100644/0/0/top/5/\n" +
-		"debugfs: ls -p \"/bin\"\n/13/040755/0/0/.//\n/38/120777/0/0/gunzip/19/\n/17/104755/0/70/busybox.suid/59520/\n"
-	got := parseExtPerms(out)
-	if len(got) != 2 || got["/top"] != (Perm{0o644, 0, 0}) || got["/bin/busybox.suid"] != (Perm{0o4755, 0, 70}) {
+func TestParseExtList(t *testing.T) {
+	out := "debugfs: ls -p <2>\n/2/040755/0/0/.//\n/2/040755/0/0/..//\n/9/100644/0/0/top/5/\n/0/000000/0/0//0/\n/13/040755/0/0/bin//\n\n" +
+		"debugfs: ls -p <13>\n/13/040755/0/0/.//\n/2/040755/0/0/..//\n/38/120777/0/0/gunzip/19/\n/17/104755/0/70/busybox.suid/59520/\n\n"
+	entries, err := parseExtList(out, map[int]string{2: "/", 13: "/bin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := extPerms(entries)
+	if len(entries) != 4 || len(got) != 2 || got["/top"] != (Perm{0o644, 0, 0}) || got["/bin/busybox.suid"] != (Perm{0o4755, 0, 70}) {
 		t.Errorf("got %v", got)
+	}
+}
+
+func TestParseExtListRefusesUnsafeNames(t *testing.T) {
+	head := "debugfs: ls -p <2>\n/2/040755/0/0/.//\n/2/040755/0/0/..//\n"
+	for name, entries := range map[string]string{
+		"traversal":  "/9/100644/0/0/../../etc/x/5/\n",
+		"line break": "/9/100644/0/0/a\nb/5/\n",
+		"late dots":  "/9/100644/0/0/../5/\n",
+		"duplicate":  "/9/120777/0/0/a/5/\n/10/040755/0/0/a//\n",
+		"no name":    "/9/100644/0/0//5/\n",
+	} {
+		if _, err := parseExtList(head+entries, map[int]string{2: "/"}); err == nil {
+			t.Errorf("%s: not refused", name)
+		}
 	}
 }
 

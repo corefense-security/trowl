@@ -7,7 +7,6 @@ package fstab
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -87,8 +86,8 @@ func contains(xs []string, s string) bool {
 }
 
 func Check(rootfs string) ([]*pyjson.Obj, []model.Finding) {
-	path := filepath.Join(rootfs, "etc", "fstab")
-	if !py.IsFile(path) || py.IsSymlink(path) {
+	path := py.InRoot(rootfs, "etc/fstab")
+	if !py.IsFile(path) {
 		return []*pyjson.Obj{}, []model.Finding{{Check: "fstab.missing", Severity: "info", Path: "/etc/fstab",
 			Title: "No /etc/fstab in the image", Detail: "Mount options could not be assessed statically."}}
 	}

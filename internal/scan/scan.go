@@ -777,7 +777,7 @@ func modulePackages(rootfs string, kernel *pyjson.Obj, sb *sbom.Sbom) {
 	//   - a file is usually declared by two packages, its own and the image's, which lists
 	//     every file in the image. The one declaring fewest files is the specific owner.
 	real := func(path string) string {
-		r := py.Resolve(filepath.Join(rootfs, strings.TrimLeft(path, "/")))
+		r := py.InRoot(rootfs, path)
 		if rel, err := filepath.Rel(rootfs, r); err == nil {
 			return "/" + rel
 		}

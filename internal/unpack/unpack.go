@@ -14,7 +14,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path"
@@ -219,57 +218,132 @@ func extractExt(img, dest string) (map[string]Perm, error) {
 	if _, err := exec.LookPath("debugfs"); err != nil {
 		return nil, errorf("debugfs (e2fsprogs) is required to read ext2/3/4 images")
 	}
+	entries, err := extList(img)
+	if err != nil {
+		return nil, err
+	}
+	abs, err := filepath.Abs(img)
+	if err != nil {
+		return nil, err
+	}
 	os.MkdirAll(dest, 0o755)
 	var stderr bytes.Buffer
-	cmd := exec.Command("debugfs", "-R", "rdump / "+dest, img)
+	cmd := exec.Command("debugfs", "-R", "rdump / .", abs)
+	cmd.Dir = dest
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		return nil, errorf("debugfs failed: %s", strings.TrimSpace(stderr.String()))
 	}
-	return extPerms(img, dest), nil
+	return extPerms(entries), nil
 }
 
-// extPermRe matches a line of debugfs "ls -p": /inode/mode/uid/gid/name/size/.
-var extPermRe = regexp.MustCompile(`^/\d+/(\d+)/(\d+)/(\d+)/(.*)/\d*/$`)
+// extEntry is one line of debugfs "ls -p" with the path it was found at.
+type extEntry struct {
+	inode, mode, uid, gid int
+	path                  string
+}
 
-// extPerms lists every directory rdump extracted, in one debugfs run.
-func extPerms(img, dest string) map[string]Perm {
-	var cmds strings.Builder
-	filepath.WalkDir(dest, func(p string, d fs.DirEntry, err error) error {
-		if err == nil && d.IsDir() {
-			rel, _ := filepath.Rel(dest, p)
-			fmt.Fprintf(&cmds, "ls -p \"/%s\"\n", strings.TrimPrefix(filepath.ToSlash(rel), "."))
+func (e extEntry) isDir() bool { return e.mode&0o170000 == 0o040000 }
+
+var (
+	extPromptRe = regexp.MustCompile(`^debugfs: ls -p <(\d+)>$`)
+	// extEntryRe matches a line of debugfs "ls -p": /inode/mode/uid/gid/name/size/.
+	extEntryRe = regexp.MustCompile(`^/(\d+)/(\d+)/(\d+)/(\d+)/(.*)/\d*/$`)
+)
+
+const extRootInode = 2
+
+// extList walks the image and refuses one that rdump can't extract safely. debugfs is only ever
+// given inode numbers: it runs lines starting "!" in a shell and doesn't check names, so a name
+// from the image must not reach its command line or rdump's output path.
+func extList(img string) ([]extEntry, error) {
+	var entries []extEntry
+	seen := map[int]bool{extRootInode: true}
+	dirs := map[int]string{extRootInode: "/"}
+	for len(dirs) > 0 {
+		var cmds strings.Builder
+		for inode := range dirs {
+			fmt.Fprintf(&cmds, "ls -p <%d>\n", inode)
 		}
-		return nil
-	})
-	cmd := exec.Command("debugfs", "-f", "-", img)
-	cmd.Stdin = strings.NewReader(cmds.String())
-	out, err := cmd.Output()
-	if err != nil {
-		return nil
+		var stderr bytes.Buffer
+		cmd := exec.Command("debugfs", "-f", "-", img)
+		cmd.Stdin = strings.NewReader(cmds.String())
+		cmd.Stderr = &stderr
+		out, err := cmd.Output()
+		if err != nil {
+			return nil, errorf("debugfs failed: %s", strings.TrimSpace(stderr.String()))
+		}
+		found, err := parseExtList(string(out), dirs)
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, found...)
+		dirs = map[int]string{}
+		for _, e := range found {
+			if !e.isDir() {
+				continue
+			}
+			if seen[e.inode] {
+				return nil, errorf("unsafe image: directory %q is linked twice", e.path)
+			}
+			seen[e.inode] = true
+			dirs[e.inode] = e.path
+		}
 	}
-	return parseExtPerms(string(out))
+	return entries, nil
 }
 
-func parseExtPerms(out string) map[string]Perm {
-	perms := map[string]Perm{}
-	dir := "/"
+// parseExtList reads the listings of dirs, an inode to path map. debugfs prints names raw, so a
+// line that isn't exactly an entry means a name holds a line break, which could hide anything.
+func parseExtList(out string, dirs map[int]string) ([]extEntry, error) {
+	var entries []extEntry
+	dir, listed := "", 0
+	names := map[string]bool{}
 	for _, line := range strings.Split(out, "\n") {
-		if s, ok := strings.CutPrefix(line, `debugfs: ls -p "`); ok {
-			dir = strings.TrimSuffix(s, `"`)
+		if m := extPromptRe.FindStringSubmatch(line); m != nil {
+			inode, _ := strconv.Atoi(m[1])
+			d, ok := dirs[inode]
+			if !ok {
+				return nil, errorf("unsafe image: unexpected listing in %q", dir)
+			}
+			dir, listed = d, 0
+			names = map[string]bool{}
 			continue
 		}
-		m := extPermRe.FindStringSubmatch(line)
+		if dir == "" || line == "" {
+			continue
+		}
+		m := extEntryRe.FindStringSubmatch(line)
 		if m == nil {
+			return nil, errorf("unsafe image: file name with a line break in %q", dir)
+		}
+		listed++
+		name := m[5]
+		if (name == "." || name == "..") && listed <= 2 {
 			continue
 		}
-		mode, _ := strconv.ParseInt(m[1], 8, 32)
-		if mode&0o170000 != 0o100000 {
-			continue
+		if name == "" && m[1] == "0" {
+			continue // an unused slot, as lost+found is full of
 		}
-		uid, _ := strconv.Atoi(m[2])
-		gid, _ := strconv.Atoi(m[3])
-		perms[path.Join(dir, m[4])] = Perm{int(mode & 0o7777), uid, gid}
+		if name == "" || name == "." || name == ".." || strings.Contains(name, "/") || names[name] {
+			return nil, errorf("unsafe image: bad entry %q in %q", name, dir)
+		}
+		names[name] = true
+		inode, _ := strconv.Atoi(m[1])
+		mode, _ := strconv.ParseInt(m[2], 8, 32)
+		uid, _ := strconv.Atoi(m[3])
+		gid, _ := strconv.Atoi(m[4])
+		entries = append(entries, extEntry{inode, int(mode), uid, gid, path.Join(dir, name)})
+	}
+	return entries, nil
+}
+
+func extPerms(entries []extEntry) map[string]Perm {
+	perms := map[string]Perm{}
+	for _, e := range entries {
+		if e.mode&0o170000 == 0o100000 {
+			perms[e.path] = Perm{e.mode & 0o7777, e.uid, e.gid}
+		}
 	}
 	return perms
 }
@@ -344,8 +418,8 @@ func extractSquashfs(img, dest string) error {
 }
 
 func looksLikeRootfs(path string) bool {
-	return py.IsDir(filepath.Join(path, "etc")) &&
-		(py.IsDir(filepath.Join(path, "usr")) || py.Exists(filepath.Join(path, "bin")))
+	return py.IsDir(py.InRoot(path, "etc")) &&
+		(py.IsDir(py.InRoot(path, "usr")) || py.Exists(py.InRoot(path, "bin")))
 }
 
 func extractFilesystem(img, dest string) (string, map[string]Perm, error) {
