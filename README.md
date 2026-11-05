@@ -5,45 +5,49 @@
   </picture>
 </p>
 
+Trowl is a security scanner for embedded Linux images. It detects hardening gaps and known vulnerabilities.
 
-Trowl is a static analyser for embedded Linux images. It unpacks a rootfs to detect hardening gaps, known CVEs, and hidden secrets to 
-provide a comprehensive post-build security analysis. 
-
-When provided with an SBOM, it can also perform dependency analysis.
-
+Given an SBOM, it also maps dependencies and flags discrepancies.
 
 ## What it checks
-- Hardening gaps (binaries, kernel, filesystems)
+- Hardening gaps (binaries, kernel configs, filesystems)
 - Secrets and private keys
-- Software-Bill-of-Materials (SBOM) analysis, including graph-based relationships and image discrepancies
-- Known CVEs
-
+- Software Bill of Materials (SBOM) dependency graphs and image discrepancies
+- Known CVEs, fixed versions and available kernel backports.
 
 ## Currently supported
-- **Distro:** Yocto 
+- **Distro:** Yocto
 - **Filesystems:** ext2/3/4, squashfs, tar, or an unpacked directory.
-- **Disk images:** `.wic` and other MBR/GPT images; one detected root filesystem is analysed (ext or squashfs partitions only; extended MBR partitions are skipped).
+- **Disk images:** `.wic` and other MBR/GPT images; one detected root filesystem is analysed (ext or squashfs partitions only).
 - **Compression:** zstd, xz, gzip, bzip2.
 - **SBOMs:** SPDX 3.0 JSON-LD from Yocto, including `sbom-cve-check` output.
 
+### Local LLM (experimental)
+
+Trowl uses a local LLM to generate impact summaries. Model weights are downloaded from Hugging Face and are licensed under Apache 2.0.
+
+Supported models:
+
+- [`qwen3-4b`](https://huggingface.co/Qwen/Qwen3-4B-GGUF) 
+- [`qwen3.5-4b`](https://huggingface.co/unsloth/Qwen3.5-4B-GGUF) (default and preferred)
+- [`qwen3.5-9b`](https://huggingface.co/unsloth/Qwen3.5-9B-GGUF)
+
 ## Quick start
 
-From a directory containing your image and SBOM:
+From a directory containing your Yocto image and SBOM:
 
 ```sh
 docker run --rm \
   --user "$(id -u):$(id -g)" \
-  -p 127.0.0.1:8765:8765 -v "$PWD:/work" \
+  -v "$PWD:/work" \
   ghcr.io/corefense-security/trowl:latest \
-  scan <image>.ext4.zst --sbom <image>.spdx.json \
-  -o report --cache-dir /work/.trowl-cache --serve
+  scan image.ext4.zst --sbom image.spdx.json \
+  -o report --cache-dir /work/.trowl-cache
 ```
 
 Reports are saved under `report/index.html` and `report/report.json`.
 
-HTML reports can be viewed independently of Trowl, either locally or through static hosting (GitHub Pages, Cloudflare Pages, S3).
-
-For example, serve the report locally using Python:
+HTML reports can be viewed locally or via static hosting (GitHub Pages, Cloudflare Pages, S3). For example:
 
 ```sh
 python3 -m http.server 8765 --directory report
@@ -51,71 +55,52 @@ python3 -m http.server 8765 --directory report
 
 Then open `http://localhost:8765` in your browser.
 
+## Install
+
+On Debian or Ubuntu (x86-64 or arm64):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/corefense-security/trowl/main/install.sh | bash
+```
+
+Then scan an image and open the report:
+
+```sh
+trowl scan image.ext4.zst -o report
+trowl view report
+```
+
+For the optional local LLM summary, run the script with `--with-llm` to install `llama-server`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/corefense-security/trowl/main/install.sh | bash -s -- --with-llm
+```
+
+Trowl then downloads the default model on the first scan; use `--model` to pick another. Without `llama-server`, the scan still runs and skips the summary.
+
+Run `trowl scan --help` for all options.
+
 ## External data
-Trowl queries various resources both before and during a scan.
+
+Trowl fetches data from these sources during a scan:
+
 - CISA KEV
 - EPSS
 - Advisories (NVD, CNA)
 
-## Local LLM usage (experimental)
-
-Trowl is experimenting local LLM inference for:
-
-- Impact summaries
-- Image and report diffing summaries
-
-### Supported models: 
-- Qwen 3-4B (default and preferred)
-- Qwen 3.5-4B
-- Qwen 3.5-9B 
-
-Model downloads are cached. `--no-network` disables feed and link requests, but
-does not prevent an uncached model download.
-
-Run `trowl scan --help` for kernel configuration, policy, model, and other options.
-
-
-## Development
-
-### Local dependencies
-
-To build and run outside Docker on Debian or Ubuntu (x86-64), paste this into a terminal:
-
-```sh
-sudo apt-get update
-sudo apt-get install -y curl e2fsprogs squashfs-tools zstd sqlite3 nodejs npm
-curl -fsSL https://go.dev/dl/go1.23.0.linux-amd64.tar.gz | sudo tar -C /usr/local -xz
-export PATH="$PATH:/usr/local/go/bin:/usr/sbin"
-```
-
-The last line lasts for the current terminal; add it to `~/.profile` to keep it. It also makes `debugfs` findable, which Debian installs in `/usr/sbin`.
-
-The LLM scan summary is optional and needs llama.cpp's `llama-server` on `PATH`, or its path in `TROWL_LLAMA_SERVER`.
-
-### Build
-
-Build the UI first: without it `go build` still succeeds, but the binary has no dashboard report.
-
-```sh
-cd ui && npm ci && npm run build && cd ..
-go build -o bin/trowl ./cmd/trowl
-bin/trowl scan path/to/rootfs -o report
-```
-
 ## Roadmap
-- CI Integration
+- CI integration
 - Image and report diffing
 - License scanning
 - Terminal reporting
-- SBOM and VEX generation
-- Backport detection (Kernel CVEs)
+- SBOM/VEX report generation
 - Buildroot & OpenWrt support
 
 ## Community
 
 Trowl is under active development, and some features do not yet have automated tests. Test coverage will be expanded as the project matures.
 
-Contributions and feedback are welcome.
+Contributions and feedback are welcome. Please follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 - [Open an issue](https://github.com/corefense-security/trowl/issues) for bugs or feature requests.
 - Include reproduction steps and sanitized examples.
