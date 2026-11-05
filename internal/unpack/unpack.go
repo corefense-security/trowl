@@ -41,6 +41,9 @@ type Unpacked struct {
 	SourceFormat string
 	Notes        []string
 	Perms        map[string]Perm // regular files by image path; nil if they couldn't be read
+	// OtherPartitions says the disk has partitions besides Rootfs, such as a boot partition that
+	// may be in a filesystem trowl can't read.
+	OtherPartitions bool
 }
 
 // Perm is a file's owner and mode as the image records them. The extracted copy can't keep them:
@@ -549,7 +552,8 @@ func Unpack(image, workdir string) (*Unpacked, error) {
 	if chosen == "" {
 		return nil, errorf("no partition looks like a root filesystem")
 	}
-	return &Unpacked{Rootfs: chosen, SourceFormat: strings.Join(formats, "+"), Notes: notes, Perms: chosenPerms}, nil
+	return &Unpacked{Rootfs: chosen, SourceFormat: strings.Join(formats, "+"), Notes: notes, Perms: chosenPerms,
+		OtherPartitions: len(parts) > 1}, nil
 }
 
 // IterFiles calls fn(imagePath, realPath) for regular files, never following symlinks, in the

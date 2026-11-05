@@ -6,21 +6,29 @@ import (
 	"unicode"
 )
 
-// preRelease suffixes sort before the release they lead up to (1.0rc1 < 1.0).
-var preRelease = map[string]bool{"alpha": true, "a": true, "beta": true, "b": true, "pre": true,
-	"rc": true, "dev": true}
+// preRelease suffixes sort before the release they lead up to (1.0rc1 < 1.0). The single letters
+// "a" and "b" only do with a number straight after them: 1.0a1 is an alpha, but 1.1.1a is a patch
+// level of 1.1.1.
+var preRelease = map[string]bool{"alpha": true, "beta": true, "pre": true, "rc": true, "dev": true}
 
 // Compare orders two package versions: -1, 0 or 1. It splits each version into runs of digits
 // and letters and compares run by run, numbers numerically. A trailing letter run is a patch
-// level (10.3p1 > 10.3) unless it names a pre-release (1.0rc1 < 1.0). Build metadata after "+"
-// (Yocto's "+git…") and an epoch ("1:") are ignored.
+// level (10.3p1 > 10.3) unless it names a pre-release (1.0rc1 < 1.0). A missing number counts as
+// zero, so 2.0 equals 2.0.0. Build metadata after "+" (Yocto's "+git…") and an epoch ("1:") are
+// ignored.
 func Compare(a, b string) int {
 	ta, tb := tokens(clean(a)), tokens(clean(b))
 	for i := 0; i < len(ta) || i < len(tb); i++ {
 		switch {
 		case i >= len(ta):
+			if tb[i].isZero() {
+				continue
+			}
 			return -tailSign(tb[i])
 		case i >= len(tb):
+			if ta[i].isZero() {
+				continue
+			}
 			return tailSign(ta[i])
 		}
 		if c := cmpToken(ta[i], tb[i]); c != 0 {
@@ -45,13 +53,16 @@ type token struct {
 	num   int
 	text  string
 	isNum bool
+	pre   bool // text naming a pre-release
 }
+
+func (t token) isZero() bool { return t.isNum && t.num == 0 }
 
 func tokens(v string) []token {
 	var out []token
 	var cur strings.Builder
 	curNum := false
-	flush := func() {
+	flush := func(beforeDigit bool) {
 		if cur.Len() == 0 {
 			return
 		}
@@ -60,7 +71,7 @@ func tokens(v string) []token {
 			n, _ := strconv.Atoi(strings.TrimLeft(s, "0"))
 			out = append(out, token{num: n, isNum: true})
 		} else {
-			out = append(out, token{text: s})
+			out = append(out, token{text: s, pre: preRelease[s] || (beforeDigit && (s == "a" || s == "b"))})
 		}
 		cur.Reset()
 	}
@@ -68,27 +79,27 @@ func tokens(v string) []token {
 		switch {
 		case unicode.IsDigit(r):
 			if !curNum {
-				flush()
+				flush(true)
 			}
 			curNum = true
 			cur.WriteRune(r)
 		case unicode.IsLetter(r):
 			if curNum {
-				flush()
+				flush(false)
 			}
 			curNum = false
 			cur.WriteRune(r)
 		default: // separators: . - _ ~
-			flush()
+			flush(false)
 		}
 	}
-	flush()
+	flush(false)
 	return out
 }
 
 // tailSign is the sign an extra trailing token gives the longer version.
 func tailSign(t token) int {
-	if !t.isNum && preRelease[t.text] {
+	if t.pre {
 		return -1
 	}
 	return 1
@@ -99,16 +110,12 @@ func cmpToken(a, b token) int {
 	case a.isNum && b.isNum:
 		return cmpInt(a.num, b.num)
 	case a.isNum: // 1.0.1 > 1.0rc1, 1.1 > 1.p
-		if preRelease[b.text] {
-			return 1
-		}
 		return 1
 	case b.isNum:
 		return -cmpToken(b, a)
 	}
-	pa, pb := preRelease[a.text], preRelease[b.text]
-	if pa != pb {
-		if pa {
+	if a.pre != b.pre {
+		if a.pre {
 			return -1
 		}
 		return 1

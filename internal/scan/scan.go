@@ -130,7 +130,7 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 			st.Fail("")
 			return nil, err
 		}
-		cmp := sbom.Compare(sb, rootfs)
+		cmp := sbom.Compare(sb, rootfs, u.OtherPartitions)
 		modulePackages(rootfs, kernelSection, sb)
 		findings = append(findings, cmp.Findings...)
 		roles := pyjson.NewCounter()
@@ -420,13 +420,13 @@ func topCVE(rows []any, userland bool) string {
 }
 
 func openShipped(row *pyjson.Obj) bool {
-	return row.G("status") == "unpatched" && row.G("shipped") == "yes"
+	return row.G("status") == "unpatched" && sbom.MayShip(row.G("shipped").(string))
 }
 
 // openCarrier is the first shipped package that leaves the CVE unpatched.
 func openCarrier(row *pyjson.Obj) string {
 	for _, c := range row.G("carriers").([]any) {
-		if co := c.(*pyjson.Obj); co.G("shipped") == "yes" && co.G("status") == "unpatched" {
+		if co := c.(*pyjson.Obj); sbom.MayShip(co.G("shipped").(string)) && co.G("status") == "unpatched" {
 			return co.G("name").(string)
 		}
 	}
@@ -655,15 +655,24 @@ func checkKernelVersion(sb *sbom.Sbom, modules string) error {
 func imageInventory(rootfs string) (*sbom.Sbom, *sbom.Status) {
 	st := status.Start("reading package database")
 	var comps []sbom.Package
-	if v := kconfig.ModulesVersion(rootfs); v != "" {
+	addKernel := func(v string) {
 		comps = append(comps, sbom.Package{Name: "linux", Version: v,
 			Cpes: []string{"cpe:2.3:o:linux:linux_kernel:" + v + ":*:*:*:*:*:*:*"}})
 	}
+	kernel := kconfig.ModulesVersion(rootfs)
+	if kernel != "" {
+		addKernel(kernel)
+	}
 	found, source := inventory.Read(rootfs)
 	for _, c := range found {
-		// The kernel recipe is already covered above.
 		if !strings.HasPrefix(c.Name, "linux-yocto") && c.Name != "linux" && c.Name != "kernel" {
 			comps = append(comps, sbom.Package{Name: c.Name, Version: c.Version})
+			continue
+		}
+		// /lib/modules decides when it can; a kernel with everything built in has none.
+		if v := kernelRelease.FindString(c.Version); kernel == "" && v != "" {
+			kernel = v
+			addKernel(v)
 		}
 	}
 	if len(comps) == 0 {

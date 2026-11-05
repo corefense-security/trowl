@@ -1,6 +1,7 @@
 package nvd
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -23,6 +24,15 @@ func TestCompare(t *testing.T) {
 		{"1.2.3+git0+abcdef", "1.2.3", 0},
 		{"1:2.0", "2.0", 0},
 		{"3.51.3", "3.51.03", 0},
+		{"1.1.1a", "1.1.1", 1},
+		{"1.1.1a", "1.1.1c", -1},
+		{"1.1.1a-2", "1.1.1", 1},
+		{"1.0a1", "1.0", -1},
+		{"1.0b2", "1.0a3", 1},
+		{"2.0.0", "2.0", 0},
+		{"2.0", "2.0.0", 0},
+		{"2.0.1", "2.0", 1},
+		{"2.0.0rc1", "2.0", -1},
 	}
 	for _, c := range cases {
 		if got := Compare(c.a, c.b); got != c.want {
@@ -297,5 +307,58 @@ func TestKernelBackportedIntoBranch(t *testing.T) {
 		if got := kernelAffected(v, bs); got != want {
 			t.Errorf("kernelAffected(%s) = %v, want %v", v, got, want)
 		}
+	}
+}
+
+func TestCNAThatCantDecideFallsBackToCPE(t *testing.T) {
+	const cpe = `"configurations": [{"nodes": [{"cpeMatch": [{"vulnerable": true,
+		"criteria": "cpe:2.3:a:haxx:curl:*:*:*:*:*:*:*:*", "versionEndExcluding": "9.0"}]}]}]`
+	target := Target{Comp: "curl", Vendor: "haxx", Product: "curl", Version: "8.0"}
+	for _, c := range []struct {
+		name, block string
+		want        int
+	}{
+		{"another vendor's block", `"vendor": "curl", "versions": [{"version": "0", "lessThan": "7.0", "status": "affected"}]`, 1},
+		{"version in words", `"vendor": "haxx", "versions": [{"version": "8.1 and earlier", "status": "affected"}]`, 1},
+		{"the vendor's own block clears it", `"vendor": "haxx", "versions": [{"version": "0", "lessThan": "7.0", "status": "affected"}]`, 0},
+	} {
+		var rec record
+		text := `{` + cpe + `, "affected": [{"affectedData": [{"product": "curl", "defaultStatus": "unaffected", ` + c.block + `}]}]}`
+		if err := json.Unmarshal([]byte(text), &rec); err != nil {
+			t.Fatal(err)
+		}
+		if hits, _ := affects(&rec, map[string][]Target{"curl": {target}}); len(hits) != c.want {
+			t.Errorf("%s: %d hits, want %d", c.name, len(hits), c.want)
+		}
+	}
+}
+
+func TestCNAOnOneCPEDecidesTheComponent(t *testing.T) {
+	var rec record
+	text := `{"configurations": [{"nodes": [{"cpeMatch": [{"vulnerable": true,
+		"criteria": "cpe:2.3:a:haxx:curl:*:*:*:*:*:*:*:*", "versionEndExcluding": "8.21.0"}]}]}],
+		"affected": [{"affectedData": [{"vendor": "curl", "product": "curl", "defaultStatus": "unaffected",
+		"versions": [{"version": "8.17.0", "lessThan": "8.20.1", "status": "affected"}]}]}]}`
+	if err := json.Unmarshal([]byte(text), &rec); err != nil {
+		t.Fatal(err)
+	}
+	hits, _ := affects(&rec, map[string][]Target{"curl": {
+		{Comp: "curl", Vendor: "curl", Product: "curl", Version: "8.20.0"},
+		{Comp: "curl", Vendor: "haxx", Product: "curl", Version: "8.20.0"},
+	}})
+	if len(hits) != 1 || hits[0].fix != "8.20.1" {
+		t.Errorf("got %+v", hits)
+	}
+}
+
+func TestADateIsNotAFix(t *testing.T) {
+	var rec record
+	text := `{"configurations": [{"nodes": [{"cpeMatch": [{"vulnerable": true,
+		"criteria": "cpe:2.3:a:gnu:gcc:*:*:*:*:*:*:*:*", "versionEndExcluding": "2023-09-12"}]}]}]}`
+	if err := json.Unmarshal([]byte(text), &rec); err != nil {
+		t.Fatal(err)
+	}
+	if found, fix := cpeHit(&rec, Target{Vendor: "gnu", Product: "gcc", Version: "13.2.0"}); !found || fix != "" {
+		t.Errorf("found %v, fix %q", found, fix)
 	}
 }

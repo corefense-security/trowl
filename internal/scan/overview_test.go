@@ -1,6 +1,9 @@
 package scan
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/corefense-security/trowl/internal/pyjson"
@@ -128,4 +131,23 @@ func TestHardeningFacts(t *testing.T) {
 			t.Errorf("%s = %v, want %d", k, got.G(k), want)
 		}
 	}
+}
+
+func TestKernelFromPackageDatabaseWithoutModules(t *testing.T) {
+	root := t.TempDir()
+	os.MkdirAll(filepath.Join(root, "var/lib/opkg"), 0o755)
+	os.WriteFile(filepath.Join(root, "var/lib/opkg/status"), []byte("Package: kernel-image\nVersion: 6.1.20-r0\n"+
+		"Source: linux-yocto_6.1.bb\nStatus: install ok installed\n"), 0o644)
+	sb, _ := imageInventory(root)
+	if sb == nil {
+		t.Fatal("no inventory")
+	}
+	for _, p := range sb.Packages {
+		for _, c := range p.Cpes {
+			if strings.Contains(c, ":linux_kernel:6.1.20:") {
+				return
+			}
+		}
+	}
+	t.Error("the kernel was dropped")
 }
