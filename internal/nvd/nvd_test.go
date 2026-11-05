@@ -1,6 +1,9 @@
 package nvd
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestCompare(t *testing.T) {
 	cases := []struct {
@@ -84,6 +87,127 @@ func TestSplitCPE(t *testing.T) {
 	p = splitCPE(`cpe:2.3:a:foo:bar\:baz:1.0:*:*:*:*:*:*:*`)
 	if p[4] != "bar:baz" {
 		t.Errorf("escaped colon: %q", p[4])
+	}
+}
+
+func TestCnaFix(t *testing.T) {
+	kernel := []affectedData{{Versions: []cnaVersion{
+		{Version: "4.4", Status: "affected"},
+		{Version: "0", LessThan: "4.4", Status: "unaffected"},
+		{Version: "6.6.40", LessThanOrEqual: "6.6.*", Status: "unaffected"},
+		{Version: "6.18.54", LessThanOrEqual: "6.18.*", Status: "unaffected"},
+		{Version: "7.1", LessThanOrEqual: "*", Status: "unaffected"},
+	}}}
+	for v, want := range map[string]string{"6.18.52": "6.18.54", "6.6.1": "6.6.40", "6.12.3": "6.18.54"} {
+		if got := cnaFix(v, kernel, true); got != want {
+			t.Errorf("kernel %s: got %q, want %q", v, got, want)
+		}
+	}
+	ranged := []affectedData{{Versions: []cnaVersion{{Version: "1.0", LessThan: "1.4", Status: "affected"}}}}
+	if got := cnaFix("1.2", ranged, false); got != "1.4" {
+		t.Errorf("range: got %q", got)
+	}
+	github := []affectedData{{Versions: []cnaVersion{{Version: ">= 2.17, < 2.41.6", Status: "affected"}}}}
+	if got := cnaFix("2.30", github, false); got != "2.41.6" {
+		t.Errorf("constraint: got %q", got)
+	}
+	for _, junk := range []string{"12.7 in Android 11, 13.1", "35d122a3df8b0cc4082a4d89fdc6ee99f375fe67"} {
+		b := []affectedData{{Versions: []cnaVersion{{Version: junk, Status: "unaffected"}}}}
+		if got := cnaFix("1.0", b, false); got != "" {
+			t.Errorf("%q: got %q, want none", junk, got)
+		}
+	}
+	inclusive := []affectedData{{Versions: []cnaVersion{{Version: ">= 2.17, <= 2.41", Status: "affected"}}}}
+	if got := cnaFix("2.30", inclusive, false); got != "" {
+		t.Errorf("inclusive end: got %q, want none", got)
+	}
+}
+
+func TestRecordFixAlreadyPassed(t *testing.T) {
+	rec := &record{}
+	rec.Affected = append(rec.Affected, struct {
+		Source       string         `json:"source"`
+		AffectedData []affectedData `json:"affectedData"`
+	}{kernelCNA, []affectedData{{Product: "Linux", Versions: []cnaVersion{
+		{Version: "6.6.40", LessThanOrEqual: "6.6.*", Status: "unaffected"},
+		{Version: "6.18.10", LessThanOrEqual: "6.18.*", Status: "unaffected"},
+		{Version: "6.19", LessThanOrEqual: "*", Status: "unaffected"},
+	}}}})
+	if got := recordFix(rec, Target{Product: "linux_kernel", Version: "6.18.52"}); got != "6.18.10" {
+		t.Errorf("own series: got %q", got)
+	}
+	if got := recordFix(rec, Target{Product: "linux_kernel", Version: "6.20.1"}); got != "6.19" {
+		t.Errorf("past every fix: got %q", got)
+	}
+}
+
+func TestFixDetails(t *testing.T) {
+	h1, h2 := strings.Repeat("a", 40), strings.Repeat("b", 40)
+	rec := &record{}
+	rec.Affected = append(rec.Affected, struct {
+		Source       string         `json:"source"`
+		AffectedData []affectedData `json:"affectedData"`
+	}{kernelCNA, []affectedData{
+		{Product: "Linux", Versions: []cnaVersion{
+			{Version: "c0ffee", LessThan: h1, Status: "affected", VersionType: "git"},
+			{Version: "c0ffee", LessThan: h2, Status: "affected", VersionType: "git"},
+		}},
+		{Product: "Linux", Versions: []cnaVersion{
+			{Version: "0", LessThan: "4.4", Status: "unaffected"},
+			{Version: "6.18.54", LessThanOrEqual: "6.18.*", Status: "unaffected"},
+			{Version: "7.3", LessThanOrEqual: "*", Status: "unaffected"},
+		}},
+	}})
+	target := Target{Product: "linux_kernel", Version: "6.18.52"}
+	got := fixDetails(rec, target, "6.18.54", "")
+	if want := (Fix{"6.18.54", h1, true, "7.3", h2, "", ""}); got != want {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+	// No fix in 6.12 and nothing from an SBOM: mainline, with the next stable fix kept alongside.
+	got = fixDetails(rec, Target{Product: "linux_kernel", Version: "6.12.1"}, "6.18.54", "")
+	if got.Version != "7.3" || got.Backport || got.Commit != h2 || got.Stable != "6.18.54" || got.StableCommit != h1 {
+		t.Errorf("want mainline: %+v", got)
+	}
+	if got := fixDetails(rec, Target{Product: "linux_kernel", Version: "6.12.1"}, "6.12.9", ""); got.Version != "6.12.9" || !got.Backport {
+		t.Errorf("a range end in the same series is a backport: %+v", got)
+	}
+	if got := fixDetails(rec, Target{Product: "linux_kernel", Version: "6.12.1"}, "", "7.2.10"); got.Version != "7.2.10" || got.Backport {
+		t.Errorf("no backport: the SBOM's version comes next: %+v", got)
+	}
+	if got := fixDetails(rec, target, "", "7.2.10"); got.Version != "6.18.54" || !got.Backport {
+		t.Errorf("a backport beats the SBOM: %+v", got)
+	}
+	// One commit missing: pairing by position would link the wrong one.
+	rec.Affected[0].AffectedData[0].Versions = rec.Affected[0].AffectedData[0].Versions[:1]
+	if got := fixDetails(rec, target, "6.18.54", ""); got.Commit != "" {
+		t.Errorf("uneven lists must not pair: %+v", got)
+	}
+}
+
+func TestCpeEndSkipsDistroBuilds(t *testing.T) {
+	rec := &record{}
+	rec.Configurations = append(rec.Configurations, struct {
+		Nodes []node `json:"nodes"`
+	}{[]node{{CpeMatch: []cpeMatch{
+		{Vulnerable: true, Criteria: "cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*", VersionEndExcluding: "4.18.0-193.el8"},
+	}}}})
+	if got := cpeEnd(rec, Target{Vendor: "linux", Product: "linux_kernel"}); got != "" {
+		t.Errorf("got %q, want none", got)
+	}
+}
+
+func TestCpeHitFix(t *testing.T) {
+	rec := &record{}
+	rec.Configurations = append(rec.Configurations, struct {
+		Nodes []node `json:"nodes"`
+	}{[]node{{CpeMatch: []cpeMatch{
+		{Vulnerable: true, Criteria: "cpe:2.3:a:haxx:curl:*:*:*:*:*:*:*:*", VersionEndExcluding: "8.6.0"},
+		{Vulnerable: true, Criteria: "cpe:2.3:a:haxx:curl:*:*:*:*:*:*:*:*", VersionEndExcluding: "8.4.0"},
+		{Vulnerable: true, Criteria: "cpe:2.3:a:haxx:curl:*:*:*:*:*:*:*:*", VersionEndExcluding: "7.0"},
+	}}}})
+	found, fix := cpeHit(rec, Target{Vendor: "haxx", Product: "curl", Version: "8.1.0"})
+	if !found || fix != "8.6.0" {
+		t.Errorf("got %v %q", found, fix)
 	}
 }
 
