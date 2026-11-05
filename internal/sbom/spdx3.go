@@ -10,6 +10,7 @@ package sbom
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"regexp"
 	"sort"
@@ -202,7 +203,7 @@ func parseScore(raw json.RawMessage) (float64, bool) {
 	var str string
 	if json.Unmarshal(raw, &str) == nil {
 		f, err := strconv.ParseFloat(strings.TrimSpace(str), 64)
-		return f, err == nil
+		return f, err == nil && !math.IsInf(f, 0) && !math.IsNaN(f)
 	}
 	var f float64
 	return f, json.Unmarshal(raw, &f) == nil

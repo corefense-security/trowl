@@ -1,6 +1,3 @@
-/* Same faces as the Corefense dashboard. Offline viewers fall back to the system fonts. */
-@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap");
-
 /* Tokens. Light is the base; dark is selected under the OS preference (unless the viewer
    chose light) and under an explicit data-theme="dark". */
 :root {
@@ -41,8 +38,8 @@
   --vex-none: rgba(137, 135, 129, 0.16);
 
   --radius: 10px;
-  --font: Geist, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font: "Geist Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
 @media (prefers-color-scheme: dark) {

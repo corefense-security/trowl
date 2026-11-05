@@ -37,7 +37,7 @@ function duration(s: number) {
   return n < 60 ? `${n}s` : `${Math.floor(n / 60)}m ${n % 60}s`;
 }
 
-export default function App({ initial }: { initial: Report | null }) {
+export default function App({ initial, error }: { initial: Report | null; error?: string }) {
   const [report, setReport] = useState<Report | null>(initial);
   const [route, setRoute] = useState<Route>(readRoute);
   const [hash, setHash] = useState(window.location.hash);
@@ -61,7 +61,7 @@ export default function App({ initial }: { initial: Report | null }) {
     window.location.hash = `/${r}` + (params ? `?${new URLSearchParams(params)}` : "");
   };
 
-  if (!report) return <Loader onLoad={setReport} />;
+  if (!report) return <Loader onLoad={setReport} error={error} />;
 
   const cves = report.cves;
   const hasSecrets = report.findings.some((f) => f.check.startsWith("secrets."));
@@ -149,8 +149,13 @@ export default function App({ initial }: { initial: Report | null }) {
   );
 }
 
-function Loader({ onLoad }: { onLoad: (r: Report) => void }) {
-  const [err, setErr] = useState("");
+/** Tells a Trowl report from any other JSON, such as the SBOM next to it. */
+function isReport(x: Partial<Report> | null): x is Report {
+  return x?.tool?.name === "trowl" && Array.isArray(x.findings) && Array.isArray(x.fstab) && !!x.summary;
+}
+
+function Loader({ onLoad, error }: { onLoad: (r: Report) => void; error?: string }) {
+  const [err, setErr] = useState(error ?? "");
   return (
     <div className="loader">
       <div className="brand">
@@ -166,7 +171,11 @@ function Loader({ onLoad }: { onLoad: (r: Report) => void }) {
             onChange={async (e) => {
               const f = e.target.files?.[0];
               if (!f) return;
-              try { onLoad(JSON.parse(await f.text())); } catch (x) { setErr(String(x)); }
+              try {
+                const data = JSON.parse(await f.text());
+                if (isReport(data)) onLoad(data);
+                else setErr("That isn't a Trowl report.json.");
+              } catch (x) { setErr(String(x)); }
             }}
           />
         </label>
