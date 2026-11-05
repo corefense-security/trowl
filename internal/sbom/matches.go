@@ -16,7 +16,7 @@ type CPE struct {
 // image, all present, with no VEX. CPE product is the component's name unless it has its own CPE.
 func FromInventory(source string, comps []Package) (*Sbom, *Status) {
 	s := &Sbom{Packages: map[string]*Package{}, Generates: newIDList(), RuntimeDeps: newIDList(), BuildDeps: newIDList(),
-		Vulns: newIDList(), vex: map[pair]string{}, vexNotes: map[pair]string{}, stated: map[pair]string{}, matched: map[pair]bool{}, fixes: map[pair]Fix{},
+		Vulns: newIDList(), vex: map[pair]string{}, vexNotes: map[pair]string{}, stated: map[pair]string{}, matched: map[pair]bool{}, nameOnly: map[pair]bool{}, fixes: map[pair]Fix{},
 		VulnInfo: map[string]*VulnInfo{}, Inventory: source}
 	st := &Status{M: map[string]*pyjson.Obj{}}
 	for i := range comps {
@@ -136,3 +136,14 @@ func (s *Sbom) SetFix(comp, cve string, fix Fix) { s.fixes[pair{cve, comp}] = fi
 func (s *Sbom) FixOf(cve, comp string) Fix { return s.fixes[pair{cve, comp}] }
 
 func (s *Sbom) Matched(cve, comp string) bool { return s.matched[pair{cve, comp}] }
+
+// MarkNameOnly records that a version match rests on the package name alone: the SBOM gives no
+// vendor, so the CVE may be for another product of the same name. A CVE the SBOM lists itself
+// isn't affected.
+func (s *Sbom) MarkNameOnly(comp, cve string) {
+	if s.Matched(cve, comp) {
+		s.nameOnly[pair{cve, comp}] = true
+	}
+}
+
+func (s *Sbom) NameOnly(cve, comp string) bool { return s.nameOnly[pair{cve, comp}] }

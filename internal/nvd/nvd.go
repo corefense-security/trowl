@@ -86,6 +86,9 @@ type Result struct {
 	Info    map[string]*Info
 	Known   map[string]bool // target products that appear in the feed, matched or not
 	Fixes   map[Match]Fix   // upstream fix, where the record gives one
+	// Vendored holds the matches made through a CPE that names its vendor. The others rest on the
+	// product name alone, so they may be another vendor's product of the same name.
+	Vendored map[Match]bool
 	// InFeed holds the matched and listed CVEs that have a record, each true when the kernel CNA
 	// publishes it. Rejected CVEs are skipped when reading the feed, so they aren't here.
 	InFeed map[string]bool
@@ -354,7 +357,8 @@ func match(files []string, targets []Target, listed map[Match]string) *Result {
 	for m := range listed {
 		compsOf[m.CVE] = append(compsOf[m.CVE], m.Comp)
 	}
-	res := &Result{Info: map[string]*Info{}, Known: map[string]bool{}, Fixes: map[Match]Fix{}, InFeed: map[string]bool{}}
+	res := &Result{Info: map[string]*Info{}, Known: map[string]bool{}, Fixes: map[Match]Fix{}, InFeed: map[string]bool{},
+		Vendored: map[Match]bool{}}
 	var mu sync.Mutex
 	seen := map[Match]bool{}
 	var wg sync.WaitGroup
@@ -395,6 +399,9 @@ func match(files []string, targets []Target, listed map[Match]string) *Result {
 					if !seen[m] {
 						seen[m] = true
 						res.Matches = append(res.Matches, m)
+					}
+					if v := h.target.Vendor; v != "" && v != "*" {
+						res.Vendored[m] = true
 					}
 					if h.fix != "" {
 						res.Fixes[m] = fixDetails(rec, h.target, h.fix, listed[m])

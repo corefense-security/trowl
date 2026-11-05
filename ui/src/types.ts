@@ -78,6 +78,8 @@ export interface CveCarrier {
   kernel: boolean;
   /** Where the status comes from: the SBOM's own VEX, or trowl's version match. */
   source?: "sbom" | "version-match";
+  /** Matched by package name alone: the SBOM gives no vendor, so it may be another product. */
+  name_only?: boolean;
   /** First upstream version with the fix, from the CVE record; "" if it gives none. */
   fixed_in?: string;
   /** Kernel only: the commit for fixed_in, whether fixed_in is the backport to this kernel's

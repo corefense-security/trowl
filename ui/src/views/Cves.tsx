@@ -36,6 +36,11 @@ function ShippedCell({ r }: { r: CveRow }) {
   return <span className="muted">–</span>;
 }
 
+const NAME_ONLY_NOTE = "SBOM is missing a vendor name, so this matched on the package name alone and may be another product's CVE.";
+
+/** Every carrier matched by name alone; one with a vendor behind it makes the CVE stand. */
+const nameOnly = (r: CveRow) => r.carriers.every((c) => c.name_only);
+
 /** Whether a CVE's package may be on the device: an unknown one can't be ruled out. */
 const onDevice = (r: CveRow) => r.shipped !== "build" && r.shipped !== "no";
 
@@ -204,7 +209,8 @@ function CveSheet({ r, sources, onClose }: { r: CveRow; sources: CveSection["sou
     <div className="overlay" onClick={onClose}>
       <aside className="sheet cve-sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={r.id}>
         <button className="icon-btn x" onClick={onClose} aria-label="Close"><X size={15} /></button>
-        <h3><code style={{ fontSize: 15 }}>{r.id}</code></h3>
+        <h3><code className={nameOnly(r) ? "cve-name-only" : undefined} style={{ fontSize: 15 }}>{r.id}</code></h3>
+        {nameOnly(r) && <p className="cve-foot">{NAME_ONLY_NOTE}</p>}
         {r.links && r.links.length > 0 && (
           <div className="adv-pills">
             {r.links.map((l) => (
@@ -342,7 +348,7 @@ export default function Cves({ section, params }: { section: CveSection; params:
                 </tr>
               ) : (
                 <tr key={r.id} className={`clickable ${open?.id === r.id ? "sel" : ""}`} onClick={() => setOpen(r)}>
-                  <td><code>{r.id}</code>{outsideSbom(r) && <span className="cve-star" title={OUTSIDE_NOTE}>*</span>}</td>
+                  <td><code className={nameOnly(r) ? "cve-name-only" : undefined} title={nameOnly(r) ? NAME_ONLY_NOTE : undefined}>{r.id}</code>{outsideSbom(r) && <span className="cve-star" title={OUTSIDE_NOTE}>*</span>}</td>
                   <td>
                     <code>{r.carriers[0]?.name}</code> <span className="muted">{r.carriers[0]?.version}</span>
                     {r.carriers.length > 1 && <span className="muted"> +{r.carriers.length - 1}</span>}
@@ -360,6 +366,7 @@ export default function Cves({ section, params }: { section: CveSection; params:
           {shown.length === 0 && <div className="empty">No CVEs match these filters.</div>}
         </div>
         {shown.some(outsideSbom) && <p className="cve-foot">* {OUTSIDE_NOTE}</p>}
+        {shown.some(nameOnly) && <p className="cve-foot"><code className="cve-name-only">CVE-XXXX-YYYY</code> in amber: {NAME_ONLY_NOTE}</p>}
         {shown.some((r) => r.carriers[0]?.backport) && <p className="cve-foot">B {BACKPORT_NOTE}</p>}
         {page.pager}
       </div>

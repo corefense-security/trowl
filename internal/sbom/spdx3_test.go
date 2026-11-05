@@ -42,3 +42,15 @@ func TestUnknownStaysInPlay(t *testing.T) {
 		t.Errorf("shipped %v, not shipped %v", s.G("unpatched_shipped"), s.G("unpatched_not_shipped"))
 	}
 }
+
+func TestNameOnlyIsForVersionMatches(t *testing.T) {
+	sb, _ := FromInventory("opkg", []Package{{Name: "phone", Version: "1.0"}})
+	sb.vex[pair{"CVE-1", "inventory/phone"}] = "affected" // as the SBOM would list it
+	sb.AddMatch("inventory/phone", "CVE-1", nil)
+	sb.AddMatch("inventory/phone", "CVE-2", nil)
+	sb.MarkNameOnly("inventory/phone", "CVE-1")
+	sb.MarkNameOnly("inventory/phone", "CVE-2")
+	if sb.NameOnly("CVE-1", "inventory/phone") || !sb.NameOnly("CVE-2", "inventory/phone") {
+		t.Errorf("listed %v, matched %v", sb.NameOnly("CVE-1", "inventory/phone"), sb.NameOnly("CVE-2", "inventory/phone"))
+	}
+}
