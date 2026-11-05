@@ -26,9 +26,6 @@ func resolveVersion() string {
 	if !ok {
 		return devVersion
 	}
-	if v := info.Main.Version; v != "" && v != "(devel)" {
-		return strings.TrimPrefix(v, "v")
-	}
 	rev, dirty := "", false
 	for _, s := range info.Settings {
 		switch s.Key {
@@ -37,6 +34,18 @@ func resolveVersion() string {
 		case "vcs.modified":
 			dirty = s.Value == "true"
 		}
+	}
+	return fromBuildInfo(info.Main.Version, rev, dirty)
+}
+
+// fromBuildInfo picks the version of a build that wasn't stamped. rev is the commit of a local
+// checkout, and empty for "go install".
+func fromBuildInfo(v, rev string, dirty bool) string {
+	// Go gives an untagged local build a generated version holding the commit's first 12
+	// characters, such as 0.0.0-20261105025515-32a47fadaf2e+dirty. A tag never holds them.
+	generated := len(rev) >= 12 && strings.Contains(v, rev[:12])
+	if v != "" && v != "(devel)" && !generated {
+		return strings.TrimPrefix(v, "v")
 	}
 	if rev == "" {
 		return devVersion
