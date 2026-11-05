@@ -149,6 +149,7 @@ func fetch(dir string, years []string) {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	failed := 0
+	var firstErr error
 	sem := make(chan struct{}, 6)
 	for _, y := range years {
 		wg.Add(1)
@@ -159,12 +160,17 @@ func fetch(dir string, years []string) {
 			if err := fetchYear(client, dir, y); err != nil {
 				mu.Lock()
 				failed++
+				if firstErr == nil {
+					firstErr = fmt.Errorf("%s: %w", y, err)
+				}
 				mu.Unlock()
-				warn("NVD %s: %v", y, err)
 			}
 		}(y)
 	}
 	wg.Wait()
+	if failed > 0 {
+		warn("NVD: %d of %d yearly files not updated, first error: %v", failed, len(years), firstErr)
+	}
 	if failed == 0 {
 		os.WriteFile(stamp, nil, 0o644)
 		now := time.Now()

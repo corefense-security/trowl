@@ -848,7 +848,7 @@ func versionMatch(sb *sbom.Sbom, opt Options) (any, map[string]bool) {
 	}
 	res := nvd.Run(opt.CacheDir, opt.Network, targets, listed)
 	if res == nil {
-		st.Fail("no NVD data cached")
+		st.Fail("no NVD data available")
 		return nil, nil
 	}
 	for _, m := range res.Matches {

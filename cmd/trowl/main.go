@@ -79,7 +79,8 @@ func commands() []*command {
 				{names: []string{"--model"}, value: true, def: llm.DefaultModel, choices: llm.ModelNames(),
 					help: "local LLM that writes the Overview summary; downloaded into the cache on first use (default: " + llm.DefaultModel + ")"},
 				{names: []string{"--cache-dir"}, value: true, def: defaultCache(),
-					help: "where the model, KEV, EPSS and link results are cached (default: " + defaultCache() + ")"},
+					help: "where NVD data, the model, KEV, EPSS and link results are cached; created if missing. trowl needs write " +
+						"permission to it, or the scan runs uncached (default: " + defaultCache() + ")"},
 				{names: []string{"--workdir"}, value: true, help: "unpack here instead of a temp dir (kept afterwards)"},
 				{names: []string{"--keep"}, help: "keep the temp unpack dir"},
 			},
@@ -289,6 +290,20 @@ func cmdScan(a args) int {
 			return 1
 		}
 	}
+	// NVD matching reads what was saved in the cache, so one that can't be written would quietly
+	// drop CVEs from the report: keep this run's data with the unpacked image instead. With
+	// --no-network nothing is saved, so a read-only cache is fine.
+	cache := a["cache-dir"]
+	if cache != "" && !a.flag("no-network") {
+		if err := writable(cache); err != nil {
+			var pathErr *os.PathError
+			if errors.As(err, &pathErr) {
+				err = pathErr.Err // it already names the path, which the message gives
+			}
+			status.Warn("can't write the cache to %s (%v); this run won't be cached", cache, err)
+			cache = filepath.Join(work, "cache")
+		}
+	}
 	modelName := a["model"]
 	started := time.Now()
 	res, code := func() (*scan.Result, int) {
@@ -311,7 +326,7 @@ func cmdScan(a args) int {
 		}
 		st.Ok(u.SourceFormat)
 		res, err := scan.Run(u, a["image"], scan.Options{
-			SBOM: a["sbom"], Network: !a.flag("no-network"), CacheDir: a["cache-dir"], Links: a["links"],
+			SBOM: a["sbom"], Network: !a.flag("no-network"), CacheDir: cache, Links: a["links"],
 			Model: modelName, KernelConfig: a["kernel-config"], KernelSrc: a["kernel-src"], KernelPolicy: a["kernel-policy"],
 			Started: started,
 		})
