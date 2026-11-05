@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -46,9 +47,6 @@ type Target struct {
 	Version         string
 }
 
-// Kernel reports whether the target is the Linux kernel.
-func (t Target) Kernel() bool { return t.Product == "linux_kernel" }
-
 type CVSS struct {
 	Score            float64
 	Vector, Severity string
@@ -66,18 +64,37 @@ type Match struct {
 	Comp, CVE string
 }
 
+// hit is a target a record affects, with the first version that has the fix ("" if unknown).
+type hit struct {
+	comp, fix string
+	target    Target
+}
+
+// Fix is the upstream fix for a CVE on one component. Commit and Mainline are kernel only.
+type Fix struct {
+	Version, Commit          string
+	Backport                 bool // Version is the fix in the kernel's own stable series
+	Mainline, MainlineCommit string
+	Stable, StableCommit     string // earliest stable release with the fix, when not a backport
+}
+
 // Result is the outcome of a match run.
 type Result struct {
 	Matches []Match
 	Info    map[string]*Info
-	Meta    map[string]any // for the report's sources
+	Known   map[string]bool // target products that appear in the feed, matched or not
+	Fixes   map[Match]Fix   // upstream fix, where the record gives one
+	Meta    map[string]any  // for the report's sources
 }
 
 func warn(format string, a ...any) { fmt.Fprintf(os.Stderr, "trowl: "+format+"\n", a...) }
 
 // Run fetches the feed when network is allowed and the cache is stale, then matches. It returns
 // nil when there is no feed to match against.
-func Run(cacheDir string, network bool, targets []Target) *Result {
+// Run matches targets against the feed. listed are CVEs already known for a component, such as
+// from an SBOM, each with the fix version it names ("" if none): they get a fix too, even when
+// the version match itself doesn't hit.
+func Run(cacheDir string, network bool, targets []Target, listed map[Match]string) *Result {
 	if len(targets) == 0 {
 		return nil
 	}
@@ -96,7 +113,7 @@ func Run(cacheDir string, network bool, targets []Target) *Result {
 		warn("no NVD data cached; CVEs come from the SBOM only")
 		return nil
 	}
-	res := match(files, targets)
+	res := match(files, targets, listed)
 	updated := ""
 	if st, err := os.Stat(filepath.Join(dir, "CVE-all.updated")); err == nil {
 		updated = st.ModTime().UTC().Format(time.RFC3339)
@@ -301,7 +318,7 @@ type record struct {
 
 // --- matching ---
 
-func match(files []string, targets []Target) *Result {
+func match(files []string, targets []Target, listed map[Match]string) *Result {
 	byProduct := map[string][]Target{}
 	seenTarget := map[Target]bool{}
 	for _, t := range targets {
@@ -316,7 +333,17 @@ func match(files []string, targets []Target) *Result {
 		seenTarget[t] = true
 		byProduct[t.Product] = append(byProduct[t.Product], t)
 	}
-	res := &Result{Info: map[string]*Info{}}
+	targetsOf := map[string][]Target{}
+	for _, ts := range byProduct {
+		for _, t := range ts {
+			targetsOf[t.Comp] = append(targetsOf[t.Comp], t)
+		}
+	}
+	compsOf := map[string][]string{}
+	for m := range listed {
+		compsOf[m.CVE] = append(compsOf[m.CVE], m.Comp)
+	}
+	res := &Result{Info: map[string]*Info{}, Known: map[string]bool{}, Fixes: map[Match]Fix{}}
 	var mu sync.Mutex
 	seen := map[Match]bool{}
 	var wg sync.WaitGroup
@@ -328,18 +355,35 @@ func match(files []string, targets []Target) *Result {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 			err := eachRecord(f, func(rec *record) {
-				comps := affects(rec, byProduct)
-				if len(comps) == 0 {
+				hits, products := affects(rec, byProduct)
+				mu.Lock()
+				defer mu.Unlock()
+				for _, comp := range compsOf[rec.ID] {
+					for _, t := range targetsOf[comp] {
+						m := Match{comp, rec.ID}
+						if fix := fixDetails(rec, t, recordFix(rec, t), listed[m]); fix.Version != "" {
+							res.Fixes[m] = fix
+						}
+					}
+				}
+				if len(products) == 0 {
+					return
+				}
+				for _, p := range products {
+					res.Known[p] = true
+				}
+				if len(hits) == 0 {
 					return
 				}
 				info := infoOf(rec)
-				mu.Lock()
-				defer mu.Unlock()
-				for _, c := range comps {
-					m := Match{c, rec.ID}
+				for _, h := range hits {
+					m := Match{h.comp, rec.ID}
 					if !seen[m] {
 						seen[m] = true
 						res.Matches = append(res.Matches, m)
+					}
+					if h.fix != "" {
+						res.Fixes[m] = fixDetails(rec, h.target, h.fix, listed[m])
 					}
 				}
 				res.Info[rec.ID] = info
@@ -399,26 +443,27 @@ func eachRecord(path string, fn func(*record)) error {
 // affects returns the components a record affects. For each product the CNA's own version
 // data decides when it has any (NVD has not analysed most recent CVEs); NVD's CPE
 // configurations are the fallback. That is the precedence sbom-cve-check uses.
-func affects(rec *record, byProduct map[string][]Target) []string {
-	var out []string
+func affects(rec *record, byProduct map[string][]Target) (hits []hit, products []string) {
+	var out []hit
 	for product, ts := range byProduct {
 		kernel := product == "linux_kernel"
 		blocks := cnaBlocks(rec, product, kernel)
 		if len(blocks) > 0 {
+			products = append(products, product)
 			for _, t := range ts {
-				hit := false
+				affected := false
 				if kernel {
-					hit = kernelAffected(t.Version, blocks)
+					affected = kernelAffected(t.Version, blocks)
 				} else {
 					for _, b := range blocks {
 						if cnaAffected(t.Version, b, false) && vendorAgrees(t.Vendor, b.Vendor) {
-							hit = true
+							affected = true
 							break
 						}
 					}
 				}
-				if hit {
-					out = append(out, t.Comp)
+				if affected {
+					out = append(out, hit{t.Comp, cnaFix(t.Version, blocks, kernel), t})
 				}
 			}
 			continue
@@ -426,21 +471,223 @@ func affects(rec *record, byProduct map[string][]Target) []string {
 		if !mentions(rec, product) {
 			continue
 		}
+		products = append(products, product)
 		out = append(out, cpeAffects(rec, ts)...)
 	}
-	return dedupe(out)
+	return dedupe(out), products
 }
 
-func dedupe(xs []string) []string {
-	seen := map[string]bool{}
+// dedupe keeps one hit per component, with a fix version if any of them has one.
+func dedupe(xs []hit) []hit {
+	at := map[string]int{}
 	out := xs[:0]
 	for _, x := range xs {
-		if !seen[x] {
-			seen[x] = true
+		if i, ok := at[x.comp]; !ok {
+			at[x.comp] = len(out)
 			out = append(out, x)
+		} else if out[i].fix == "" {
+			out[i].fix, out[i].target = x.fix, x.target
 		}
 	}
 	return out
+}
+
+// upperBoundRe finds the exclusive bound in a GitHub-style range such as ">= 2.17, < 2.41.6".
+var upperBoundRe = regexp.MustCompile(`<\s*([^=,\s][^,\s]*)`)
+
+// recordFix is the fix version a record gives for t, whether or not t's version is affected: a
+// CVE the SBOM lists may be fixed in the installed version already, or by a backported patch.
+func recordFix(rec *record, t Target) string {
+	kernel := t.Product == "linux_kernel"
+	blocks := cnaBlocks(rec, t.Product, kernel)
+	if len(blocks) == 0 {
+		return cpeEnd(rec, t)
+	}
+	if fix := seriesFix(t.Version, blocks); fix != "" {
+		return fix
+	}
+	if fix := cnaFix(t.Version, blocks, kernel); fix != "" {
+		return fix
+	}
+	return highestFix(blocks)
+}
+
+// fixDetails picks the fix to show. A kernel CVE takes the backport to t's stable series if there
+// is one, then the version the SBOM names so the two agree, then the mainline fix: a stable release
+// of another series isn't something to update to, so the record's next fix is only a last resort,
+// and otherwise kept as Stable for the overlay. stated is the SBOM's version, "" if none; version
+// is the record's next fix.
+func fixDetails(rec *record, t Target, version, stated string) Fix {
+	kernel := t.Product == "linux_kernel"
+	blocks := cnaBlocks(rec, t.Product, kernel)
+	if !kernel || len(blocks) == 0 {
+		if version == "" {
+			version = stated
+		}
+		return Fix{Version: version}
+	}
+	commits := kernelCommits(rec)
+	fix := Fix{Mainline: mainlineFix(blocks)}
+	fix.MainlineCommit = commits[fix.Mainline]
+	backport := seriesFix(t.Version, blocks)
+	for _, v := range []string{version, stated} {
+		if backport == "" && sameSeries(v, t.Version) {
+			backport = v // given only as the end of an affected range, or only by the SBOM
+		}
+	}
+	switch {
+	case backport != "" && backport != fix.Mainline:
+		fix.Version, fix.Backport = backport, true
+	case stated != "":
+		fix.Version = stated
+	case fix.Mainline != "":
+		fix.Version = fix.Mainline
+	default:
+		fix.Version = version
+	}
+	fix.Commit = commits[fix.Version]
+	if !fix.Backport && version != fix.Mainline {
+		fix.Stable, fix.StableCommit = version, commits[version]
+	}
+	return fix
+}
+
+// sameSeries reports whether two versions share major.minor, such as 6.18.58 and 6.18.52.
+func sameSeries(a, b string) bool {
+	x, y := strings.Split(a, "."), strings.Split(b, ".")
+	return len(x) > 2 && len(y) > 2 && x[0] == y[0] && x[1] == y[1]
+}
+
+// mainlineFix is the version the kernel CNA gives for the mainline fix.
+func mainlineFix(blocks []affectedData) string {
+	for _, b := range blocks {
+		for _, e := range b.Versions {
+			if e.Status == "unaffected" && e.LessThanOrEqual == "*" && usable(e) && versionRe.MatchString(e.Version) {
+				return e.Version
+			}
+		}
+	}
+	return ""
+}
+
+var commitRe = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
+// kernelCommits maps each fix version to its commit. The kernel CNA lists the fix commits and the
+// fix versions separately, in the same order, so they pair by position; checked against
+// linux-stable. If the two lists differ in length nothing is paired.
+func kernelCommits(rec *record) map[string]string {
+	var hashes, versions []string
+	for _, a := range rec.Affected {
+		if a.Source != kernelCNA {
+			continue
+		}
+		for _, ad := range a.AffectedData {
+			if strings.ToLower(strings.TrimSpace(ad.Product)) != "linux" {
+				continue
+			}
+			for _, e := range ad.Versions {
+				if e.VersionType == "git" {
+					if commitRe.MatchString(e.LessThan) {
+						hashes = append(hashes, e.LessThan)
+					}
+				} else if e.Status == "unaffected" && e.Version != "0" && e.LessThan == "" && usable(e) {
+					versions = append(versions, e.Version)
+				}
+			}
+		}
+	}
+	if len(hashes) != len(versions) {
+		return nil
+	}
+	out := map[string]string{}
+	for i, v := range versions {
+		out[v] = hashes[i]
+	}
+	return out
+}
+
+// seriesFix is the fix listed for v's own stable series, such as 6.18.54 for 6.18.52.
+func seriesFix(v string, blocks []affectedData) string {
+	for _, b := range blocks {
+		for _, e := range b.Versions {
+			s, ok := strings.CutSuffix(e.LessThanOrEqual, "*")
+			if ok && s != "" && e.Status == "unaffected" && usable(e) && strings.HasPrefix(v+".", s) && versionRe.MatchString(e.Version) {
+				return e.Version
+			}
+		}
+	}
+	return ""
+}
+
+// highestFix is the latest fix a record gives, for a version already past all of them.
+func highestFix(blocks []affectedData) string {
+	top := ""
+	for _, b := range blocks {
+		for _, e := range b.Versions {
+			if !usable(e) {
+				continue
+			}
+			c := ""
+			ver := strings.TrimSpace(e.Version)
+			switch {
+			case e.Status == "affected" && strings.ContainsAny(ver, "<>="):
+				if m := upperBoundRe.FindStringSubmatch(ver); m != nil {
+					c = m[1]
+				}
+			case e.Status == "affected" && e.LessThan != "*":
+				c = e.LessThan
+			case e.Status == "unaffected" && e.LessThan == "":
+				c = ver
+			}
+			if versionRe.MatchString(c) && (top == "" || Compare(c, top) > 0) {
+				top = c
+			}
+		}
+	}
+	return top
+}
+
+// versionRe tells a version from the prose and commit hashes CNAs also put in version fields.
+var versionRe = regexp.MustCompile(`^[0-9][0-9A-Za-z.+~_-]{0,31}$`)
+
+// cnaFix is the first version after v with the fix. A fix in v's own stable series ("6.18.54" for
+// 6.18.52) wins, since that is the update to take; otherwise it's the lowest later fix.
+func cnaFix(v string, blocks []affectedData, kernel bool) string {
+	inSeries, next := "", ""
+	lowest := func(cur, c string) string {
+		if versionRe.MatchString(c) && Compare(c, v) > 0 && (cur == "" || Compare(c, cur) < 0) {
+			return c
+		}
+		return cur
+	}
+	for _, b := range blocks {
+		for _, e := range b.Versions {
+			if !usable(e) {
+				continue
+			}
+			ver := strings.TrimSpace(e.Version)
+			switch {
+			case e.Status == "affected" && strings.ContainsAny(ver, "<>="):
+				if m := upperBoundRe.FindStringSubmatch(ver); m != nil && constraintsHit(v, ver) {
+					next = lowest(next, m[1])
+				}
+			case e.Status == "affected":
+				if e.LessThan != "" && e.LessThan != "*" && entryHits(v, e, kernel) {
+					next = lowest(next, e.LessThan)
+				}
+			case e.Status == "unaffected" && e.LessThan == "" && !strings.ContainsAny(ver, "<>="):
+				if s, ok := strings.CutSuffix(e.LessThanOrEqual, "*"); ok && s != "" && strings.HasPrefix(v+".", s) {
+					inSeries = lowest(inSeries, ver)
+				} else {
+					next = lowest(next, ver)
+				}
+			}
+		}
+	}
+	if inSeries != "" {
+		return inSeries
+	}
+	return next
 }
 
 // cnaBlocks returns the CNA's affected blocks for a product that carry at least one version
@@ -645,17 +892,19 @@ func mentions(rec *record, product string) bool {
 }
 
 // cpeAffects matches the record's vulnerable CPEs against targets of one product.
-func cpeAffects(rec *record, ts []Target) []string {
-	var out []string
+func cpeAffects(rec *record, ts []Target) []hit {
+	var out []hit
 	for _, t := range ts {
-		if cpeHit(rec, t) {
-			out = append(out, t.Comp)
+		if ok, fix := cpeHit(rec, t); ok {
+			out = append(out, hit{t.Comp, fix, t})
 		}
 	}
 	return out
 }
 
-func cpeHit(rec *record, t Target) bool {
+// cpeHit reports whether the record covers t. The fix is the highest exclusive end among the
+// ranges that cover t, the first version past all of them; NVD gives none for an inclusive end.
+func cpeHit(rec *record, t Target) (found bool, fix string) {
 	for _, c := range rec.Configurations {
 		for _, n := range c.Nodes {
 			for _, m := range n.CpeMatch {
@@ -670,12 +919,37 @@ func cpeHit(rec *record, t Target) bool {
 					continue
 				}
 				if inRange(t.Version, p[5], p[6], m) {
-					return true
+					found = true
+					if end := m.VersionEndExcluding; end != "" && !distroRe.MatchString(end) && (fix == "" || Compare(end, fix) > 0) {
+						fix = end
+					}
 				}
 			}
 		}
 	}
-	return false
+	return found, fix
+}
+
+// distroRe matches a distro build such as 4.18.0-193.el8: not an upstream version to update to.
+var distroRe = regexp.MustCompile(`(?i)\.(el|fc|amzn)\d|ubuntu|deb\d`)
+
+// cpeEnd is the highest exclusive end of any vulnerable range for t's product.
+func cpeEnd(rec *record, t Target) string {
+	end := ""
+	for _, c := range rec.Configurations {
+		for _, n := range c.Nodes {
+			for _, m := range n.CpeMatch {
+				p := splitCPE(m.Criteria)
+				if !m.Vulnerable || len(p) < 7 || p[4] != t.Product || (t.Vendor != "*" && t.Vendor != "" && p[3] != t.Vendor) {
+					continue
+				}
+				if e := m.VersionEndExcluding; e != "" && !distroRe.MatchString(e) && (end == "" || Compare(e, end) > 0) {
+					end = e
+				}
+			}
+		}
+	}
+	return end
 }
 
 // inRange decides whether version v is covered by one cpeMatch entry.

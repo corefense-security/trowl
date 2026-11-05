@@ -10,6 +10,7 @@ package sbom
 import (
 	"encoding/json"
 	"os"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -80,13 +81,24 @@ type Sbom struct {
 	Vulns        *IDList // component id -> CVE ids (sorted, unique)
 	vex          map[pair]string
 	vexNotes     map[pair]string
-	matched      map[pair]bool // statuses that came from a version match
+	stated       map[pair]string // fix version named in the VEX text (sbom-cve-check)
+	matched      map[pair]bool   // statuses that came from a version match
+	fixes        map[pair]Fix    // upstream fix, from the CVE record
 	Name         string
 	VulnInfo     map[string]*VulnInfo
+	Inventory    string // the package database this came from, when it isn't a real SBOM
 }
 
 // Vex returns the SBOM's VEX status for (CVE, component), or "".
 func (s *Sbom) Vex(cve, comp string) string { return s.vex[pair{cve, comp}] }
+
+// statedFixRe finds the version in sbom-cve-check's VEX text: "May need backporting (fixed from
+// 6.18.53)", "Needs backporting (originally fixed in 7.2)", "fixed-version: Originally fixed in
+// 6.12", "cpe-stable-backport: Backported in 6.18.40". "fixed from >1.38" names no exact version.
+var statedFixRe = regexp.MustCompile(`(?i)(?:fixed from|fixed in|backported in) ([0-9][^\s)]*)`)
+
+// StatedFix is the fix version the SBOM names for a CVE, "" if none.
+func (s *Sbom) StatedFix(cve, comp string) string { return s.stated[pair{cve, comp}] }
 
 func (s *Sbom) VexNotes(cve, comp string) string { return s.vexNotes[pair{cve, comp}] }
 
@@ -118,6 +130,7 @@ type element struct {
 	From         *string         `json:"from"`
 	To           json.RawMessage `json:"to"`
 	StatusNotes  *string         `json:"security_statusNotes"`
+	Action       *string         `json:"security_actionStatement"`
 	Score        json.RawMessage `json:"security_score"`
 	VectorString *string         `json:"security_vectorString"`
 	CVSSSeverity *string         `json:"security_severity"`
@@ -238,7 +251,7 @@ func Load(path string) (*Sbom, error) {
 	}
 
 	sb := &Sbom{Packages: map[string]*Package{}, Generates: newIDList(), RuntimeDeps: newIDList(),
-		BuildDeps: newIDList(), Vulns: newIDList(), vex: map[pair]string{}, vexNotes: map[pair]string{}, matched: map[pair]bool{},
+		BuildDeps: newIDList(), Vulns: newIDList(), vex: map[pair]string{}, vexNotes: map[pair]string{}, stated: map[pair]string{}, matched: map[pair]bool{}, fixes: map[pair]Fix{},
 		VulnInfo: map[string]*VulnInfo{}}
 	for _, sid := range order {
 		e := byID[sid]
@@ -310,7 +323,7 @@ func Load(path string) (*Sbom, error) {
 
 	// VEX pairs are collected per raw (vulnerability, component) first and mapped to CVE ids
 	// afterwards, so a CVE described twice resolves the way the Python dict did.
-	type vexVal struct{ status, notes string }
+	type vexVal struct{ status, notes, fix string }
 	var vexOrder []pair
 	vexRaw := map[pair]*vexVal{}
 	vulnRaw := newIDList()
@@ -329,6 +342,9 @@ func Load(path string) (*Sbom, error) {
 					vexOrder = append(vexOrder, k)
 				}
 				cur.status = v
+				if v := statedFixRe.FindStringSubmatch(s(e.Action) + " " + s(e.StatusNotes)); v != nil {
+					cur.fix = v[1]
+				}
 				if s(e.StatusNotes) != "" {
 					cur.notes = *e.StatusNotes
 				}
@@ -398,6 +414,9 @@ func Load(path string) (*Sbom, error) {
 		sb.vex[pair{mapCVE(k.a), k.b}] = v.status
 		if v.notes != "" {
 			sb.vexNotes[pair{mapCVE(k.a), k.b}] = v.notes
+		}
+		if v.fix != "" {
+			sb.stated[pair{mapCVE(k.a), k.b}] = v.fix
 		}
 	}
 

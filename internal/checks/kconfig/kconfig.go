@@ -283,7 +283,7 @@ func verLess(a, b []int) bool {
 	return len(a) < len(b)
 }
 
-func modulesVersion(rootfs string) string {
+func ModulesVersion(rootfs string) string {
 	mods := filepath.Join(rootfs, "lib", "modules")
 	var names []string
 	if py.IsDir(mods) {
@@ -498,13 +498,13 @@ func archList(v any) []string {
 func Check(rootfs, kernelConfig, kernelSrc, policyPath string) (*pyjson.Obj, []model.Finding, error) {
 	text, source := FindConfig(rootfs, kernelConfig, kernelSrc)
 	if source == nil {
-		version := modulesVersion(rootfs)
+		version := ModulesVersion(rootfs)
 		return pyjson.O("source", nil, "version", version, "arch", "", "entries", []any{},
 			"modules", ScanModules(rootfs, Config{}, version)), nil, nil
 	}
 	values, arch, version := Parse(text)
 	if version == "" {
-		version = modulesVersion(rootfs)
+		version = ModulesVersion(rootfs)
 	}
 	pol, err := LoadPolicy(policyPath)
 	if err != nil {

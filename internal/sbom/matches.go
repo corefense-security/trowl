@@ -3,11 +3,33 @@ package sbom
 import (
 	"sort"
 	"strings"
+
+	"github.com/corefense-security/trowl/internal/pyjson"
 )
 
 // CPE is one component's CPE identity, for version matching.
 type CPE struct {
 	Comp, Vendor, Product, Version string
+}
+
+// FromInventory stands in for an SBOM when the image has none: the components found in the
+// image, all present, with no VEX. CPE product is the component's name unless it has its own CPE.
+func FromInventory(source string, comps []Package) (*Sbom, *Status) {
+	s := &Sbom{Packages: map[string]*Package{}, Generates: newIDList(), RuntimeDeps: newIDList(), BuildDeps: newIDList(),
+		Vulns: newIDList(), vex: map[pair]string{}, vexNotes: map[pair]string{}, stated: map[pair]string{}, matched: map[pair]bool{}, fixes: map[pair]Fix{},
+		VulnInfo: map[string]*VulnInfo{}, Inventory: source}
+	st := &Status{M: map[string]*pyjson.Obj{}}
+	for i := range comps {
+		p := comps[i]
+		p.ID, p.Role = "inventory/"+p.Name, "recipe"
+		if len(p.Cpes) == 0 {
+			p.Cpes = []string{"cpe:2.3:a:*:" + strings.ToLower(p.Name) + ":" + p.Version + ":*:*:*:*:*:*:*"}
+		}
+		s.Packages[p.ID] = &p
+		s.PackageOrder = append(s.PackageOrder, p.ID)
+		st.set(p.ID, pyjson.O("status", "present"))
+	}
+	return s, st
 }
 
 // MatchTargets lists the CPEs of the components CVEs are attached to: build components
@@ -88,4 +110,29 @@ func (s *Sbom) AddMatch(comp, cve string, info *VulnInfo) {
 }
 
 // Matched reports whether the pair's status came from a version match, not from the SBOM.
+// Listed returns each component's CVEs as [comp, cve] pairs.
+func (s *Sbom) Listed() [][2]string {
+	var out [][2]string
+	for _, comp := range s.Vulns.Keys {
+		for _, cve := range s.Vulns.M[comp] {
+			out = append(out, [2]string{comp, cve})
+		}
+	}
+	return out
+}
+
+// Fix is the upstream fix for a CVE on one component. Commit and Mainline are kernel only.
+type Fix struct {
+	Version, Commit          string
+	Backport                 bool
+	Mainline, MainlineCommit string
+	Stable, StableCommit     string
+}
+
+// SetFix records the upstream fix, taken from the CVE record even for CVEs the SBOM lists.
+func (s *Sbom) SetFix(comp, cve string, fix Fix) { s.fixes[pair{cve, comp}] = fix }
+
+// FixOf is the upstream fix, zero if unknown.
+func (s *Sbom) FixOf(cve, comp string) Fix { return s.fixes[pair{cve, comp}] }
+
 func (s *Sbom) Matched(cve, comp string) bool { return s.matched[pair{cve, comp}] }

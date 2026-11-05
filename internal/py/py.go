@@ -82,9 +82,6 @@ func Strip(s string) string { return strings.TrimFunc(s, IsSpace) }
 // Fields mirrors str.split() with no arguments.
 func Fields(s string) []string { return strings.FieldsFunc(s, IsSpace) }
 
-// Round mirrors Python 3 round(x) for floats: halves go to the even neighbour.
-func Round(x float64) int { return int(math.RoundToEven(x)) }
-
 // Round2 mirrors round(x, 2).
 func Round2(x float64) float64 { return math.RoundToEven(x*100) / 100 }
 

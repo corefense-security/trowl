@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/corefense-security/trowl/internal/llm"
 	"github.com/corefense-security/trowl/internal/model"
@@ -78,9 +79,6 @@ func commands() []*command {
 					help: "local LLM that writes the Overview summary; downloaded into the cache on first use (default: " + llm.DefaultModel + ")"},
 				{names: []string{"--cache-dir"}, value: true, def: defaultCache(),
 					help: "where the model, KEV, EPSS and link results are cached (default: " + defaultCache() + ")"},
-				{names: []string{"--serve"}, help: "after the scan, serve the report folder over HTTP (for container use)"},
-				{names: []string{"--host"}, value: true, def: defaultHost(), help: "--serve address (default: " + defaultHost() + ")"},
-				{names: []string{"--port"}, value: true, def: "8765", help: "--serve port (default: 8765)"},
 				{names: []string{"--workdir"}, value: true, help: "unpack here instead of a temp dir (kept afterwards)"},
 				{names: []string{"--keep"}, help: "keep the temp unpack dir"},
 			},
@@ -260,6 +258,7 @@ func cmdScan(a args) int {
 		}
 	}
 	modelName := a["model"]
+	started := time.Now()
 	res, code := func() (*scan.Result, int) {
 		defer func() {
 			if a["workdir"] == "" && !a.flag("keep") {
@@ -279,6 +278,7 @@ func cmdScan(a args) int {
 		res, err := scan.Run(u, a["image"], scan.Options{
 			SBOM: a["sbom"], Network: !a.flag("no-network"), CacheDir: a["cache-dir"], Links: a["links"],
 			Model: modelName, KernelConfig: a["kernel-config"], KernelSrc: a["kernel-src"], KernelPolicy: a["kernel-policy"],
+			Started: started,
 		})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "trowl: %v\n", err)
@@ -330,10 +330,6 @@ func cmdScan(a args) int {
 				break
 			}
 		}
-	}
-	if a.flag("serve") && html {
-		port, _ := strconv.Atoi(a["port"])
-		serve(out, a["host"], port)
 	}
 	return status
 }

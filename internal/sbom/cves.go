@@ -131,9 +131,13 @@ func BuildCVEs(sb *Sbom, status *Status) []*pyjson.Obj {
 		for _, cve := range sb.Vulns.M[comp] {
 			shipped := or(shippedOfRecipe, recipeStatus, "unknown")
 			st := or(statusOfVex, sb.Vex(cve, comp), "unknown")
+			fix := sb.FixOf(cve, comp)
 			c := &carrier{name: pkg.Name, shipped: shipped, status: st, kernel: kernel,
 				obj: pyjson.O("name", pkg.Name, "version", pkg.Version, "shipped", shipped, "status", st,
-					"notes", sb.VexNotes(cve, comp), "kernel", kernel, "source", source(sb, cve, comp))}
+					"notes", sb.VexNotes(cve, comp), "kernel", kernel, "source", source(sb, cve, comp),
+					"fixed_in", fix.Version, "fix_commit", fix.Commit, "backport", fix.Backport,
+					"mainline", fix.Mainline, "mainline_commit", fix.MainlineCommit,
+					"stable", fix.Stable, "stable_commit", fix.StableCommit)}
 			if _, ok := carriers[cve]; !ok {
 				order = append(order, cve)
 			}

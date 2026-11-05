@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/corefense-security/trowl/internal/checks/kconfig"
 	"github.com/corefense-security/trowl/internal/checks/secrets"
 	"github.com/corefense-security/trowl/internal/feeds"
+	"github.com/corefense-security/trowl/internal/inventory"
 	"github.com/corefense-security/trowl/internal/llm"
 	"github.com/corefense-security/trowl/internal/model"
 	"github.com/corefense-security/trowl/internal/nvd"
@@ -33,6 +35,7 @@ type Options struct {
 	KernelConfig string
 	KernelSrc    string
 	KernelPolicy string
+	Started      time.Time // when the scan began, including unpacking; zero means when Run was called
 }
 
 type Result struct {
@@ -46,7 +49,10 @@ type Result struct {
 }
 
 func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
-	t0 := time.Now()
+	started := opt.Started
+	if started.IsZero() {
+		started = time.Now()
+	}
 	rootfs := u.Rootfs
 	var findings []model.Finding
 	binaries := []any{}
@@ -59,6 +65,11 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 			b := pyjson.O("path", imagePath)
 			for _, k := range props.Keys() {
 				b.Set(k, props.G(k))
+			}
+			if p, ok := u.Perms[imagePath]; ok {
+				b.Set("mode", p.Mode)
+				b.Set("uid", p.UID)
+				b.Set("gid", p.GID)
 			}
 			binaries = append(binaries, b)
 			findings = append(findings, elfcheck.FindingsFor(imagePath, props)...)
@@ -73,11 +84,14 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 	}
 	findings = append(findings, kernelFindings...)
 
-	var sbomSection *pyjson.Obj
+	var sbomSection, cves *pyjson.Obj
 	var sb *sbom.Sbom
 	if opt.SBOM != "" {
 		sb, err = sbom.Load(opt.SBOM)
 		if err != nil {
+			return nil, err
+		}
+		if err := checkKernelVersion(sb, kconfig.ModulesVersion(rootfs)); err != nil {
 			return nil, err
 		}
 		cmp := sbom.Compare(sb, rootfs)
@@ -113,8 +127,10 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 			"status_counts", statusCounts,
 			"not_present", cmp.NotPresent,
 			"graph", sbom.Graph(sb, cmp.Status),
-			"cves", cveSection(sb, cmp.Status, opt),
 		)
+		cves = cveSection(sb, cmp.Status, opt)
+	} else if inv, status := imageInventory(rootfs); inv != nil {
+		cves = cveSection(inv, status, opt)
 	}
 
 	sort.SliceStable(findings, func(i, j int) bool {
@@ -141,9 +157,12 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 	if notes == nil {
 		notes = []string{}
 	}
-	var sbomOut any
+	var sbomOut, cvesOut any
 	if sbomSection != nil {
 		sbomOut = sbomSection
+	}
+	if cves != nil {
+		cvesOut = cves
 	}
 	result := pyjson.O(
 		"tool", pyjson.O("name", "trowl", "version", model.Version),
@@ -152,36 +171,31 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 			"findings", bySev,
 			"by_check", byCheck,
 			"elf", elfKinds,
-			"duration_s", py.Round2(time.Since(t0).Seconds()),
+			"scanned_at", started.UTC().Format(time.RFC3339),
+			"duration_s", nil,
 		),
 		"findings", findingObjs,
 		"binaries", binaries,
 		"fstab", fstabEntries,
 		"kernel", kernelSection,
 		"sbom", sbomOut,
+		"cves", cvesOut,
 		"overview", nil,
 	)
 	if opt.Model != "" && opt.CacheDir != "" {
 		runner := llm.NewRunner(opt.Model, opt.CacheDir)
 		defer runner.Close()
-		if ov := llm.Overview(runner, overviewFacts(result, findingObjs, binaries, kernelSection, sbomSection)); ov != nil {
+		if ov := llm.Overview(runner, overviewFacts(findingObjs, binaries, kernelSection, sbomSection, cves)); ov != nil {
 			result.Set("overview", ov)
 		}
 	}
+	result.G("summary").(*pyjson.Obj).Set("duration_s", py.Round2(time.Since(started).Seconds()))
 	res := &Result{Report: result, Findings: findings, Files: fileCount, Binaries: len(binaries),
 		Format: u.SourceFormat, Counts: bySev}
 	if sbomSection != nil {
 		res.SbomCounts = sbomSection.G("status_counts").(*pyjson.Obj)
 	}
 	return res, nil
-}
-
-func pct(n, d int) string {
-	p := 0
-	if d != 0 {
-		p = py.Round(100 * float64(n) / float64(d))
-	}
-	return fmt.Sprintf("%d of %d (%d%%)", n, d, p)
 }
 
 func truthy(v any) bool {
@@ -198,201 +212,424 @@ func truthy(v any) bool {
 	return true
 }
 
-// overviewFacts are the numbers the Overview page shows, as plain facts for the model to
-// summarise. Keys are numbered in the order the summary should cover them, most important first.
-func overviewFacts(r *pyjson.Obj, findings []any, binaries []any, kernel, sb *pyjson.Obj) *pyjson.Obj {
-	var judged []*pyjson.Obj
-	for _, b := range binaries {
-		bo := b.(*pyjson.Obj)
-		if k := bo.G("kind"); k == "executable" || k == "library" {
-			judged = append(judged, bo)
-		}
-	}
-	fortifiable := func(b *pyjson.Obj) bool {
-		f, _ := b.G("fortify").(*pyjson.Obj)
-		return f != nil && (truthy(f.G("fortified")) || truthy(f.G("unfortified")))
-	}
-	// The critical protections a binary can lack. Partial RELRO counts as protected; a missing
-	// canary counts only where there are buffer calls to protect (as the elf.canary check does);
-	// CFI is judged only on architectures whose ELF notes record it (x86 IBT, arm64 BTI).
-	lacks := func(b *pyjson.Obj) []string {
-		var m []string
-		if b.G("pie") == false {
-			m = append(m, "PIE")
-		}
-		if b.G("relro") == "none" {
-			m = append(m, "RELRO")
-		}
-		if !truthy(b.G("canary")) && fortifiable(b) {
-			m = append(m, "stack protector")
-		}
-		cf, _ := b.G("cf_protection").(*pyjson.Obj)
-		switch b.G("arch") {
-		case "EM_X86_64", "EM_386":
-			if !truthy(cf.G("ibt")) {
-				m = append(m, "CFI")
-			}
-		case "EM_AARCH64":
-			if !truthy(cf.G("bti")) {
-				m = append(m, "CFI")
-			}
-		}
-		return m
-	}
-	const maxNamed = 3
-	var weakBins []*pyjson.Obj
-	missing := pyjson.NewCounter()
-	for _, k := range []string{"PIE", "RELRO", "stack protector", "CFI"} {
-		missing.Add(k, 0)
-	}
-	for _, b := range judged {
-		if m := lacks(b); len(m) > 0 {
-			weakBins = append(weakBins, b)
-			for _, k := range m {
-				missing.Add(k, 1)
-			}
-		}
-	}
-	// Name the binaries that lack the most protections first.
-	sort.SliceStable(weakBins, func(i, j int) bool { return len(lacks(weakBins[i])) > len(lacks(weakBins[j])) })
-	named := []string{}
-	for i, b := range weakBins {
-		if i == maxNamed {
-			break
-		}
-		named = append(named, fmt.Sprintf("%s (no %s)", path.Base(b.G("path").(string)), strings.Join(lacks(b), "/")))
-	}
+// overviewFacts are the facts the model interprets for the Overview summary. Every number is
+// computed here; the model only explains them. Keys are numbered in the order to cover them.
+func overviewFacts(findings []any, binaries []any, kernel, sb, cv *pyjson.Obj) *pyjson.Obj {
 	facts := pyjson.New()
-	if sb != nil {
-		if cv, _ := sb.G("cves").(*pyjson.Obj); cv != nil {
-			s := cv.G("summary").(*pyjson.Obj)
-			var kev any = "not checked"
-			if cv.G("sources").(*pyjson.Obj).G("kev") != nil {
-				kev = s.G("kev")
-			}
-			sev := s.G("severity").(*pyjson.Counter)
-			status := s.G("status").(*pyjson.Counter)
-			comps := []string{}
-			for i, c := range s.G("by_component").([]any) {
-				if i == 3 {
-					break
-				}
-				co := c.(*pyjson.Obj)
-				total := 0
-				for _, k := range co.Keys() {
-					if k != "name" {
-						total += co.G(k).(int)
-					}
-				}
-				comps = append(comps, fmt.Sprintf("%s: %d", co.G("name"), total))
-			}
-			facts.Set("1. Vulnerabilities", pyjson.O(
-				"Unpatched CVEs on packages that ship", s.G("unpatched_shipped"),
-				"Unpatched CVEs with CVSS 7.0 or higher", s.G("high"),
-				"Unpatched CVEs in the CISA Known Exploited Vulnerabilities list", kev,
-				"Unpatched CVEs without a CVSS score", sev.Get("none"),
-				"Components with the most unpatched CVEs", comps,
-				"CVEs marked fixed in the SBOM", status.Get("fixed"),
-			))
-		}
-	}
-	secretsC := pyjson.NewCounter()
-	var mountIssues []string
-	for _, f := range findings {
-		fo := f.(*pyjson.Obj)
-		check := fo.G("check").(string)
-		if strings.HasPrefix(check, "secrets.") {
-			secretsC.Add(fmt.Sprintf("%s: %s", fo.G("severity"), fo.G("title")), 1)
-		}
-		if check == "fstab.mount-options" {
-			mountIssues = append(mountIssues, fo.G("title").(string))
-		}
-	}
-	if kernel != nil && kernel.G("source") != nil {
-		var failing []*pyjson.Obj
-		checked, accepted := 0, 0
-		for _, e := range kernel.G("entries").([]any) {
-			eo := e.(*pyjson.Obj)
-			switch eo.G("status") {
-			case "fail", "missing":
-				failing = append(failing, eo)
-			case "accepted":
-				accepted++
-			}
-			if eo.G("status") != "na" {
-				checked++
-			}
-		}
-		exposed, weak := []string{}, []string{}
-		for _, e := range failing {
-			if e.G("bucket") == "attack_surface" {
-				exposed = append(exposed, e.G("option").(string))
-			} else if e.G("bucket") == "harden" {
-				weak = append(weak, e.G("option").(string))
-			}
-		}
-		first := weak
-		if len(first) > 4 {
-			first = first[:4]
-		}
-		// Counts are given as numbers so the model copies them instead of counting a list.
-		facts.Set("2. Kernel", pyjson.O(
-			"Kernel", strings.TrimSpace(fmt.Sprintf("Linux %s %s", kernel.G("version"), kernel.G("arch"))),
-			"Config options checked", checked,
-			"Options failing the baseline", len(failing),
-			"Attack-surface options enabled that should be off", len(exposed),
-			"Those options", exposed,
-			"Hardening options missing that should be on", len(weak),
-			"First of those options", first,
-			"Accepted by team policy", accepted,
-		))
-	}
-	if mountIssues == nil {
-		mountIssues = []string{}
-	}
-	total := 0
-	for _, k := range secretsC.Keys() {
-		total += secretsC.Get(k)
-	}
-	fs := pyjson.O("Insecure mounts (missing a secure flag)", len(mountIssues), "Those mounts", mountIssues,
-		"Private keys, host keys or tokens found", total)
-	if total > 0 {
-		var kinds []string
-		for _, k := range secretsC.MostCommon() {
-			kinds = append(kinds, fmt.Sprintf("%d x %s", secretsC.Get(k), k))
-		}
-		fs.Set("Secrets by kind", kinds)
-	}
-	facts.Set("3. Filesystems", fs)
-	missingIn := func(k string) string { return fmt.Sprintf("%d of %d", missing.Get(k), len(judged)) }
-	facts.Set("4. Hardening", pyjson.O(
-		"Executables and libraries checked", len(judged),
-		"Lacking at least one critical protection", pct(len(weakBins), len(judged)),
-		"Without PIE", missingIn("PIE"),
-		"Without RELRO", missingIn("RELRO"),
-		"Without stack overflow protection", missingIn("stack protector"),
-		"Without CFI protection", missingIn("CFI"),
-		"Examples", strings.Join(named, ", "),
-		"Others not named", max(len(weakBins)-len(named), 0),
-	))
+	sv := pyjson.New()
 	if sb != nil {
 		sc := sb.G("status_counts").(*pyjson.Obj)
 		n := func(k string) int {
 			v, _ := sc.G(k).(int)
 			return v
 		}
-		facts.Set("5. SBOM", pyjson.O(
-			"Packages in the image", n("package:present")+n("package:modified"),
-			"Packages whose files differ from the SBOM", n("package:modified"),
-			"Packages listed in the SBOM but missing from the image", n("package:absent")+n("package:partial"),
-			"Source components used only at build time (not shipped)", n("recipe:build-only"),
+		shipped := n("package:present") + n("package:modified") + n("package:partial")
+		sv.Set("Packages in the SBOM", shipped+n("package:absent"))
+		sv.Set("Packages shipped", shipped)
+		sv.Set("SBOM packages not installed", n("package:absent"))
+		sv.Set("Packages changed after build", n("package:modified"))
+		sv.Set("Packages with files missing", n("package:partial"))
+	}
+	if cv != nil {
+		cveFacts(sv, cv, sb != nil)
+	}
+	if sv.Len() > 0 {
+		facts.Set("1. SBOM and vulnerabilities", sv)
+	}
+	if kernel != nil && kernel.G("source") != nil {
+		exposed, weak := pyjson.New(), pyjson.New()
+		for _, e := range kernel.G("entries").([]any) {
+			eo := e.(*pyjson.Obj)
+			if s := eo.G("status"); s != "fail" && s != "missing" {
+				continue
+			}
+			option := eo.G("option").(string)
+			fact := pyjson.O("Why", eo.G("why"), "Fix", kernelFix(option, eo.G("expect")))
+			if eo.G("bucket") == "attack_surface" {
+				exposed.Set(option, fact)
+			} else if eo.G("bucket") == "harden" {
+				weak.Set(option, fact)
+			}
+		}
+		facts.Set("2. Kernel", pyjson.O(
+			"Kernel", strings.TrimSpace(fmt.Sprintf("Linux %s %s", kernel.G("version"), kernel.G("arch"))),
+			"Attack-surface options enabled that should be off", exposed,
+			"Hardening options missing that should be on", weak,
 		))
 	}
+	mountIssues := []string{}
+	var secretPaths []string
+	for _, f := range findings {
+		fo := f.(*pyjson.Obj)
+		check := fo.G("check").(string)
+		if strings.HasPrefix(check, "secrets.") {
+			secretPaths = append(secretPaths, fo.G("path").(string))
+		}
+		if check == "fstab.mount-options" {
+			mountIssues = append(mountIssues, fo.G("title").(string))
+		}
+	}
+	facts.Set("3. Filesystems", pyjson.O("Insecure mounts (missing a secure flag)", len(mountIssues), "Those mounts", mountIssues,
+		"Secrets found per directory", secretDirs(secretPaths, maxSecretDirs)))
+	facts.Set("4. Hardening", hardeningFacts(binaries))
 	return facts
 }
 
+// kernelFix is the setting that clears a failing option, such as CONFIG_PROC_KCORE=n.
+func kernelFix(option string, expect any) string {
+	if o, ok := expect.(*pyjson.Obj); ok {
+		if m := o.G("min"); m != nil {
+			return fmt.Sprintf("CONFIG_%s=%v", option, m)
+		}
+		return fmt.Sprintf("CONFIG_%s: %s", option, pyjson.Compact(o))
+	}
+	return fmt.Sprintf("CONFIG_%s=%v", option, expect)
+}
+
+// hardeningFacts counts the executables and libraries missing each flag. A stripped static
+// binary has no symbols to judge its canary or FORTIFY by, so it isn't counted for those.
+func hardeningFacts(binaries []any) *pyjson.Obj {
+	missing := pyjson.NewCounter()
+	for _, k := range []string{"PIE", "NX", "RELRO", "partial RELRO", "stack canary", "FORTIFY"} {
+		missing.Add(k, 0)
+	}
+	checked, cfChecked := 0, 0
+	for _, b := range binaries {
+		bo := b.(*pyjson.Obj)
+		kind := bo.G("kind")
+		if kind != "executable" && kind != "library" {
+			continue
+		}
+		checked++
+		if kind == "executable" && bo.G("pie") == false {
+			missing.Add("PIE", 1)
+		}
+		if !truthy(bo.G("nx")) {
+			missing.Add("NX", 1)
+		}
+		switch bo.G("relro") {
+		case "none":
+			missing.Add("RELRO", 1)
+		case "partial":
+			missing.Add("partial RELRO", 1)
+		}
+		if !truthy(bo.G("no_symbols")) {
+			if !truthy(bo.G("canary")) {
+				missing.Add("stack canary", 1)
+			}
+			if f, _ := bo.G("fortify").(*pyjson.Obj); f == nil || !truthy(f.G("fortified")) {
+				missing.Add("FORTIFY", 1)
+			}
+		}
+		// Only x86 and arm64 ELF notes record these; other architectures have no cf_protection.
+		if cf, _ := bo.G("cf_protection").(*pyjson.Obj); cf != nil {
+			cfChecked++
+			if !truthy(cf.G("ibt")) && !truthy(cf.G("bti")) {
+				missing.Add("CFI", 1)
+			}
+			if !truthy(cf.G("shstk")) && !truthy(cf.G("pac")) {
+				missing.Add("shadow stack or PAC", 1)
+			}
+		}
+	}
+	out := pyjson.O(
+		"Executables and libraries checked", checked,
+		"Note", "A binary can miss several flags, so these numbers overlap and must not be added.",
+		"Executables without PIE", missing.Get("PIE"),
+		"Without NX", missing.Get("NX"),
+		"Without RELRO", missing.Get("RELRO"),
+		"With only partial RELRO", missing.Get("partial RELRO"),
+		"Without a stack canary", missing.Get("stack canary"),
+		"Without FORTIFY", missing.Get("FORTIFY"),
+	)
+	if cfChecked > 0 {
+		out.Set("Without CFI", missing.Get("CFI"))
+		out.Set("Without a shadow stack or PAC", missing.Get("shadow stack or PAC"))
+	}
+	return out
+}
+
+// topCVE names the highest-CVSS unpatched CVE on a shipped package, with its component; userland
+// leaves out kernel CVEs. Equal scores go to the lowest id, so the fact is the same every run.
+func topCVE(rows []any, userland bool) string {
+	var best *pyjson.Obj
+	top := -1.0
+	for _, x := range rows {
+		row := x.(*pyjson.Obj)
+		cvss, _ := row.G("cvss").(*pyjson.Obj)
+		if cvss == nil || !openShipped(row) || (userland && truthy(row.G("kernel"))) {
+			continue
+		}
+		score, _ := cvss.G("score").(float64)
+		if score > top || (score == top && row.G("id").(string) < best.G("id").(string)) {
+			best, top = row, score
+		}
+	}
+	if best == nil {
+		return "none"
+	}
+	return fmt.Sprintf("%s (CVSS %.1f, %s)", best.G("id"), top, openCarrier(best))
+}
+
+func openShipped(row *pyjson.Obj) bool {
+	return row.G("status") == "unpatched" && row.G("shipped") == "yes"
+}
+
+// openCarrier is the first shipped package that leaves the CVE unpatched.
+func openCarrier(row *pyjson.Obj) string {
+	for _, c := range row.G("carriers").([]any) {
+		if co := c.(*pyjson.Obj); co.G("shipped") == "yes" && co.G("status") == "unpatched" {
+			return co.G("name").(string)
+		}
+	}
+	return ""
+}
+
+// hasBackport reports whether a carrier has the fix in its own stable series.
+func hasBackport(row *pyjson.Obj) bool {
+	for _, c := range row.G("carriers").([]any) {
+		if truthy(c.(*pyjson.Obj).G("backport")) {
+			return true
+		}
+	}
+	return false
+}
+
+// topEPSS is the shipped, unpatched CVE most likely to be exploited soon, by EPSS score.
+func topEPSS(rows []any) string {
+	var best *pyjson.Obj
+	top := -1.0
+	for _, x := range rows {
+		row := x.(*pyjson.Obj)
+		epss, _ := row.G("epss").(*pyjson.Obj)
+		if epss == nil || !openShipped(row) {
+			continue
+		}
+		score, _ := epss.G("score").(float64)
+		if score > top || (score == top && row.G("id").(string) < best.G("id").(string)) {
+			best, top = row, score
+		}
+	}
+	if best == nil {
+		return "none"
+	}
+	return fmt.Sprintf("%s (EPSS %.2f, %s)", best.G("id"), top, openCarrier(best))
+}
+
+// topPackages lists the packages with the most critical, then high, unpatched CVEs.
+func topPackages(components []any, limit int) []any {
+	count := func(o *pyjson.Obj, k string) int {
+		v, _ := o.G(k).(int)
+		return v
+	}
+	ranked := []*pyjson.Obj{}
+	for _, c := range components {
+		if o := c.(*pyjson.Obj); count(o, "critical")+count(o, "high") > 0 {
+			ranked = append(ranked, o)
+		}
+	}
+	sort.SliceStable(ranked, func(i, j int) bool {
+		a, b := ranked[i], ranked[j]
+		if count(a, "critical") != count(b, "critical") {
+			return count(a, "critical") > count(b, "critical")
+		}
+		return count(a, "high") > count(b, "high")
+	})
+	out := []any{}
+	for _, o := range ranked[:min(limit, len(ranked))] {
+		out = append(out, fmt.Sprintf("%s: %d critical, %d high", o.G("name"), count(o, "critical"), count(o, "high")))
+	}
+	return out
+}
+
+// cveFacts adds the CVE triage facts. Only shipped, unpatched CVEs count.
+func cveFacts(sv, cv *pyjson.Obj, hasSBOM bool) {
+	sources := cv.G("sources").(*pyjson.Obj)
+	summary := cv.G("summary").(*pyjson.Obj)
+	rows := cv.G("rows").([]any)
+	if !hasSBOM {
+		inventory := "the image's package database"
+		if s, ok := sources.G("inventory").(string); ok && s != "" {
+			inventory = "the image's " + s + " database"
+		}
+		sv.Set("SBOM", "Not supplied; package versions came from "+inventory)
+	}
+	found := "Matched by package version; not confirmed as exploitable on this image"
+	if !hasSBOM {
+		found += ". Backported fixes can't be seen without an SBOM, so some may already be fixed"
+	}
+	sv.Set("How CVEs were found", found)
+	if unmapped, _ := cv.G("unmapped").([]any); len(unmapped) > 0 {
+		sv.Set("Packages not checked for CVEs (no CVE product mapping)", len(unmapped))
+	}
+	severity, _ := summary.G("severity").(*pyjson.Obj)
+	bySeverity := pyjson.New()
+	for _, k := range []string{"critical", "high", "medium", "low"} {
+		if severity != nil && severity.G(k) != nil {
+			bySeverity.Set(k, severity.G(k))
+		}
+	}
+	if severity != nil && severity.G("none") != nil {
+		bySeverity.Set("no CVSS score yet", severity.G("none"))
+	}
+	sv.Set("Unpatched CVEs by severity", bySeverity)
+	kernelHigh, userHigh, networkHigh := 0, 0, 0
+	kernelTotal, kernelBackport := 0, 0
+	kernelNames := map[string]bool{}
+	kevRows := []any{}
+	for _, x := range rows {
+		row := x.(*pyjson.Obj)
+		if !openShipped(row) {
+			continue
+		}
+		if truthy(row.G("kernel")) {
+			kernelNames[openCarrier(row)] = true
+			kernelTotal++
+			if hasBackport(row) {
+				kernelBackport++
+			}
+		}
+		if row.G("kev") != nil {
+			kevRows = append(kevRows, fmt.Sprintf("%s (%s)", row.G("id"), openCarrier(row)))
+		}
+		if sev := row.G("severity"); sev != "critical" && sev != "high" {
+			continue
+		}
+		if truthy(row.G("kernel")) {
+			kernelHigh++
+		} else {
+			userHigh++
+		}
+		if row.G("vector") == "network" {
+			networkHigh++
+		}
+	}
+	if kernelTotal > 0 {
+		sv.Set("Unpatched kernel CVEs", kernelTotal)
+		sv.Set("Unpatched kernel CVEs with a backport for this kernel's stable series", kernelBackport)
+	}
+	sv.Set("Critical or high unpatched CVEs in the kernel", kernelHigh)
+	sv.Set("Critical or high unpatched CVEs in userland", userHigh)
+	sv.Set("Critical or high unpatched CVEs with a network attack vector", networkHigh)
+	if components, _ := summary.G("by_component").([]any); len(components) > 0 {
+		sv.Set("Packages with the most critical and high unpatched CVEs", topPackages(components, 5))
+		userland := []any{}
+		for _, c := range components {
+			if !kernelNames[c.(*pyjson.Obj).G("name").(string)] {
+				userland = append(userland, c)
+			}
+		}
+		if top := topPackages(userland, 1); len(top) > 0 {
+			sv.Set("Userland package most affected", top[0])
+		}
+	}
+	if sources.G("kev") == nil {
+		sv.Set("Unpatched CVEs in the CISA Known Exploited Vulnerabilities list", "not checked")
+	} else if len(kevRows) == 0 {
+		sv.Set("Unpatched CVEs in the CISA Known Exploited Vulnerabilities list", "none")
+	} else {
+		sv.Set("Unpatched CVEs in the CISA Known Exploited Vulnerabilities list", kevRows[:min(10, len(kevRows))])
+	}
+	sv.Set("Highest-CVSS unpatched CVE", topCVE(rows, false))
+	sv.Set("Highest-CVSS unpatched userland CVE", topCVE(rows, true))
+	if sources.G("epss") != nil {
+		sv.Set("Highest-EPSS unpatched CVE", topEPSS(rows))
+	}
+	if n, _ := summary.G("unpatched_not_shipped").(int); n > 0 {
+		sv.Set("Unpatched CVEs on packages that don't ship", n)
+	}
+}
+
+const maxSecretDirs = 40
+
+// secretDirs counts the secrets per directory, so the model can tell test fixtures from real
+// material by path. Past limit it keeps the shallowest directories: real config sits near the
+// root, and deep test trees must not push it out.
+func secretDirs(paths []string, limit int) *pyjson.Obj {
+	counts := map[string]int{}
+	for _, p := range paths {
+		counts[path.Dir(p)]++
+	}
+	dirs := make([]string, 0, len(counts))
+	for d := range counts {
+		dirs = append(dirs, d)
+	}
+	sort.Slice(dirs, func(i, j int) bool {
+		di, dj := strings.Count(dirs[i], "/"), strings.Count(dirs[j], "/")
+		if di != dj {
+			return di < dj
+		}
+		return dirs[i] < dirs[j]
+	})
+	out := pyjson.New()
+	for i, d := range dirs {
+		if i == limit {
+			out.Set("Other directories", len(dirs)-limit)
+			break
+		}
+		out.Set(d, counts[d])
+	}
+	return out
+}
+
+var kernelRelease = regexp.MustCompile(`^\d+(\.\d+)*`)
+
+// checkKernelVersion stops the scan when the SBOM's kernel isn't the one in /lib/modules: the
+// SBOM then describes a different build, and every CVE from it would be for the wrong kernel.
+func checkKernelVersion(sb *sbom.Sbom, modules string) error {
+	if modules == "" {
+		return nil
+	}
+	versions := map[string]bool{}
+	for _, id := range sb.PackageOrder {
+		for _, c := range sb.Packages[id].Cpes {
+			if f := strings.Split(c, ":"); len(f) > 5 && f[4] == "linux_kernel" {
+				// Compare release numbers only: a CPE may carry a suffix such as 6.6.0+git.
+				if v := kernelRelease.FindString(f[5]); v != "" {
+					versions[v] = true
+				}
+			}
+		}
+	}
+	if len(versions) == 0 || versions[modules] {
+		return nil
+	}
+	listed := make([]string, 0, len(versions))
+	for v := range versions {
+		listed = append(listed, v)
+	}
+	sort.Strings(listed)
+	return fmt.Errorf("kernel version mismatch: the SBOM lists %s but /lib/modules has %s", strings.Join(listed, ", "), modules)
+}
+
+// imageInventory builds the component list for CVE matching without an SBOM: the kernel from
+// /lib/modules, the rest from the image's package database. It is nil when the image has neither.
+func imageInventory(rootfs string) (*sbom.Sbom, *sbom.Status) {
+	var comps []sbom.Package
+	if v := kconfig.ModulesVersion(rootfs); v != "" {
+		comps = append(comps, sbom.Package{Name: "linux", Version: v,
+			Cpes: []string{"cpe:2.3:o:linux:linux_kernel:" + v + ":*:*:*:*:*:*:*"}})
+	}
+	found, source := inventory.Read(rootfs)
+	for _, c := range found {
+		// The kernel recipe is already covered above.
+		if !strings.HasPrefix(c.Name, "linux-yocto") && c.Name != "linux" && c.Name != "kernel" {
+			comps = append(comps, sbom.Package{Name: c.Name, Version: c.Version})
+		}
+	}
+	if len(comps) == 0 {
+		warn("no SBOM, kernel modules or package database found; CVEs not checked")
+		return nil, nil
+	}
+	if source == "" {
+		warn("no package database in the image; only the kernel is checked for CVEs")
+		source = "kernel only"
+	}
+	return sbom.FromInventory(source, comps)
+}
+
 func cveSection(sb *sbom.Sbom, status *sbom.Status, opt Options) *pyjson.Obj {
-	matched := versionMatch(sb, opt)
+	matched, known := versionMatch(sb, opt)
 	rows := sbom.BuildCVEs(sb, status)
 	sources := pyjson.O("kev", nil, "epss", nil, "links", "none", "version_match", matched)
 	if opt.Network && opt.CacheDir != "" {
@@ -436,7 +673,21 @@ func cveSection(sb *sbom.Sbom, status *sbom.Status, opt Options) *pyjson.Obj {
 	for i, r := range rows {
 		rowsOut[i] = r
 	}
-	return pyjson.O("summary", sbom.Summary(rows), "sources", sources, "rows", rowsOut)
+	out := pyjson.O("summary", sbom.Summary(rows), "sources", sources, "rows", rowsOut)
+	if sb.Inventory != "" {
+		sources.Set("inventory", sb.Inventory)
+		// A component NVD has no product for can't be checked: its CVEs, if any, are filed under
+		// another name. Only known once the feed has been read.
+		unmapped := []any{}
+		for _, id := range sb.PackageOrder {
+			p := sb.Packages[id]
+			if product := strings.ToLower(p.Name); known != nil && !known[product] && p.Name != "linux" {
+				unmapped = append(unmapped, pyjson.O("name", p.Name, "version", p.Version))
+			}
+		}
+		out.Set("unmapped", unmapped)
+	}
+	return out
 }
 
 func nilIfNone(o *pyjson.Obj) any {
@@ -513,23 +764,27 @@ func warn(format string, a ...any) { fmt.Fprintf(os.Stderr, "trowl: "+format+"\n
 
 // versionMatch adds the CVEs that NVD and the kernel CNA list for each component's version,
 // as Trivy and Grype do. The SBOM's own VEX statuses are kept. It returns the data's
-// provenance for the report, or nil when nothing was matched.
-func versionMatch(sb *sbom.Sbom, opt Options) any {
+// provenance for the report and the products the feed knows, or nil when nothing was matched.
+func versionMatch(sb *sbom.Sbom, opt Options) (any, map[string]bool) {
 	if opt.CacheDir == "" {
-		return nil
+		return nil, nil
 	}
 	cpes := sb.MatchTargets()
 	if len(cpes) == 0 {
-		return nil
+		return nil, nil
 	}
 	targets := make([]nvd.Target, len(cpes))
 	for i, c := range cpes {
 		targets[i] = nvd.Target{Comp: c.Comp, Vendor: c.Vendor, Product: c.Product, Version: c.Version}
 	}
 	t0 := time.Now()
-	res := nvd.Run(opt.CacheDir, opt.Network, targets)
+	listed := map[nvd.Match]string{}
+	for _, p := range sb.Listed() {
+		listed[nvd.Match{Comp: p[0], CVE: p[1]}] = sb.StatedFix(p[1], p[0])
+	}
+	res := nvd.Run(opt.CacheDir, opt.Network, targets, listed)
 	if res == nil {
-		return nil
+		return nil, nil
 	}
 	for _, m := range res.Matches {
 		var vi *sbom.VulnInfo
@@ -542,6 +797,9 @@ func versionMatch(sb *sbom.Sbom, opt Options) any {
 		}
 		sb.AddMatch(m.Comp, m.CVE, vi)
 	}
+	for m, fix := range res.Fixes {
+		sb.SetFix(m.Comp, m.CVE, sbom.Fix(fix))
+	}
 	warn("version match: %d CVE match(es) for %d component CPE(s) in %.1fs", len(res.Matches), len(cpes),
 		time.Since(t0).Seconds())
 	meta := pyjson.New()
@@ -549,5 +807,5 @@ func versionMatch(sb *sbom.Sbom, opt Options) any {
 		meta.Set(k, res.Meta[k])
 	}
 	meta.Set("matches", len(res.Matches))
-	return meta
+	return meta, res.Known
 }
