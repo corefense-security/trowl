@@ -36,11 +36,12 @@ RUN git clone --depth 1 --branch "${LLAMA_CPP_TAG}" https://github.com/ggml-org/
 # --- Runtime -----------------------------------------------------------------
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update \
- && apt-get install -y --no-install-recommends e2fsprogs squashfs-tools zstd ca-certificates libgomp1 \
+ && apt-get install -y --no-install-recommends e2fsprogs squashfs-tools sqlite3 zstd ca-certificates libgomp1 \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/trowl /usr/local/bin/trowl
 # The model itself is not in the image: it is downloaded into /cache on the first scan.
 COPY --from=llama /llama/build/bin/llama-server /usr/local/bin/llama-server
+COPY --from=llama /llama/LICENSE /usr/share/doc/llama.cpp/LICENSE
 
 RUN useradd --create-home --uid 10001 trowl && mkdir /cache && chown trowl /cache
 USER trowl
