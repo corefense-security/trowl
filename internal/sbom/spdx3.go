@@ -221,19 +221,58 @@ func idString(v any) string {
 	return string(b)
 }
 
+// spdx3Elements returns the elements of an SPDX 3.0 JSON-LD document: its @graph, or the
+// document itself when it is a bare list of elements. Any other format is refused by name, so
+// that an SBOM trowl can't read stops the scan rather than giving a report without its data.
+//
+// Yocto writes SPDX 3.0 since 5.0 (scarthgap). SPDX 2.x, which older Yocto releases and
+// Android write, describes packages in a different model (packages[], relationships[]), and
+// reading it as 3.0 would find no packages at all.
+func spdx3Elements(raw []byte) ([]json.RawMessage, error) {
+	const want = "trowl reads SPDX 3.0 JSON-LD SBOMs, such as Yocto 5.0 (scarthgap) and later write"
+	var top struct {
+		Context     json.RawMessage   `json:"@context"`
+		Graph       []json.RawMessage `json:"@graph"`
+		SpdxVersion string            `json:"spdxVersion"`
+		BomFormat   string            `json:"bomFormat"`
+	}
+	if err := json.Unmarshal(raw, &top); err == nil {
+		switch {
+		case top.SpdxVersion != "":
+			return nil, fmt.Errorf("%s isn't supported: %s", top.SpdxVersion, want)
+		case top.BomFormat != "":
+			return nil, fmt.Errorf("%s isn't supported: %s", top.BomFormat, want)
+		case top.Graph == nil:
+			return nil, fmt.Errorf("not an SPDX 3.0 JSON-LD document (no @graph): %s", want)
+		case len(top.Context) > 0 && !strings.Contains(string(top.Context), "spdx.org/rdf/3."):
+			return nil, fmt.Errorf("its @context isn't SPDX 3: %s", want)
+		}
+		return top.Graph, nil
+	}
+	// A bare list of elements: each SPDX 3 element has a type.
+	var items []json.RawMessage
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return nil, fmt.Errorf("not JSON, so not an SPDX 3.0 JSON-LD document (tag-value and RDF/XML aren't read): %s", want)
+	}
+	for _, it := range items {
+		var e struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(it, &e) != nil || e.Type == "" {
+			return nil, fmt.Errorf("a list of elements without SPDX 3 types: %s", want)
+		}
+	}
+	return items, nil
+}
+
 func Load(path string) (*Sbom, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	var doc struct {
-		Graph []json.RawMessage `json:"@graph"`
-	}
-	var items []json.RawMessage
-	if json.Unmarshal(raw, &doc) == nil && doc.Graph != nil {
-		items = doc.Graph
-	} else if err := json.Unmarshal(raw, &items); err != nil {
-		return nil, fmt.Errorf("%s isn't an SPDX 3.0 JSON-LD SBOM", py.CleanPath(path))
+	items, err := spdx3Elements(raw)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", py.CleanPath(path), err)
 	}
 	raw = nil
 	graph := make([]*element, 0, len(items))
