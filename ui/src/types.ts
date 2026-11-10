@@ -66,7 +66,8 @@ export interface GraphEdge {
   kind: "generates" | "runtime" | "build";
 }
 
-export type CveStatus = "unpatched" | "ignored" | "fixed" | "unknown";
+/** "review" is trowl's: in range, but the kernel tree couldn't trace the CVE's files. */
+export type CveStatus = "unpatched" | "review" | "ignored" | "fixed" | "unknown";
 export type Shipped = "yes" | "build" | "no" | "unknown";
 
 export interface CveCarrier {
@@ -91,6 +92,38 @@ export interface CveCarrier {
   /** Earliest stable release with the fix, when it isn't a backport to this series. */
   stable?: string;
   stable_commit?: string;
+  /** Kernel only: trowl's own VEX verdict from the kernel tree, set when --kernel-tree ran. */
+  assessment?: CveAssessment;
+}
+
+/** The verdict on one file a kernel CVE record names. */
+export type FileVerdict = "compiled" | "not compiled" | "module not shipped" | "unknown";
+
+/** trowl's VEX verdict on a kernel CVE, from the config gates of the files its record names
+ *  and the modules the image ships. */
+export interface CveAssessment {
+  status: "affected" | "not_affected" | "under_investigation";
+  /** Why not_affected, in OpenVEX's words: vulnerable_code_not_present (the config leaves the
+   *  code out) or component_not_present (compiled only into modules the image lacks). */
+  justification: string;
+  detail: string;
+  files: {
+    path: string;
+    verdict: FileVerdict;
+    /** The file's config gate, as kcond writes it; "" for a file with none. */
+    gate: string;
+    /** The gate's options with their values in this config, and where the code goes. */
+    reason: string;
+    /** The kernel module the verdict rests on, as the image names it. */
+    module?: string;
+    /** The config values that put the code where reason says, when reason only says where:
+     *  "CONFIG_IP_SCTP=m && CONFIG_NET=y" beside "sctp.ko not in image". */
+    config?: string;
+  }[];
+  /** The SBOM's own status for the CVE, before trowl's ("" when it gave none). */
+  sbom_status: CveStatus | "";
+  /** trowl's verdict contradicts the SBOM's. */
+  defies_sbom: boolean;
 }
 
 export interface CveRow {
