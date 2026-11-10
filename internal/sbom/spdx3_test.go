@@ -3,6 +3,7 @@ package sbom
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/corefense-security/trowl/internal/pyjson"
@@ -10,9 +11,12 @@ import (
 
 func TestLoadRefusesWhatIsNotAnSBOM(t *testing.T) {
 	for name, text := range map[string]string{
-		"plain text": "not json",
-		"truncated":  `{"@graph": [{"type": "software_Pack`,
-		"SPDX 2.3":   `{"spdxVersion": "SPDX-2.3", "packages": []}`,
+		"plain text":    "not json",
+		"truncated":     `{"@graph": [{"type": "software_Pack`,
+		"SPDX 2.3":      `{"spdxVersion": "SPDX-2.3", "packages": []}`,
+		"CycloneDX":     `{"bomFormat": "CycloneDX", "specVersion": "1.6", "components": []}`,
+		"SPDX 2 list":   `[{"spdxVersion": "SPDX-2.3"}]`,
+		"other JSON-LD": `{"@context": "https://schema.org", "@graph": []}`,
 	} {
 		p := filepath.Join(t.TempDir(), "sbom.json")
 		os.WriteFile(p, []byte(text), 0o644)
@@ -52,5 +56,14 @@ func TestNameOnlyIsForVersionMatches(t *testing.T) {
 	sb.MarkNameOnly("inventory/phone", "CVE-2")
 	if sb.NameOnly("CVE-1", "inventory/phone") || !sb.NameOnly("CVE-2", "inventory/phone") {
 		t.Errorf("listed %v, matched %v", sb.NameOnly("CVE-1", "inventory/phone"), sb.NameOnly("CVE-2", "inventory/phone"))
+	}
+}
+
+// The error names the format it was given, so the user knows what to pass instead.
+func TestLoadNamesTheFormat(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "sbom.json")
+	os.WriteFile(p, []byte(`{"spdxVersion": "SPDX-2.3", "packages": []}`), 0o644)
+	if _, err := Load(p); err == nil || !strings.Contains(err.Error(), "SPDX-2.3 isn't supported") {
+		t.Errorf("got %v", err)
 	}
 }
