@@ -154,8 +154,10 @@ type Assessment struct {
 	Status        string // affected, not_affected or under_investigation
 	Justification string // why not_affected, in OpenVEX's words
 	Detail        string // what was found, in a sentence
+	Short         string // the same in a few words, such as "file not in tree"
 	Evidence      []*pyjson.Obj
 	Stated        string // the SBOM's status for the pair, "" if it gave none
+	StatedNotes   string // the SBOM's note on that status, such as not-applicable-config
 	Defies        bool   // the SBOM said otherwise
 }
 

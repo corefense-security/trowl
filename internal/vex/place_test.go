@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/corefense-security/kcond"
+	"github.com/corefense-security/kcond/builds"
 	"github.com/corefense-security/kcond/gate"
 )
 
@@ -71,6 +72,29 @@ func TestAssessNotShipped(t *testing.T) {
 		}
 		if s, j, _ := decide(counts); s != tc.status || j != tc.justification {
 			t.Errorf("%s: got %s %s, want %s %s", tc.note, s, j, tc.status, tc.justification)
+		}
+	}
+}
+
+// TestShort checks the few-word reasons the report's status line shows.
+func TestShort(t *testing.T) {
+	built := gate.File{Status: builds.StatusBuilt}
+	for _, tc := range []struct {
+		j    judgement
+		f    gate.File
+		want string
+	}{
+		{judgement{verdict: compiled, reason: "built into vmlinux"}, built, "built in"},
+		{judgement{verdict: compiled, reason: "foo.ko in image", module: "/lib/modules/x/kernel/foo.ko"}, built, "module in image"},
+		{judgement{verdict: compiled, reason: "included by drivers/a.c"}, gate.File{Status: builds.StatusHeader}, "code compiled"},
+		{judgement{verdict: notShipped}, built, "module not in image"},
+		{judgement{verdict: notCompiled}, built, "not compiled"},
+		{judgement{verdict: unknown}, gate.File{Status: builds.StatusMissing}, "file not in tree"},
+		{judgement{verdict: unknown}, built, "gate not decidable"},
+		{judgement{verdict: unknown}, gate.File{Status: builds.StatusUnlisted}, "file not in any Makefile"},
+	} {
+		if got := short(tc.j, tc.f); got != tc.want {
+			t.Errorf("%+v: got %q, want %q", tc.j, got, tc.want)
 		}
 	}
 }
