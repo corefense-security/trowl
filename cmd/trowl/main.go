@@ -72,6 +72,8 @@ func commands() []*command {
 				{names: []string{"--kernel-config"}, value: true, help: "kernel .config to check when the image carries none " +
 					"(/boot/config-* or a config embedded in the kernel image)"},
 				{names: []string{"--kernel-src"}, value: true, help: "kernel build tree whose .config to use when the image carries none"},
+				{names: []string{"--kernel-tree"}, value: true, help: "source tree of the image's kernel, checked out at its version. " +
+					"Kernel CVEs get a VEX status from the config gates of the files their CNA record names"},
 				{names: []string{"--kernel-policy"}, value: true, help: "YAML with team overrides: accept (with a reason) or add options"},
 				{names: []string{"--no-network"}, help: "don't fetch CISA KEV / EPSS or check advisory links"},
 				{names: []string{"--links"}, value: true, def: "open", choices: []string{"open", "all", "none"},
@@ -266,6 +268,9 @@ func scanBanner(a args) {
 		{"sbom", orNone(a["sbom"], "not supplied")},
 		{"kernel", kernel},
 	}
+	if a["kernel-tree"] != "" {
+		rows = append(rows, [2]string{"tree", py.CleanPath(a["kernel-tree"])})
+	}
 	if a["kernel-policy"] != "" {
 		rows = append(rows, [2]string{"policy", py.CleanPath(a["kernel-policy"])})
 	}
@@ -327,7 +332,7 @@ func cmdScan(a args) int {
 		st.Ok(u.SourceFormat)
 		res, err := scan.Run(u, a["image"], scan.Options{
 			SBOM: a["sbom"], Network: !a.flag("no-network"), CacheDir: cache, Links: a["links"],
-			Model: modelName, KernelConfig: a["kernel-config"], KernelSrc: a["kernel-src"], KernelPolicy: a["kernel-policy"],
+			Model: modelName, KernelConfig: a["kernel-config"], KernelSrc: a["kernel-src"], KernelTree: a["kernel-tree"], KernelPolicy: a["kernel-policy"],
 			Started: started,
 		})
 		if err != nil {

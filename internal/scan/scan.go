@@ -24,6 +24,7 @@ import (
 	"github.com/corefense-security/trowl/internal/sbom"
 	"github.com/corefense-security/trowl/internal/status"
 	"github.com/corefense-security/trowl/internal/unpack"
+	"github.com/corefense-security/trowl/internal/vex"
 )
 
 type Options struct {
@@ -34,6 +35,7 @@ type Options struct {
 	Model        string // "" disables the model
 	KernelConfig string
 	KernelSrc    string
+	KernelTree   string // source tree of the image's kernel, for the VEX of kernel CVEs
 	KernelPolicy string
 	Started      time.Time // when the scan began, including unpacking; zero means when Run was called
 }
@@ -172,9 +174,12 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 			"not_present", cmp.NotPresent,
 			"graph", sbom.Graph(sb, cmp.Status),
 		)
-		cves = cveSection(sb, cmp.Status, opt)
+		cves, err = cveSection(sb, cmp.Status, rootfs, opt)
 	} else if inv, presence := imageInventory(rootfs, kernelVersion(kernelSection)); inv != nil {
-		cves = cveSection(inv, presence, opt)
+		cves, err = cveSection(inv, presence, rootfs, opt)
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	sort.SliceStable(findings, func(i, j int) bool {
@@ -694,10 +699,14 @@ func imageInventory(rootfs, kernel string) (*sbom.Sbom, *sbom.Status) {
 	return sbom.FromInventory(source, comps)
 }
 
-func cveSection(sb *sbom.Sbom, presence *sbom.Status, opt Options) *pyjson.Obj {
-	matched, known, inFeed := versionMatch(sb, opt)
+func cveSection(sb *sbom.Sbom, presence *sbom.Status, rootfs string, opt Options) (*pyjson.Obj, error) {
+	matched, known, inFeed, feed := versionMatch(sb, opt)
+	kernelVex, err := assessKernel(sb, feed, rootfs, opt)
+	if err != nil {
+		return nil, err
+	}
 	rows := sbom.BuildCVEs(sb, presence)
-	sources := pyjson.O("kev", nil, "epss", nil, "links", "none", "version_match", matched)
+	sources := pyjson.O("kev", nil, "epss", nil, "links", "none", "version_match", matched, "kernel_vex", kernelVex)
 	if opt.Network && opt.CacheDir != "" {
 		st := status.Start("fetching KEV")
 		kev, kevMeta := feeds.KEV(opt.CacheDir)
@@ -765,7 +774,64 @@ func cveSection(sb *sbom.Sbom, presence *sbom.Status, opt Options) *pyjson.Obj {
 		}
 		out.Set("unmapped", unmapped)
 	}
-	return out
+	return out, nil
+}
+
+// assessKernel sets the VEX status of the kernel's CVEs from the config gates of the files their
+// CNA records name. The result is for the report's sources: what was read and what it decided, nil
+// when nothing ran. A tree that can't be used stops the scan: asked for, it would otherwise leave
+// the report looking as if it had been checked.
+func assessKernel(sb *sbom.Sbom, feed *nvd.Result, rootfs string, opt Options) (any, error) {
+	if len(sb.KernelComponents()) == 0 {
+		return nil, nil
+	}
+	if opt.KernelTree == "" {
+		status.Warn("kernel CVEs stay version matches: pass --kernel-tree to check their config gates")
+		return nil, nil
+	}
+	if feed == nil {
+		status.Warn("no CVE data, so --kernel-tree has no CVE records to check")
+		return nil, nil
+	}
+	st := status.Start("checking kernel config gates")
+	text, source := kconfig.FindConfig(rootfs, opt.KernelConfig, opt.KernelSrc)
+	if source == nil {
+		st.Fail("")
+		return nil, fmt.Errorf("--kernel-tree needs the kernel's config, and the image has none: pass --kernel-config")
+	}
+	ev, err := vex.NewKernel(opt.KernelTree, []byte(text))
+	if err != nil {
+		st.Fail("")
+		return nil, err
+	}
+	for _, comp := range sb.KernelComponents() {
+		// The release of the tree must be the kernel's: the gates of another release can clear
+		// CVEs this one has.
+		if v := kernelRelease.FindString(sb.Packages[comp].Version); v != "" && v != ev.Version() {
+			st.Fail("")
+			return nil, fmt.Errorf("kernel version mismatch: the tree is %s but the image's kernel is %s", ev.Version(), v)
+		}
+	}
+	// Code the config compiles only into modules is in the image only if the module is.
+	modules := vex.ReadModules(rootfs, ev.Version())
+	if modules == nil {
+		status.Warn(fmt.Sprintf("no single /lib/modules/%s* in the image: code compiled only into modules counts as shipped", ev.Version()))
+	}
+	ev.SetModules(modules)
+	inRange := map[[2]string]bool{}
+	for _, m := range feed.Matches {
+		inRange[[2]string{m.Comp, m.CVE}] = true
+	}
+	n := vex.Apply(sb, ev, feed.ProgramFiles, inRange)
+	var modulesDir any
+	if modules != nil {
+		modulesDir = modules.Dir
+	}
+	st.Ok(fmt.Sprintf("%d not affected, %d affected, %d undecided, %d without files", n.NotAffected, n.Affected, n.Undecided, n.NoFiles))
+	return pyjson.O("tree", py.CleanPath(opt.KernelTree), "version", ev.Version(), "build", ev.Build(), "config", source,
+		"modules", modulesDir,
+		"sbom_assessed", sb.AssessesKernel(), "not_affected", n.NotAffected, "affected", n.Affected, "undecided", n.Undecided,
+		"no_files", n.NoFiles, "defies_sbom", n.Defies), nil
 }
 
 func nilIfNone(o *pyjson.Obj) any {
@@ -841,16 +907,16 @@ func hasModuleSuffix(name string) bool {
 // versionMatch adds the CVEs that NVD and the kernel CNA list for each component's version,
 // as Trivy and Grype do. The SBOM's own VEX statuses are kept. It returns the data's
 // provenance for the report, the products the feed knows and the CVEs it has records for, or
-// nil when nothing was matched.
-func versionMatch(sb *sbom.Sbom, opt Options) (any, map[string]bool, map[string]bool) {
+// nil when nothing was matched. feed is the match itself, nil the same way.
+func versionMatch(sb *sbom.Sbom, opt Options) (meta any, known, inFeed map[string]bool, feed *nvd.Result) {
 	if opt.CacheDir == "" {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 	st := status.Start("sifting CVEs")
 	cpes := sb.MatchTargets()
 	if len(cpes) == 0 {
 		st.Fail("no components with a CPE")
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 	targets := make([]nvd.Target, len(cpes))
 	for i, c := range cpes {
@@ -863,7 +929,7 @@ func versionMatch(sb *sbom.Sbom, opt Options) (any, map[string]bool, map[string]
 	res := nvd.Run(opt.CacheDir, opt.Network, targets, listed)
 	if res == nil {
 		st.Fail("no NVD data available")
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 	for _, m := range res.Matches {
 		var vi *sbom.VulnInfo
@@ -884,10 +950,10 @@ func versionMatch(sb *sbom.Sbom, opt Options) (any, map[string]bool, map[string]
 		sb.SetFix(m.Comp, m.CVE, sbom.Fix(fix))
 	}
 	st.Ok(fmt.Sprintf("%d match(es) for %d component CPE(s)", len(res.Matches), len(cpes)))
-	meta := pyjson.New()
+	m := pyjson.New()
 	for _, k := range []string{"source", "updated", "years"} {
-		meta.Set(k, res.Meta[k])
+		m.Set(k, res.Meta[k])
 	}
-	meta.Set("matches", len(res.Matches))
-	return meta, res.Known, res.InFeed
+	m.Set("matches", len(res.Matches))
+	return m, res.Known, res.InFeed, res
 }

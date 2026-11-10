@@ -10,9 +10,9 @@
 # Go and Node are downloaded into a temporary directory for the build and removed afterwards.
 set -euo pipefail
 
-GO_VERSION=1.23.0
-GO_SHA_amd64=905a297f19ead44780548933e0ff1a1b86e8327bb459e92f9c0012569f76f5e3
-GO_SHA_arm64=62788056693009bcf7020eedc778cdd1781941c6145eab7688bd087bce0f8659
+GO_VERSION=1.26.0 # at least go.mod's go line: GOTOOLCHAIN=local below won't fetch a newer one
+GO_SHA_amd64=aac1b08a0fb0c4e0a7c1555beb7b59180b05dfc5a3d62e40e9de90cd42f88235
+GO_SHA_arm64=bd03b743eb6eb4193ea3c3fd3956546bf0e3ca5b7076c8226334afe6b75704cd
 NODE_VERSION=22.12.0
 NODE_SHA_x64=22982235e1b71fa8850f82edd09cdae7e3f32df1764a9ec298c72d25ef2c164f
 NODE_SHA_arm64=8cfd5a8b9afae5a2e0bd86b0148ca31d2589c0ea669c2d0b11c132e35d90ed68
@@ -104,7 +104,9 @@ say "Building the dashboard"
 (cd "$src/ui" && npm ci --silent && npm run build --silent)
 
 say "Building Trowl"
-(cd "$src" && go build -o "$work/trowl-bin" ./cmd/trowl)
+# kcond comes from the module proxy at the version go.mod pins. GOWORK=off ignores a developer's
+# go.work that a --source checkout may carry, which points at a ../kcond this copy doesn't have.
+(cd "$src" && GOWORK=off go build -o "$work/trowl-bin" ./cmd/trowl)
 
 bindir="$prefix/bin"
 $sudo mkdir -p "$bindir"

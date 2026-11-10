@@ -6,3 +6,5 @@ tests
 *.img
 *.ext4*
 *.wic*
+go.work
+go.work.sum

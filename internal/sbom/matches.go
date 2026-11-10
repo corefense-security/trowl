@@ -17,7 +17,7 @@ type CPE struct {
 func FromInventory(source string, comps []Package) (*Sbom, *Status) {
 	s := &Sbom{Packages: map[string]*Package{}, Generates: newIDList(), RuntimeDeps: newIDList(), BuildDeps: newIDList(),
 		Vulns: newIDList(), vex: map[pair]string{}, vexNotes: map[pair]string{}, stated: map[pair]string{}, matched: map[pair]bool{}, nameOnly: map[pair]bool{}, fixes: map[pair]Fix{},
-		VulnInfo: map[string]*VulnInfo{}, Inventory: source}
+		assessed: map[pair]*Assessment{}, VulnInfo: map[string]*VulnInfo{}, Inventory: source}
 	st := &Status{M: map[string]*pyjson.Obj{}}
 	for i := range comps {
 		p := comps[i]
@@ -147,3 +147,71 @@ func (s *Sbom) MarkNameOnly(comp, cve string) {
 }
 
 func (s *Sbom) NameOnly(cve, comp string) bool { return s.nameOnly[pair{cve, comp}] }
+
+// Assessment is trowl's own VEX judgement of a CVE on a component, from something it checked
+// rather than from the SBOM.
+type Assessment struct {
+	Status        string // affected, not_affected or under_investigation
+	Justification string // why not_affected, in OpenVEX's words
+	Detail        string // what was found, in a sentence
+	Evidence      []*pyjson.Obj
+	Stated        string // the SBOM's status for the pair, "" if it gave none
+	Defies        bool   // the SBOM said otherwise
+}
+
+// Assess records a. A decided status replaces the one the pair had. under_investigation leaves
+// the VEX status as it was; the report shows such a pair as Needs review (see reviewed).
+func (s *Sbom) Assess(cve, comp string, a *Assessment) {
+	k := pair{cve, comp}
+	s.assessed[k] = a
+	switch a.Status {
+	case "not_affected":
+		s.vex[k], s.vexNotes[k] = "not_affected", ConfigNote
+	case "affected":
+		if s.vex[k] != "affected" {
+			s.vex[k] = "affected"
+			delete(s.vexNotes, k)
+		}
+	}
+}
+
+// AssessmentOf is trowl's judgement of the pair, nil without one.
+func (s *Sbom) AssessmentOf(cve, comp string) *Assessment { return s.assessed[pair{cve, comp}] }
+
+// ConfigNote is the VEX note for code the kernel config leaves out, in Yocto's words.
+const ConfigNote = "not-applicable-config"
+
+// KernelComponents lists the components that are the Linux kernel.
+func (s *Sbom) KernelComponents() []string {
+	var out []string
+	for _, id := range s.PackageOrder {
+		if s.Packages[id].IsKernel() {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// IsKernel reports whether the package is the Linux kernel, by its CPE.
+func (p *Package) IsKernel() bool {
+	for _, c := range p.Cpes {
+		if strings.Contains(c, ":linux_kernel:") {
+			return true
+		}
+	}
+	return false
+}
+
+// AssessesKernel reports whether the SBOM carries a CVE scanner's verdicts on the kernel. Only a
+// scanner states "affected": a plain Yocto SBOM lists the recipe's own CVE_STATUS lines, all fixed
+// or not affected, and says nothing about the thousands of CVEs nobody wrote a line for.
+func (s *Sbom) AssessesKernel() bool {
+	for _, comp := range s.KernelComponents() {
+		for _, cve := range s.Vulns.M[comp] {
+			if s.Vex(cve, comp) == "affected" && !s.Matched(cve, comp) {
+				return true
+			}
+		}
+	}
+	return false
+}
