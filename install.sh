@@ -111,6 +111,10 @@ say "Building Trowl"
 bindir="$prefix/bin"
 $sudo mkdir -p "$bindir"
 $sudo install -m 0755 "$work/trowl-bin" "$bindir/trowl"
+# The licenses of what the binary includes (kcond, MIT), which must ship with it.
+docdir="$prefix/share/doc/trowl"
+$sudo mkdir -p "$docdir"
+$sudo install -m 0644 "$src/LICENSE" "$src/THIRD_PARTY_NOTICES.md" "$docdir/"
 # Debian keeps debugfs in /usr/sbin, which isn't on a normal user's PATH.
 [ -e "$bindir/debugfs" ] || $sudo ln -s "$(PATH=$PATH:/usr/sbin:/sbin command -v debugfs)" "$bindir/debugfs"
 
