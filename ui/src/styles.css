@@ -616,3 +616,12 @@ tr.sel td { background: var(--accent-soft); }
 .stat-v.stat-warn { color: var(--warning); }
 .stat-v.stat-plain { color: var(--ink); }
 .cve-b { margin-left: 2px; font-size: 9.5px; font-weight: 600; color: var(--accent); }
+
+/* Kernel CVEs: trowl's verdict per file of the CVE record, and where it defies the SBOM. */
+.kfile { border: 1px solid var(--ring); border-radius: 8px; padding: 7px 10px; margin-bottom: 6px; }
+.kfile-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.kfile-h code { font-size: 12px; min-width: 0; }
+.kfile-r { margin-top: 4px; font-family: var(--mono, ui-monospace, monospace); font-size: 11.5px; color: var(--ink-2); word-break: break-word; }
+.kfile-g { margin-top: 2px; font-size: 11px; color: var(--muted); word-break: break-word; }
+.kfile-g code { font-size: 11px; }
+.cve-d { margin-left: 3px; font-size: 10px; font-weight: 700; color: color-mix(in srgb, var(--warning) 70%, var(--ink)); }
