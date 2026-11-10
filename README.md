@@ -7,7 +7,7 @@
 
 Trowl is a security scanner for embedded Linux images. It detects hardening gaps and known vulnerabilities.
 
-Given an SBOM, it also maps dependencies and flags discrepancies.
+When provided with an SBOM (`--sbom`), Trowl also maps dependencies and detects discrepancies with the actual image. With a kernel source tree (`--kernel-tree`), it additionally performs VEX analysis on kernel CVEs.
 
 ## What it checks
 - Privileged binaries and compiler hardening (e.g., NX, CFI, PIE, stack protection)
@@ -16,6 +16,7 @@ Given an SBOM, it also maps dependencies and flags discrepancies.
 - Secrets and private keys
 - SBOM dependencies and image discrepancies
 - Known CVEs, fixes, available kernel backports
+- SBOM VEX disagreements (e.g. code compiled but `.ko` module not shipped)
 
 ## Currently supported
 - **Distro:** Yocto
@@ -26,35 +27,39 @@ Given an SBOM, it also maps dependencies and flags discrepancies.
 
 ### Local LLM (experimental)
 
-Trowl uses a local LLM to generate impact summaries. Model weights are downloaded from Hugging Face and are licensed under Apache 2.0.
+Trowl uses a local LLM to generate impact summaries. Model weights are downloaded from Hugging Face (licensed under Apache 2.0).
 
 Supported models:
 
-- [`qwen3-4b`](https://huggingface.co/Qwen/Qwen3-4B-GGUF) 
+- [`qwen3-4b`](https://huggingface.co/Qwen/Qwen3-4B-GGUF)
 - [`qwen3.5-4b`](https://huggingface.co/unsloth/Qwen3.5-4B-GGUF) (default and preferred)
 - [`qwen3.5-9b`](https://huggingface.co/unsloth/Qwen3.5-9B-GGUF)
 
-## Quick start
+## Quick start (Docker)
 
-From a directory containing your Yocto image and SBOM:
+Assuming `/path/to/input` contains the scan targets (e.g. image, SBOM and kernel config):
 
 ```sh
-docker run --rm \
+docker run --rm -t \
   --user "$(id -u):$(id -g)" \
-  -v "$PWD:/work" \
+  -v /path/to/input:/in:ro \
+  -v /path/to/output:/out \
+  -v /path/to/kernel-source:/tree:ro \
   ghcr.io/corefense-security/trowl:latest \
-  scan image.ext4.zst --sbom image.spdx.json \
-  -o report --cache-dir /work/.trowl-cache
+  scan /in/rootfs.ext4 \
+    --sbom /in/sbom.spdx.json \
+    --kernel-tree /tree \
+    --kernel-config /in/kernel.config \
+    -o /out/report --cache-dir /out/.trowl-cache
 ```
+*`--kernel-tree`, `--kernel-config` and `--sbom` are optional, but enrich Trowl's VEX analysis.*
 
-Reports are saved under `report/index.html` and `report/report.json`.
+Reports are saved under `/path/to/output/report/` (`index.html` and `report.json`). HTML reports can be viewed locally or via static hosting (GitHub Pages, Cloudflare Pages, S3).
 
-Progress goes to stderr as plain `✓` and `✗` lines, so CI logs stay readable. Colour is on only in a terminal; set `FORCE_COLOR=1` to keep it in a log, or `NO_COLOR=1` to turn it off.
-
-HTML reports can be viewed locally or via static hosting (GitHub Pages, Cloudflare Pages, S3). For example:
+For example:
 
 ```sh
-python3 -m http.server 8765 --directory report
+python3 -m http.server 8765 --directory /path/to/output/report
 ```
 
 Then open `http://localhost:8765` in your browser.
@@ -64,23 +69,22 @@ Then open `http://localhost:8765` in your browser.
 On Debian or Ubuntu (x86-64 or arm64):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/corefense-security/trowl/main/install.sh | bash
+# Without --with-llm, Trowl won't install "llama-server" or generate an AI summary.
+
+curl -fsSL https://raw.githubusercontent.com/corefense-security/trowl/main/install.sh | bash -s -- --with-llm
 ```
 
 Then scan an image and open the report:
 
 ```sh
-trowl scan image.ext4.zst -o report
-trowl view report
+trowl scan /path/to/input/rootfs.ext4 \
+  --sbom /path/to/input/sbom.spdx.json \
+  --kernel-tree /path/to/kernel-source \
+  --kernel-config /path/to/input/kernel.config \
+  -o /path/to/output/report
+
+trowl view /path/to/output/report
 ```
-
-For the optional local LLM summary, run the script with `--with-llm` to install `llama-server`:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/corefense-security/trowl/main/install.sh | bash -s -- --with-llm
-```
-
-Trowl then downloads the default model on the first scan; use `--model` to pick another. Without `llama-server`, the scan still runs and skips the summary.
 
 Run `trowl scan --help` for all options.
 
