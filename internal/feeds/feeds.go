@@ -195,10 +195,13 @@ var noRedirect = &http.Client{
 	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 }
 
-// exists is true on 200, false on 404 / redirect-away, nil when the answer was unclear.
+// exists is true on 200, false on 404 / redirect-away, nil when the answer was unclear: a
+// timeout, or a rate limit or server error that outlasted the retries. A 429 is retried after the
+// wait its Retry-After asks for, up to maxRetryAfter.
 func exists(url string) *bool {
 	t, f := true, false
 	for attempt := 0; attempt < 4; attempt++ {
+		wait := time.Duration(1<<attempt) * time.Second
 		req, _ := http.NewRequest("GET", url, nil)
 		req.Header.Set("User-Agent", ua)
 		resp, err := noRedirect.Do(req)
@@ -214,12 +217,22 @@ func exists(url string) *bool {
 				return &f
 			case !retryCodes[code]:
 				return nil
+			case code == 429:
+				if s, err := strconv.Atoi(resp.Header.Get("Retry-After")); err == nil && s > 0 {
+					wait = min(time.Duration(s)*time.Second, maxRetryAfter)
+				}
 			}
 		}
-		time.Sleep(time.Duration(1<<attempt) * time.Second)
+		sleep(wait)
 	}
 	return nil
 }
+
+// maxRetryAfter caps the wait a site's Retry-After can ask for.
+const maxRetryAfter = 30 * time.Second
+
+// sleep is time.Sleep; tests replace it.
+var sleep = time.Sleep
 
 // Each link is a fixed pattern; the check only asks whether that page exists. cve.org's page
 // answers 200 for any ID (it renders client-side), so its record API stands in for it.
@@ -245,34 +258,46 @@ func fill(pattern, cve string) string {
 	return strings.NewReplacer("{id}", cve, "{year}", year).Replace(pattern)
 }
 
-// checkOne finds which pages exist for this CVE; nil when any answer was unclear (retried next
-// scan). inFeed is what the NVD data says, as in CheckLinks: a CVE with a record there is on
+// linkCheck is one CVE's pages: those answered, and those still to ask.
+type linkCheck struct {
+	cve    string
+	answer map[string]bool // by kind: the page exists
+	ask    []string        // kinds no answer was clear for yet
+}
+
+// newCheck lists the pages to find for a CVE: cve.org and OSV, and the kernel CNA's page for a
+// kernel CVE. inFeed is what the NVD data says, as in CheckLinks: a CVE with a record there is on
 // cve.org, and the record tells whether it has a kernel page, so only OSV has to be asked. A CVE
 // without one is asked of every site.
-func checkOne(cve string, kernel bool, inFeed map[string]bool) *pyjson.Obj {
-	rec := pyjson.New()
+func newCheck(cve string, kernel bool, inFeed map[string]bool) *linkCheck {
+	c := &linkCheck{cve: cve, answer: map[string]bool{}}
 	kinds := []string{"cve", "osv"}
 	if kernel {
 		kinds = append(kinds, "kernel")
 	}
 	kernelPage, known := inFeed[cve]
 	for _, kind := range kinds {
-		var ok *bool
 		if known && kind != "osv" {
-			v := kind == "cve" || kernelPage
-			ok = &v
+			c.answer[kind] = kind == "cve" || kernelPage
 		} else {
-			ok = exists(fill(probes[kind], cve))
+			c.ask = append(c.ask, kind)
 		}
-		if ok == nil {
-			return nil
-		}
-		rec.Set(kind, *ok)
 	}
-	// nvd.nist.gov answers scripted clients with 403, so it can't be probed. NVD imports every
-	// CVE List record, so a record on cve.org is taken as the NVD page existing.
-	rec.Set("nvd", rec.G("cve"))
-	return rec
+	return c
+}
+
+// record is the cached form of a finished check. nvd.nist.gov answers scripted clients with 403,
+// so it can't be probed; NVD imports every CVE List record, so a record on cve.org is taken as the
+// NVD page existing.
+func (c *linkCheck) record() map[string]any {
+	m := map[string]any{}
+	for _, k := range []string{"cve", "osv", "kernel"} {
+		if v, ok := c.answer[k]; ok {
+			m[k] = v
+		}
+	}
+	m["nvd"] = c.answer["cve"]
+	return m
 }
 
 func links(cve string, rec map[string]any) []any {
@@ -285,9 +310,77 @@ func links(cve string, rec map[string]any) []any {
 	return out
 }
 
+// linkRounds are the passes over the pages still unanswered: the first at full speed, then
+// slower ones after a pause, as an unclear answer is nearly always a site rate-limiting or
+// briefly failing a burst of requests.
+var linkRounds = []struct {
+	workers int
+	pause   time.Duration
+}{{workers, 0}, {2, 10 * time.Second}, {1, 30 * time.Second}}
+
+// probe asks each site the checks still need, with n requests at a time, and keeps the clear
+// answers. bar, if set, ticks once per check.
+func probe(checks []*linkCheck, n int, bar *status.Step) {
+	type job struct {
+		c    *linkCheck
+		kind string
+	}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	jobs := make(chan job)
+	for w := 0; w < n; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := range jobs {
+				if ok := exists(fill(probes[j.kind], j.c.cve)); ok != nil {
+					mu.Lock()
+					j.c.answer[j.kind] = *ok
+					mu.Unlock()
+				}
+			}
+		}()
+	}
+	for _, c := range checks {
+		for _, kind := range c.ask {
+			jobs <- job{c, kind}
+		}
+		if bar != nil {
+			bar.Tick()
+		}
+	}
+	close(jobs)
+	wg.Wait()
+	for _, c := range checks {
+		var still []string
+		for _, kind := range c.ask {
+			if _, ok := c.answer[kind]; !ok {
+				still = append(still, kind)
+			}
+		}
+		c.ask = still
+	}
+}
+
+// unanswered returns the checks some page is still unanswered for.
+func unanswered(checks []*linkCheck) []*linkCheck {
+	var out []*linkCheck
+	for _, c := range checks {
+		if len(c.ask) > 0 {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 // CheckLinks returns confirmed advisory links per CVE; the kernel CNA page is only tried for
-// kernel CVEs. CVEs whose check failed are left out. inFeed holds the CVEs with an NVD record,
-// each true when it has a kernel CNA page; it is nil without NVD data.
+// kernel CVEs. inFeed holds the CVEs with an NVD record, each true when it has a kernel CNA
+// page; it is nil without NVD data.
+//
+// A site that doesn't answer clearly is asked again, more slowly, in later rounds (see
+// linkRounds), so that one burst of rate limiting doesn't leave CVEs without links. Only a CVE
+// whose every page is answered gets links and is cached; one still unanswered after the last
+// round is left out, said in a warning naming the sites, and asked again next scan.
 func CheckLinks(cache string, cves []string, kernel, inFeed map[string]bool) map[string][]any {
 	path := filepath.Join(cache, "links-v2.json")
 	known := map[string]map[string]any{}
@@ -300,57 +393,60 @@ func CheckLinks(cache string, cves []string, kernel, inFeed map[string]bool) map
 		t, _ := known[c]["t"].(float64)
 		return t
 	}
-	var todo []string
+	var checks []*linkCheck
 	for _, c := range cves {
 		_, hasKernel := known[c]["kernel"]
 		if now-tOf(c) > linkTTL || (kernel[c] && !hasKernel) {
-			todo = append(todo, c)
+			checks = append(checks, newCheck(c, kernel[c], inFeed))
 		}
 	}
-	if len(todo) > 0 {
-		bar := status.StartBar("advisory links", len(todo))
-		results := make([]*pyjson.Obj, len(todo))
-		var wg sync.WaitGroup
-		next := make(chan int)
-		for w := 0; w < workers; w++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				for i := range next {
-					results[i] = checkOne(todo[i], kernel[todo[i]], inFeed)
-					bar.Tick()
-				}
-			}()
-		}
-		for i := range todo {
-			next <- i
-		}
-		close(next)
-		wg.Wait()
-		for i, c := range todo {
-			if rec := results[i]; rec != nil {
-				m := map[string]any{}
-				for _, k := range rec.Keys() {
-					m[k] = rec.G(k)
-				}
-				m["t"] = now
-				if _, ok := known[c]; !ok {
-					order = append(order, c)
-				}
-				known[c] = m
-				knownKeys[c] = append(rec.Keys(), "t")
+	if len(checks) > 0 {
+		bar := status.StartBar("advisory links", len(checks))
+		probe(checks, linkRounds[0].workers, bar)
+		left := unanswered(checks)
+		for _, r := range linkRounds[1:] {
+			if len(left) == 0 {
+				break
 			}
+			sleep(r.pause)
+			probe(left, r.workers, nil)
+			left = unanswered(left)
 		}
-		failed := 0
-		for _, c := range todo {
-			if tOf(c) != now {
-				failed++
+		for _, c := range checks {
+			if len(c.ask) > 0 {
+				continue
 			}
+			m := c.record()
+			m["t"] = now
+			if _, ok := known[c.cve]; !ok {
+				order = append(order, c.cve)
+			}
+			known[c.cve] = m
+			keys := []string{}
+			for _, k := range []string{"cve", "osv", "kernel", "nvd", "t"} {
+				if _, ok := m[k]; ok {
+					keys = append(keys, k)
+				}
+			}
+			knownKeys[c.cve] = keys
 		}
-		if failed > 0 {
-			warn("advisory check failed for %d CVE(s); their links are omitted", failed)
+		if len(left) > 0 {
+			sites := map[string]int{}
+			for _, c := range left {
+				for _, k := range c.ask {
+					sites[k]++
+				}
+			}
+			var names []string
+			for _, k := range []string{"cve", "osv", "kernel"} {
+				if sites[k] > 0 {
+					names = append(names, fmt.Sprintf("%s %d", siteNames[k], sites[k]))
+				}
+			}
+			warn("advisory links: %d CVE(s) left without links, as some sites didn't answer clearly after %d rounds (%s); the next scan asks again",
+				len(left), len(linkRounds), strings.Join(names, ", "))
 		}
-		if checked := len(todo) - failed; checked > 0 {
+		if checked := len(checks) - len(left); checked > 0 {
 			bar.Ok(fmt.Sprintf("%d CVEs", checked))
 		} else {
 			bar.Fail("none checked")
@@ -368,6 +464,9 @@ func CheckLinks(cache string, cves []string, kernel, inFeed map[string]bool) map
 	}
 	return out
 }
+
+// siteNames name the sites a warning mentions.
+var siteNames = map[string]string{"cve": "cveawg.mitre.org", "osv": "osv.dev", "kernel": "git.kernel.org"}
 
 // knownKeys remembers each cached record's key order so the cache file is rewritten as Python did.
 var knownKeys = map[string][]string{}
