@@ -92,7 +92,9 @@ type Result struct {
 	// InFeed holds the matched and listed CVEs that have a record, each true when the kernel CNA
 	// publishes it. Rejected CVEs are skipped when reading the feed, so they aren't here.
 	InFeed map[string]bool
-	Meta   map[string]any // for the report's sources
+	// ProgramFiles holds the source files the kernel CNA names for each matched or listed CVE.
+	ProgramFiles map[string][]string
+	Meta         map[string]any // for the report's sources
 }
 
 func warn(format string, a ...any) { status.Warn(format, a...) }
@@ -290,6 +292,7 @@ type affectedData struct {
 	Product       string       `json:"product"`
 	DefaultStatus string       `json:"defaultStatus"`
 	Versions      []cnaVersion `json:"versions"`
+	ProgramFiles  []string     `json:"programFiles"`
 }
 
 type cvssData struct {
@@ -358,7 +361,7 @@ func match(files []string, targets []Target, listed map[Match]string) *Result {
 		compsOf[m.CVE] = append(compsOf[m.CVE], m.Comp)
 	}
 	res := &Result{Info: map[string]*Info{}, Known: map[string]bool{}, Fixes: map[Match]Fix{}, InFeed: map[string]bool{},
-		Vendored: map[Match]bool{}}
+		Vendored: map[Match]bool{}, ProgramFiles: map[string][]string{}}
 	var mu sync.Mutex
 	seen := map[Match]bool{}
 	var wg sync.WaitGroup
@@ -375,6 +378,9 @@ func match(files []string, targets []Target, listed map[Match]string) *Result {
 				defer mu.Unlock()
 				if len(hits) > 0 || len(compsOf[rec.ID]) > 0 {
 					res.InFeed[rec.ID] = rec.Source == kernelCNA
+					if files := programFiles(rec); len(files) > 0 {
+						res.ProgramFiles[rec.ID] = files
+					}
 				}
 				for _, comp := range compsOf[rec.ID] {
 					for _, t := range targetsOf[comp] {
@@ -422,6 +428,31 @@ func match(files []string, targets []Target, listed map[Match]string) *Result {
 		return res.Matches[i].CVE < res.Matches[j].CVE
 	})
 	return res
+}
+
+// programFiles lists the source files the kernel CNA names for a CVE, the field sbom-cve-check
+// reads too. Other CNAs write URLs into it, or nothing.
+func programFiles(rec *record) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, a := range rec.Affected {
+		if a.Source != kernelCNA {
+			continue
+		}
+		for _, ad := range a.AffectedData {
+			if strings.ToLower(strings.TrimSpace(ad.Product)) != "linux" {
+				continue
+			}
+			for _, f := range ad.ProgramFiles {
+				if !seen[f] {
+					seen[f] = true
+					out = append(out, f)
+				}
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // eachRecord streams the records of one feed file.

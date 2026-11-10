@@ -20,7 +20,8 @@ var statusOfVex = map[string]string{"affected": "unpatched", "not_affected": "ig
 	"under_investigation": "unknown", "": "unknown"}
 
 // Worst first: the row shows the worst status among the carriers that decide it.
-var statusOrder = []string{"unpatched", "unknown", "ignored", "fixed"}
+// "review" is trowl's own: a CVE in range whose files the kernel tree couldn't trace (see reviewed).
+var statusOrder = []string{"unpatched", "review", "unknown", "ignored", "fixed"}
 
 var shippedOfRecipe = map[string]string{"present": "yes", "modified": "yes", "partial": "yes", "build-only": "build",
 	"absent": "no", "unknown": "unknown"}
@@ -115,6 +116,25 @@ type carrier struct {
 	kernel  bool
 }
 
+// reviewed reports whether trowl's judgement makes a pair "Needs review": the CVE is in range,
+// trowl couldn't tell whether the kernel compiles its code (a file the tree lacks, a gate that
+// depends on more than the config), and the SBOM didn't itself say affected. That replaces the
+// SBOM's own clear, which trowl can't confirm, and a bare version match; an SBOM "affected"
+// stays, as the safer status.
+func reviewed(a *Assessment) bool {
+	return a != nil && a.Status == "under_investigation" && a.Stated != "affected"
+}
+
+// assessmentObj is trowl's VEX judgement as the report carries it.
+func assessmentObj(a *Assessment) *pyjson.Obj {
+	files := make([]any, len(a.Evidence))
+	for i, f := range a.Evidence {
+		files[i] = f
+	}
+	return pyjson.O("status", a.Status, "justification", a.Justification, "detail", a.Detail, "files", files,
+		"sbom_status", or(statusOfVex, a.Stated, ""), "defies_sbom", a.Defies)
+}
+
 func BuildCVEs(sb *Sbom, status *Status) []*pyjson.Obj {
 	var order []string
 	carriers := map[string][]*carrier{}
@@ -127,15 +147,14 @@ func BuildCVEs(sb *Sbom, status *Status) []*pyjson.Obj {
 		if recipeStatus == "" {
 			recipeStatus = "unknown"
 		}
-		kernel := false
-		for _, c := range pkg.Cpes {
-			if strings.Contains(c, ":linux_kernel:") {
-				kernel = true
-			}
-		}
+		kernel := pkg.IsKernel()
 		for _, cve := range sb.Vulns.M[comp] {
 			shipped := or(shippedOfRecipe, recipeStatus, "unknown")
 			st := or(statusOfVex, sb.Vex(cve, comp), "unknown")
+			a := sb.AssessmentOf(cve, comp)
+			if reviewed(a) {
+				st = "review"
+			}
 			fix := sb.FixOf(cve, comp)
 			c := &carrier{name: pkg.Name, shipped: shipped, status: st, kernel: kernel,
 				obj: pyjson.O("name", pkg.Name, "version", pkg.Version, "shipped", shipped, "status", st,
@@ -144,6 +163,9 @@ func BuildCVEs(sb *Sbom, status *Status) []*pyjson.Obj {
 					"fixed_in", fix.Version, "fix_commit", fix.Commit, "backport", fix.Backport,
 					"mainline", fix.Mainline, "mainline_commit", fix.MainlineCommit,
 					"stable", fix.Stable, "stable_commit", fix.StableCommit)}
+			if a != nil {
+				c.obj.Set("assessment", assessmentObj(a))
+			}
 			if _, ok := carriers[cve]; !ok {
 				order = append(order, cve)
 			}
