@@ -107,6 +107,8 @@ export interface CveAssessment {
    *  code out) or component_not_present (compiled only into modules the image lacks). */
   justification: string;
   detail: string;
+  /** The verdict in a few words, such as "file not in tree" or "module not in image". */
+  reason?: string;
   files: {
     path: string;
     verdict: FileVerdict;
@@ -122,6 +124,8 @@ export interface CveAssessment {
   }[];
   /** The SBOM's own status for the CVE, before trowl's ("" when it gave none). */
   sbom_status: CveStatus | "";
+  /** The SBOM's note on that status, such as not-applicable-config ("" when none). */
+  sbom_notes?: string;
   /** trowl's verdict contradicts the SBOM's. */
   defies_sbom: boolean;
 }

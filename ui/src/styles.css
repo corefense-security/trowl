@@ -625,3 +625,6 @@ tr.sel td { background: var(--accent-soft); }
 .kfile-g { margin-top: 2px; font-size: 11px; color: var(--muted); word-break: break-word; }
 .kfile-g code { font-size: 11px; }
 .cve-d { margin-left: 3px; font-size: 10px; font-weight: 700; color: color-mix(in srgb, var(--warning) 70%, var(--ink)); }
+
+/* The overlay's Status cell when trowl and the SBOM disagree: one line each, labelled. */
+.st-stack { display: grid; gap: 4px; }

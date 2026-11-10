@@ -37,7 +37,9 @@ function ShippedCell({ r }: { r: CveRow }) {
   return <span className="muted">–</span>;
 }
 
-const NAME_ONLY_NOTE = "SBOM is missing a vendor name, so this matched on the package name alone and may be another product's CVE.";
+// The SBOM's CPE for the component names no vendor (cpe:2.3:a:*:<product>), so the match rests on
+// the CPE product alone.
+const NAME_ONLY_NOTE = "The SBOM's CPE names no vendor, so this matched on the product name alone and may be another product's CVE.";
 
 /** Every carrier matched by name alone; one with a vendor behind it makes the CVE stand. */
 const nameOnly = (r: CveRow) => r.carriers.every((c) => c.name_only);
@@ -159,8 +161,6 @@ const DEFIES_NOTE = "trowl's check of the kernel tree and image disagrees with t
 /** trowl's verdict on a kernel CVE, when --kernel-tree ran: the kernel carrier's. */
 const assessmentOf = (r: CveRow) => r.carriers.find((c) => c.kernel && c.assessment)?.assessment;
 
-/** An assessment that set the CVE's status: under_investigation leaves the SBOM's in place. */
-const decided = (a?: CveAssessment) => !!a && a.status !== "under_investigation";
 
 const FILE_VERDICT: Record<FileVerdict, { label: string; color: string }> = {
   compiled: { label: "In image", color: "var(--serious)" },
@@ -189,16 +189,28 @@ function assessedVerdict(a: CveAssessment) {
   return <>Not affected: this kernel's config doesn't compile the code the CVE is in. VEX <code>not_affected</code> · <code>vulnerable_code_not_present</code>.</>;
 }
 
-/** The overlay's one-row account of a disagreement: the status the SBOM gives, beside trowl's
- *  in the Status row above. The SBOM's is kept on the assessment. */
-function SbomDisagreement({ a }: { a: CveAssessment }) {
-  return <>
-    <span>SBOM</span>
-    <span title={DEFIES_NOTE}>
-      {a.sbom_status && a.sbom_status !== "unknown" ? <StatusLabel s={a.sbom_status} /> : <span className="muted">no status</span>}
-      <b className="cve-d">≠</b>
-    </span>
-  </>;
+/** The overlay's Status cell: "<status> (source) · reason", where the source is the SBOM or trowl.
+ *  The SBOM's reason is its own note, as it wrote it; trowl's is its verdict in a few words. When
+ *  they disagree, both lines stack, trowl's (the row's status) first. */
+function StatusCell({ r, a, inventory }: { r: CveRow; a?: CveAssessment; inventory: boolean }) {
+  const line = (s: CveStatus, source: string, reason?: string) => (
+    <span><StatusLabel s={s} /><span className="muted"> ({source}){reason && ` · ${reason}`}</span></span>
+  );
+  const carrier = r.carriers.find((c) => c.status === r.status) ?? r.carriers[0];
+  const trowl = line(r.status, "trowl", a?.reason || (carrier?.source === "version-match" || inventory ? "version in range" : ""));
+  if (a?.defies_sbom) {
+    const said = a.sbom_status && a.sbom_status !== "unknown";
+    return (
+      <span className="st-stack" title={DEFIES_NOTE}>
+        {trowl}
+        {said ? line(a.sbom_status as CveStatus, "SBOM", a.sbom_notes) : <span className="muted">no SBOM status</span>}
+      </span>
+    );
+  }
+  if (!inventory && carrier?.source !== "version-match") {
+    return line(r.status, "SBOM", carrier?.notes);
+  }
+  return trowl;
 }
 
 /** Each file of the CVE record with its verdict and why: the gate's options with their values, and
@@ -278,15 +290,11 @@ function CveSheet({ r, sources, onClose }: { r: CveRow; sources: CveSection["sou
   }, [onClose]);
   const notes = r.carriers.find((c) => c.status === r.status && c.notes)?.notes;
   const a = assessmentOf(r);
-  // Where the status comes from; a trowl verdict says so in the SBOM row and Kernel config check.
-  const from = decided(a) || r.status === "review" ? ""
-    : r.carriers.find((c) => c.status === r.status)?.source === "version-match" ? "match from NVD / kernel CNA" : "from the SBOM";
   return (
     <div className="overlay" onClick={onClose}>
       <aside className="sheet cve-sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={r.id}>
         <button className="icon-btn x" onClick={onClose} aria-label="Close"><X size={15} /></button>
         <h3><code className={nameOnly(r) ? "cve-name-only" : undefined} style={{ fontSize: 15 }}>{r.id}</code></h3>
-        {nameOnly(r) && <p className="cve-foot">{NAME_ONLY_NOTE}</p>}
         {r.links && r.links.length > 0 && (
           <div className="adv-pills">
             {r.links.map((l) => (
@@ -306,9 +314,8 @@ function CveSheet({ r, sources, onClose }: { r: CveRow; sources: CveSection["sou
 
         <h4>Details</h4>
         <div className="kv">
-          <span>Status</span><span><StatusLabel s={r.status} />{notes && <span className="muted"> · {notes}</span>}
-            {from && <span className="muted"> · {from}</span>}</span>
-          {a?.defies_sbom && <SbomDisagreement a={a} />}          <FixRows r={r} />
+          <span>Status</span><StatusCell r={r} a={a} inventory={!!sources.inventory} />
+          <FixRows r={r} />
           <span>CVSS</span><span>{r.cvss?.vector ? <span className="vs">{r.cvss.vector}</span> : <span className="muted">not scored</span>}</span>
           <span>KEV</span><span>{!sources.kev ? <span className="muted">not checked</span> : r.kev
             ? <><span className="kev-t">KEV</span> added {r.kev.added}{r.kev.ransomware && " · used in ransomware"}</>
@@ -417,7 +424,7 @@ export default function Cves({ section, params }: { section: CveSection; params:
           )}
           {disagreements > 0 && (
             // A disagreement can sit under any status (trowl may have moved it from Ignored to
-            // Unpatched, or left it Ignored as undecided), so turning this on shows every status.
+            // Unpatched, or to Needs review), so turning this on shows every status.
             <button className={`fchip ${disagreeOnly ? "on" : ""}`} title={DEFIES_NOTE}
               onClick={() => { if (!disagreeOnly) setStatus("all"); setDisagreeOnly(!disagreeOnly); }}>
               <span className="cve-d">≠</span> SBOM disagreements <span className="n">{disagreements}</span>
@@ -462,9 +469,8 @@ export default function Cves({ section, params }: { section: CveSection; params:
           {shown.length === 0 && <div className="empty">No CVEs match these filters.</div>}
         </div>
         {shown.some(outsideSbom) && <p className="cve-foot">* {OUTSIDE_NOTE}</p>}
-        {shown.some(nameOnly) && <p className="cve-foot"><code className="cve-name-only">CVE-XXXX-YYYY</code> in amber: {NAME_ONLY_NOTE}</p>}
+        {shown.some(nameOnly) && <p className="cve-foot"><code className="cve-name-only">CVE-XXXX-YYYY</code> {NAME_ONLY_NOTE}</p>}
         {shown.some((r) => r.carriers[0]?.backport) && <p className="cve-foot">B {BACKPORT_NOTE}</p>}
-        {shown.some((r) => assessmentOf(r)?.defies_sbom) && <p className="cve-foot">≠ {DEFIES_NOTE}</p>}
         {page.pager}
       </div>
       {open && <CveSheet r={open} sources={section.sources} onClose={() => setOpen(null)} />}

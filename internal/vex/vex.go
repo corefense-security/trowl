@@ -244,12 +244,16 @@ func (k *Kernel) place(links []gate.Link, gateWhy string) judgement {
 func (k *Kernel) Assess(files []string) *sbom.Assessment {
 	a := &sbom.Assessment{}
 	counts := map[string]int{}
+	shorts := map[string]string{} // by verdict, the short reason of the first file with it
 	for _, f := range k.tree.Files(files) {
 		if f.Status == gate.Skipped {
 			continue
 		}
 		j := k.evaluate(f)
 		counts[j.verdict]++
+		if _, ok := shorts[j.verdict]; !ok {
+			shorts[j.verdict] = short(j, f)
+		}
 		ev := pyjson.O("path", f.Path, "verdict", j.verdict, "gate", f.Gate, "reason", j.reason)
 		if j.module != "" {
 			ev.Set("module", j.module)
@@ -263,7 +267,47 @@ func (k *Kernel) Assess(files []string) *sbom.Assessment {
 		return nil
 	}
 	a.Status, a.Justification, a.Detail = decide(counts)
+	a.Short = shorts[deciding(a)]
 	return a
+}
+
+// deciding is the file verdict that gave a its status, as decide picks it.
+func deciding(a *sbom.Assessment) string {
+	switch {
+	case a.Status == Affected:
+		return compiled
+	case a.Status == UnderInvestigation:
+		return unknown
+	case a.Justification == componentNotPresent:
+		return notShipped
+	}
+	return notCompiled
+}
+
+// short is a file's verdict in a few words, for the report's status line: "file not in tree",
+// "module not in image". The file's evidence keeps the full reason.
+func short(j judgement, f gate.File) string {
+	switch j.verdict {
+	case compiled:
+		switch {
+		case j.module != "":
+			return "module in image"
+		case j.reason == "built into vmlinux":
+			return "built in"
+		}
+		return "code compiled"
+	case notShipped:
+		return "module not in image"
+	case notCompiled:
+		return "not compiled"
+	}
+	switch f.Status {
+	case builds.StatusMissing:
+		return "file not in tree"
+	case builds.StatusBuilt:
+		return "gate not decidable"
+	}
+	return "file not in any Makefile"
 }
 
 // decide gives a CVE its status from the verdicts on its files, counted by
@@ -313,6 +357,10 @@ func Apply(sb *sbom.Sbom, ev Evaluator, files map[string][]string, inRange map[[
 				continue
 			}
 			a.Stated = stated
+			if stated != "" {
+				// Read before Assess replaces the pair's status, and its note with it.
+				a.StatedNotes = sb.VexNotes(cve, comp)
+			}
 			a.Defies = scanned && defies(stated, a.Status)
 			sb.Assess(cve, comp, a)
 			switch a.Status {

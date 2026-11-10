@@ -131,8 +131,8 @@ func assessmentObj(a *Assessment) *pyjson.Obj {
 	for i, f := range a.Evidence {
 		files[i] = f
 	}
-	return pyjson.O("status", a.Status, "justification", a.Justification, "detail", a.Detail, "files", files,
-		"sbom_status", or(statusOfVex, a.Stated, ""), "defies_sbom", a.Defies)
+	return pyjson.O("status", a.Status, "justification", a.Justification, "detail", a.Detail, "reason", a.Short, "files", files,
+		"sbom_status", or(statusOfVex, a.Stated, ""), "sbom_notes", a.StatedNotes, "defies_sbom", a.Defies)
 }
 
 func BuildCVEs(sb *Sbom, status *Status) []*pyjson.Obj {
