@@ -1,0 +1,39 @@
+Trowl
+Copyright 2026 Abhishek Sen
+
+Trowl is released under the Apache License 2.0; see the LICENSE file.
+
+--------------------------------------------------------------------------
+
+This product includes third-party software under their own licenses, listed
+with the full license texts in THIRD_PARTY_NOTICES.md:
+
+  - kcond (MIT), Copyright (c) 2026 Denis Efremov
+  - github.com/ulikunitz/xz (BSD-3-Clause), Copyright (c) 2014-2022 Ulrich Kunitz
+  - gopkg.in/yaml.v3 (MIT and Apache-2.0), Copyright (c) 2006-2011 Kirill Simonov,
+    Copyright 2011-2016 Canonical Ltd.
+  - React, react-dom, scheduler (MIT), Copyright (c) Facebook, Inc. and its affiliates
+  - Cytoscape.js and cytoscape-dagre (MIT), Copyright (c) The Cytoscape Consortium
+  - dagre and graphlib (MIT), Copyright (c) 2012-2014 Chris Pettitt
+  - lodash (MIT), Copyright OpenJS Foundation and other contributors
+  - cytoscape-fcose, cose-base, layout-base (MIT), Copyright (c) iVis@Bilkent
+  - Lucide (ISC), Copyright (c) Cole Bemis and Lucide Contributors
+  - Geist and Geist Mono fonts (SIL Open Font License 1.1),
+    Copyright 2024 The Geist Project Authors
+
+gopkg.in/yaml.v3 carries the following NOTICE, reproduced as its Apache
+License 2.0 requires:
+
+  Copyright 2011-2016 Canonical Ltd.
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
