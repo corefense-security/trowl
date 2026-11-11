@@ -1,0 +1,10 @@
+# init exports INIT_VERSION=sysvinit-<version> to the processes it starts.
+package: sysvinit
+cpes: ["cpe:2.3:a:*:sysvinit"]
+evidence:
+  - files: [init, init.sysvinit]
+    pattern: '\x00INIT_VERSION=sysvinit-(?P<version>\d+\.\d+(?:\.\d+)?)\x00'
+examples:
+  - file: init.sysvinit
+    contains: "ng\0CONSOLE=%s\0INIT_VERSION=sysvinit-3.14\0/bin/sh\0-c\0/et"
+    version: "3.14"

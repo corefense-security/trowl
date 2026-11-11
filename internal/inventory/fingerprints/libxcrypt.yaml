@@ -1,0 +1,10 @@
+# libcrypt carries no version string. Only Yocto's debug path names the release.
+package: libxcrypt
+cpes: ["cpe:2.3:a:*:libxcrypt"]
+evidence:
+  - files: [libcrypt.so*]
+    pattern: '/usr/src/debug/libxcrypt/(?P<version>[0-9][^/\x00]*)/'
+examples:
+  - file: libcrypt.so.2.0.0
+    contains: "\0\0\0\0/usr/src/debug/libxcrypt/4.5.2/lib/alg-gost34"
+    version: 4.5.2

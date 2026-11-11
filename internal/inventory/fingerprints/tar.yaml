@@ -1,0 +1,10 @@
+# GNU tar builds its --version text at run time, so only Yocto's debug path names the release.
+package: tar
+cpes: [cpe:2.3:a:gnu:tar]
+evidence:
+  - files: [tar, tar.tar]
+    pattern: '/usr/src/debug/tar/(?P<version>[0-9][^/\x00]*)/'
+examples:
+  - file: tar.tar
+    contains: "e `%.*s'\0\0\0\0\0\0/usr/src/debug/tar/1.35/gnu/argp-help."
+    version: "1.35"

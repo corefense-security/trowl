@@ -1,0 +1,10 @@
+# shadow's programs print no version. Only Yocto's debug path names the release.
+package: shadow
+cpes: [cpe:2.3:a:shadow_project:shadow, cpe:2.3:a:debian:shadow]
+evidence:
+  - files: [chage, chfn.shadow, chgpasswd, chpasswd*, chsh.shadow, expiry, faillog, getsubids, gpasswd, groupadd, groupdel, groupmems, groupmod, grpck, grpconv, grpunconv, libsubid.so*, login.shadow, logoutd, newgidmap, newgrp*, newuidmap, newusers, nologin*, passwd*, pwck, pwconv, pwunconv, su.shadow, useradd, userdel, usermod, vipw*]
+    pattern: '/usr/src/debug/shadow/(?P<version>[0-9][^/\x00]*)/'
+examples:
+  - file: expiry
+    contains: "today.\0\0\0\0\0\0\0\0/usr/src/debug/shadow/4.19.4/lib/env.c\0\0stp"
+    version: 4.19.4

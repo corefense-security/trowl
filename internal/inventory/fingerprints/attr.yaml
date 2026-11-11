@@ -1,0 +1,15 @@
+# attr's configure makes the library revision from the release with printf "%d%d%02d" major
+# minor patch, so 2.5.2 is 2502. It refuses a release that wouldn't fit, so the file name
+# decodes exactly.
+package: attr
+cpes: [cpe:2.3:a:attr_project:attr]
+evidence:
+  - files: [libattr.so.*]
+    name_pattern: '^libattr\.so\.\d+\.\d+\.(?P<major>\d)(?P<minor>\d)(?P<patch>\d\d)$'
+examples:
+  - file: libattr.so.1.1.2502
+    contains: "\x7fELF"
+    version: 2.5.2
+  - file: libattr.so.1.1.2510
+    contains: "\x7fELF"
+    version: 2.5.10

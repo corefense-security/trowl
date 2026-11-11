@@ -1,0 +1,10 @@
+# eudev's programs print no version. Only Yocto's debug path names the release.
+package: eudev
+cpes: ["cpe:2.3:a:*:eudev"]
+evidence:
+  - files: [udevd, udevadm, ata_id, cdrom_id, collect, dmi_memory_id, fido_id, mtd_probe, scsi_id, v4l_id]
+    pattern: '/usr/src/debug/eudev/(?P<version>[0-9][^/\x00]*)/'
+examples:
+  - file: udevd
+    contains: "\x02\0\xf0\x80\x80\x80/usr/src/debug/eudev/3.2.14/src/udev/udevd"
+    version: 3.2.14

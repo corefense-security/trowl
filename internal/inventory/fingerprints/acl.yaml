@@ -1,0 +1,15 @@
+# acl's configure makes the library revision from the release with printf "%d%d%02d" major
+# minor patch, so 2.3.2 is 2302. It refuses a release that wouldn't fit, so the file name
+# decodes exactly.
+package: acl
+cpes: [cpe:2.3:a:acl_project:acl]
+evidence:
+  - files: [libacl.so.*]
+    name_pattern: '^libacl\.so\.\d+\.\d+\.(?P<major>\d)(?P<minor>\d)(?P<patch>\d\d)$'
+examples:
+  - file: libacl.so.1.1.2302
+    contains: "\x7fELF"
+    version: 2.3.2
+rejects:
+  - file: libacl.so.1
+    contains: "\x7fELF"

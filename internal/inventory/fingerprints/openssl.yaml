@@ -1,0 +1,11 @@
+# OPENSSL_VERSION_TEXT, such as "OpenSSL 3.5.9 29 Sep 2026". 1.1.1 releases put two spaces
+# before the date.
+package: openssl
+cpes: [cpe:2.3:a:openssl:openssl]
+evidence:
+  - files: [libcrypto.so*, libssl.so*, openssl]
+    pattern: '\x00OpenSSL (?P<version>\d+\.\d+\.\d+[a-z]{0,2}) +\d{1,2} [A-Z][a-z]{2} \d{4}\x00'
+examples:
+  - file: libcrypto.so.3
+    contains: "PENSSL_ia32cap\0OpenSSL 3.5.9 29 Sep 2026\x003.5.9\0platform"
+    version: 3.5.9
