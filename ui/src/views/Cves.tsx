@@ -50,7 +50,7 @@ const onDevice = (r: CveRow) => r.shipped !== "build" && r.shipped !== "no";
 
 /** Where the CVEs on installed packages come from. Each is listed in the SBOM (with its VEX status)
  *  or found only by matching package versions against NVD and the kernel CNA, as Trivy and Grype do. */
-export function cveSources(rows: CveRow[]) {
+function cveSources(rows: CveRow[]) {
   const installed = rows.filter(onDevice);
   const sbom = installed.filter((r) => r.carriers.some((c) => c.source !== "version-match")).length;
   return { total: installed.length, sbom, matched: installed.length - sbom };
