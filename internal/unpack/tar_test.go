@@ -31,7 +31,7 @@ func TestTarCantChangeTheHost(t *testing.T) {
 	img := writeTar(t,
 		&tar.Header{Name: "d/", Typeflag: tar.TypeDir, Mode: 0o777},
 		&tar.Header{Name: "d", Typeflag: tar.TypeSymlink, Linkname: host})
-	if _, _, err := extractTar(img, filepath.Join(t.TempDir(), "rootfs")); err != nil {
+	if _, _, err := extractTar(img, filepath.Join(t.TempDir(), "rootfs"), noProgress{}); err != nil {
 		t.Fatal(err)
 	}
 	if st, _ := os.Stat(host); st.Mode().Perm() != 0o700 {
@@ -42,7 +42,7 @@ func TestTarCantChangeTheHost(t *testing.T) {
 func TestTarCantReplaceTheRootfs(t *testing.T) {
 	dest := filepath.Join(t.TempDir(), "rootfs")
 	img := writeTar(t, &tar.Header{Name: ".", Typeflag: tar.TypeSymlink, Linkname: t.TempDir()})
-	skipped, _, err := extractTar(img, dest)
+	skipped, _, err := extractTar(img, dest, noProgress{})
 	if err != nil {
 		t.Fatal(err)
 	}

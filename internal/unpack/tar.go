@@ -13,7 +13,7 @@ import (
 
 // extractTar extracts regular files, dirs and symlinks only, and refuses anything escaping dest
 // or replacing dest itself.
-func extractTar(img, dest string) (int, map[string]Perm, error) {
+func extractTar(img, dest string, p Progress) (int, map[string]Perm, error) {
 	skipped := 0
 	perms := map[string]Perm{}
 	os.MkdirAll(dest, 0o755)
@@ -23,7 +23,8 @@ func extractTar(img, dest string) (int, map[string]Perm, error) {
 		return 0, nil, err
 	}
 	defer f.Close()
-	tr := tar.NewReader(f)
+	p.Stage("extracting tar", fileSize(img))
+	tr := tar.NewReader(counting{f, p})
 	type dirAttr struct {
 		path string
 		mode os.FileMode
@@ -44,8 +45,8 @@ func extractTar(img, dest string) (int, map[string]Perm, error) {
 			skipped++
 			continue
 		}
-		reg := h.Typeflag == tar.TypeReg || h.Typeflag == tar.TypeRegA || h.Typeflag == tar.TypeGNUSparse ||
-			h.Typeflag == tar.TypeCont
+		// archive/tar reports the old TypeRegA as TypeReg already.
+		reg := h.Typeflag == tar.TypeReg || h.Typeflag == tar.TypeGNUSparse || h.Typeflag == tar.TypeCont
 		dir := h.Typeflag == tar.TypeDir
 		sym := h.Typeflag == tar.TypeSymlink
 		if !(reg || dir || sym) {
@@ -83,8 +84,8 @@ func extractTar(img, dest string) (int, map[string]Perm, error) {
 			os.Chtimes(out, h.ModTime, h.ModTime)
 		}
 	}
-	// Like tarfile.extract, directory attributes are applied as each member is extracted;
-	// applying them last keeps a read-only directory from blocking its own contents.
+	// Directory attributes are applied last, as Python's tarfile does, so a read-only directory
+	// can't block its own contents.
 	for i := len(dirs) - 1; i >= 0; i-- {
 		// A later member may have replaced the directory with a link, which chmod would follow.
 		if st, err := os.Lstat(dirs[i].path); err != nil || !st.IsDir() {
