@@ -15,7 +15,7 @@ import (
 // modules_install puts the module of object net/sctp/sctp at
 // /lib/modules/<release>/kernel/net/sctp/sctp.ko, compressed or not, so the
 // path under kernel/ is the object. Out-of-tree modules (extra/, updates/)
-// are no object of the tree and are not read.
+// are not objects of the tree and are not read.
 type Modules struct {
 	Dir     string          // the directory read, as the image names it: /lib/modules/6.18.52-yocto-standard
 	objects map[string]bool // net/sctp/sctp, ...
@@ -28,14 +28,14 @@ var moduleSuffixes = []string{".ko", ".ko.gz", ".ko.xz", ".ko.zst"}
 // ReadModules reads the modules the image at rootfs ships for the kernel
 // release, such as 6.18.52. It is nil when the image has no module directory
 // for that release, or more than one, as then nothing tells which modules
-// the kernel loads. A directory without a single module is read: the image
+// the kernel loads. A directory with no modules is still read, and the image
 // then ships none.
 func ReadModules(rootfs, release string) *Modules {
 	entries, _ := os.ReadDir(py.InRoot(rootfs, "lib/modules"))
 	var dirs []string
 	for _, e := range entries {
-		// A release directory is the kernel's uname -r: the version, then
-		// the build's LOCALVERSION, if any.
+		// A release directory is named for the kernel's uname -r, which is the
+		// version followed by the build's LOCALVERSION, if any.
 		n := e.Name()
 		if n == release || strings.HasPrefix(n, release+"-") || strings.HasPrefix(n, release+"+") {
 			dirs = append(dirs, n)

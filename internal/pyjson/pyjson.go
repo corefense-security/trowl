@@ -30,7 +30,7 @@ func O(kv ...any) *Obj {
 	return o
 }
 
-// Set adds or replaces a key; a replaced key keeps its original position, as in Python.
+// Set adds or replaces a key. A replaced key keeps its original position, as in Python.
 func (o *Obj) Set(k string, v any) *Obj {
 	if _, ok := o.vals[k]; !ok {
 		o.keys = append(o.keys, k)
@@ -95,7 +95,8 @@ func (c *Counter) Get(k string) int {
 	return n
 }
 
-// MostCommon orders keys by count, highest first; ties keep first-seen order (Python's sort is stable).
+// MostCommon orders keys by count, highest first. Ties keep first-seen order (Python's sort is
+// stable).
 func (c *Counter) MostCommon() []string {
 	keys := append([]string(nil), c.o.keys...)
 	sort.SliceStable(keys, func(i, j int) bool { return c.Get(keys[i]) > c.Get(keys[j]) })
@@ -203,7 +204,7 @@ func encList(b *bytes.Buffer, n int, at func(int) any, indent, level int, itemSe
 	b.WriteByte(']')
 }
 
-// writeString is json's ensure_ascii encoding: ASCII stays, everything else becomes \uXXXX.
+// writeString uses json's ensure_ascii encoding. ASCII stays and everything else becomes \uXXXX.
 func writeString(b *bytes.Buffer, s string) {
 	b.WriteByte('"')
 	for i := 0; i < len(s); {
@@ -241,8 +242,8 @@ func writeString(b *bytes.Buffer, s string) {
 	b.WriteByte('"')
 }
 
-// Float formats like Python's float.__repr__: shortest round-trip digits, fixed notation for
-// exponents in [-4, 16), always with a fractional part.
+// Float formats like Python's float.__repr__. It uses the shortest round-trip digits, fixed
+// notation for exponents in [-4, 16), and always a fractional part.
 func Float(f float64) string {
 	switch {
 	case math.IsNaN(f):

@@ -16,17 +16,17 @@ func TestExplain(t *testing.T) {
 		{"true", kcond.True, "no config gate: always compiled"},
 		{"CONFIG_NET", kcond.True, "CONFIG_NET=y"},
 		{"CONFIG_DLM", kcond.False, "CONFIG_DLM=n"},
-		// Every && operand holds: each with its value.
+		// Every && operand holds, so each shows its value.
 		{"CONFIG_IP_SCTP && CONFIG_NET", kcond.True, "CONFIG_IP_SCTP=m && CONFIG_NET=y"},
 		// One failing && operand decides alone.
 		{"CONFIG_DLM && CONFIG_NET", kcond.False, "CONFIG_DLM=n"},
-		// The || branch that holds, not the one that doesn't.
+		// Only the || branch that holds is shown.
 		{"CONFIG_DLM || (CONFIG_IP_SCTP && CONFIG_NET)", kcond.True, "CONFIG_IP_SCTP=m && CONFIG_NET=y"},
-		// No || branch holds: each branch by the operand that failed it.
+		// No || branch holds, so each branch shows the operand that failed it.
 		{"CONFIG_DLM || (CONFIG_IP_SCTP && CONFIG_USB)", kcond.False, "CONFIG_DLM=n || CONFIG_USB=n"},
 		// =y and =m tests name the value they needed.
 		{"CONFIG_KVM=y", kcond.False, "CONFIG_KVM=m (needs y)"},
-		// An unset option fails both tests the same way: one reason.
+		// An unset option fails both tests the same way, so there is one reason.
 		{"CONFIG_DLM=y || CONFIG_DLM=m", kcond.False, "CONFIG_DLM=n"},
 		{"CONFIG_KVM && (CONFIG_KVM=y || CONFIG_KVM_X86=m) && CONFIG_KVM_X86", kcond.True,
 			"CONFIG_KVM=m && CONFIG_KVM_X86=m"},

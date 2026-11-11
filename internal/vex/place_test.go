@@ -29,17 +29,17 @@ func TestPlace(t *testing.T) {
 		{"a module the image ships", []gate.Link{foo}, true, judgement{verdict: compiled,
 			reason: "foo.ko in image", config: "CONFIG_A=y && CONFIG_FOO=m",
 			module: "/lib/modules/6.18.52/kernel/drivers/d/foo.ko"}},
-		// The first link held as a module, the second built in: the code is in vmlinux.
+		// The first link holds as a module and the second as built in, so the code is in vmlinux.
 		{"built in one way, a module another", []gate.Link{sctp, bar}, true, judgement{verdict: compiled,
 			reason: "built into vmlinux", config: "CONFIG_B=y && CONFIG_BAR=y"}},
-		// net/ipv6/mcast_snoop.c: its gate tests CONFIG_IPV6, =m here, but obj-y links it in.
+		// net/ipv6/mcast_snoop.c has a gate on CONFIG_IPV6, which is =m here, but obj-y links it in.
 		{"built in under a module's option", []gate.Link{{Object: "net/ipv6/mcast_snoop", Builtin: "CONFIG_IPV6", Module: "false"}},
 			true, judgement{verdict: compiled, reason: "built into vmlinux", config: "CONFIG_IPV6=m"}},
 		// Without the image's modules, nothing says the module is missing.
 		{"modules not read", []gate.Link{sctp}, false, judgement{verdict: compiled,
 			reason: "sctp.ko, counted as shipped: the image's modules weren't found", config: "CONFIG_IP_SCTP=m"}},
 		{"no links", nil, true, judgement{verdict: compiled, reason: "the gate's reason"}},
-		// Compiled, but neither linked nor a module, as an extra-y object.
+		// Compiled, but neither linked nor a module, such as an extra-y object.
 		{"neither", []gate.Link{{Object: "arch/x86/kernel/head_64", Builtin: "false", Module: "false"}}, true,
 			judgement{verdict: compiled, reason: "the gate's reason"}},
 		{"undecidable", []gate.Link{{Object: "x/y", Builtin: "\"$(if $(X))\"", Module: "false"}}, true,

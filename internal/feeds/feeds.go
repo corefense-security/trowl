@@ -28,7 +28,7 @@ import (
 
 var ua = "trowl/" + model.Version
 
-// cisa.gov refuses scripted clients; CISA publishes the same catalogue on GitHub.
+// cisa.gov refuses scripted clients. CISA publishes the same catalogue on GitHub.
 var kevURLs = []string{
 	"https://raw.githubusercontent.com/cisagov/kev-data/main/known_exploited_vulnerabilities.json",
 	"https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
@@ -195,9 +195,9 @@ var noRedirect = &http.Client{
 	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 }
 
-// exists is true on 200, false on 404 / redirect-away, nil when the answer was unclear: a
-// timeout, or a rate limit or server error that outlasted the retries. A 429 is retried after the
-// wait its Retry-After asks for, up to maxRetryAfter.
+// exists is true on 200 and false on 404 or a redirect away. It is nil when the answer was
+// unclear, such as a timeout, or a rate limit or server error that outlasted the retries. A 429 is
+// retried after the wait its Retry-After asks for, up to maxRetryAfter.
 func exists(url string) *bool {
 	t, f := true, false
 	for attempt := 0; attempt < 4; attempt++ {
@@ -231,10 +231,10 @@ func exists(url string) *bool {
 // maxRetryAfter caps the wait a site's Retry-After can ask for.
 const maxRetryAfter = 30 * time.Second
 
-// sleep is time.Sleep; tests replace it.
+// sleep is time.Sleep. Tests replace it.
 var sleep = time.Sleep
 
-// Each link is a fixed pattern; the check only asks whether that page exists. cve.org's page
+// Each link is a fixed pattern, and the check only asks whether that page exists. cve.org's page
 // answers 200 for any ID (it renders client-side), so its record API stands in for it.
 var pages = map[string]string{
 	"nvd":    "https://nvd.nist.gov/vuln/detail/{id}",
@@ -265,10 +265,10 @@ type linkCheck struct {
 	ask    []string        // kinds no answer was clear for yet
 }
 
-// newCheck lists the pages to find for a CVE: cve.org and OSV, and the kernel CNA's page for a
-// kernel CVE. inFeed is what the NVD data says, as in CheckLinks: a CVE with a record there is on
+// newCheck lists the pages to find for a CVE. These are cve.org and OSV, plus the kernel CNA's
+// page for a kernel CVE. inFeed is the NVD data, as in CheckLinks. A CVE with a record there is on
 // cve.org, and the record tells whether it has a kernel page, so only OSV has to be asked. A CVE
-// without one is asked of every site.
+// without a record is asked of every site.
 func newCheck(cve string, kernel bool, inFeed map[string]bool) *linkCheck {
 	c := &linkCheck{cve: cve, answer: map[string]bool{}}
 	kinds := []string{"cve", "osv"}
@@ -287,7 +287,7 @@ func newCheck(cve string, kernel bool, inFeed map[string]bool) *linkCheck {
 }
 
 // record is the cached form of a finished check. nvd.nist.gov answers scripted clients with 403,
-// so it can't be probed; NVD imports every CVE List record, so a record on cve.org is taken as the
+// so it can't be probed. NVD imports every CVE List record, so a record on cve.org is taken as the
 // NVD page existing.
 func (c *linkCheck) record() map[string]any {
 	m := map[string]any{}
@@ -310,8 +310,8 @@ func links(cve string, rec map[string]any) []any {
 	return out
 }
 
-// linkRounds are the passes over the pages still unanswered: the first at full speed, then
-// slower ones after a pause, as an unclear answer is nearly always a site rate-limiting or
+// linkRounds are the passes over the pages still unanswered. The first runs at full speed and
+// later ones run slower after a pause. An unclear answer is nearly always a site rate-limiting or
 // briefly failing a burst of requests.
 var linkRounds = []struct {
 	workers int
@@ -373,14 +373,14 @@ func unanswered(checks []*linkCheck) []*linkCheck {
 	return out
 }
 
-// CheckLinks returns confirmed advisory links per CVE; the kernel CNA page is only tried for
+// CheckLinks returns confirmed advisory links per CVE. The kernel CNA page is only tried for
 // kernel CVEs. inFeed holds the CVEs with an NVD record, each true when it has a kernel CNA
-// page; it is nil without NVD data.
+// page. It is nil without NVD data.
 //
 // A site that doesn't answer clearly is asked again, more slowly, in later rounds (see
-// linkRounds), so that one burst of rate limiting doesn't leave CVEs without links. Only a CVE
-// whose every page is answered gets links and is cached; one still unanswered after the last
-// round is left out, said in a warning naming the sites, and asked again next scan.
+// linkRounds). One burst of rate limiting then doesn't leave CVEs without links. Only a CVE whose
+// every page is answered gets links and is cached. A CVE still unanswered after the last round
+// is left out, named in a warning with the sites, and asked again next scan.
 func CheckLinks(cache string, cves []string, kernel, inFeed map[string]bool) map[string][]any {
 	path := filepath.Join(cache, "links-v2.json")
 	known := map[string]map[string]any{}

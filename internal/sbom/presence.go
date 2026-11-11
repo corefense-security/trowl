@@ -7,7 +7,7 @@ package sbom
 // the image (build-only recipes, packages whose files are all absent) have their associated
 // CVEs reported as candidates for VEX "not_affected / component_not_present".
 //
-// This is package-level only: a package being absent says nothing about copies of its code
+// This is package-level only. A package being absent says nothing about copies of its code
 // that were statically linked or vendored into something else.
 
 import (
@@ -77,7 +77,8 @@ func packageStatus(rootfs string, files []File) (string, *pyjson.Obj) {
 	return "present", counts
 }
 
-// Status is a component's presence: "status" plus "files" (packages) or "outputs" (recipes).
+// Status holds each component's presence, as "status" plus "files" (packages) or "outputs"
+// (recipes).
 type Status struct {
 	Keys []string
 	M    map[string]*pyjson.Obj
@@ -115,7 +116,7 @@ func onBoot(files []File) bool {
 }
 
 // Compare returns per-component status, the components not in the image, and findings. With
-// otherPartitions, a package whose files are all under /boot can't be called absent: they may be
+// otherPartitions, a package whose files are all under /boot can't be called absent. They may be
 // on a boot partition, as a kernel's usually are.
 func Compare(sb *Sbom, rootfs string, otherPartitions bool) *Comparison {
 	status := &Status{M: map[string]*pyjson.Obj{}}
@@ -147,7 +148,7 @@ func Compare(sb *Sbom, rootfs string, otherPartitions bool) *Comparison {
 				outStatus = append(outStatus, status.Of(p))
 			}
 		}
-		st := "unknown" // only file-less (meta) packages; can't tell from files
+		st := "unknown" // only file-less (meta) packages, so the files can't tell
 		anyIn, allAbsent := false, true
 		for _, s := range outStatus {
 			anyIn = anyIn || inImage[s]
@@ -231,7 +232,7 @@ func withID(pid string, c *pyjson.Obj) *pyjson.Obj {
 	return o
 }
 
-// Graph builds nodes/edges for the report UI (recipes and binary packages; sources omitted).
+// Graph builds nodes/edges for the report UI (recipes and binary packages, without sources).
 // Nodes follow the SBOM's order (the Python version iterated a set, so its order varied per run).
 func Graph(sb *Sbom, status *Status) *pyjson.Obj {
 	nodes, edges := []any{}, []any{}

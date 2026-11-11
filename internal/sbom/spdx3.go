@@ -222,8 +222,8 @@ func idString(v any) string {
 	return string(b)
 }
 
-// spdx3Elements returns the elements of an SPDX 3.0 JSON-LD document: its @graph, or the
-// document itself when it is a bare list of elements. Any other format is refused by name, so
+// spdx3Elements returns the elements of an SPDX 3.0 JSON-LD document, from its @graph or from
+// the document itself when it is a bare list of elements. Any other format is refused by name, so
 // that an SBOM trowl can't read stops the scan rather than giving a report without its data.
 //
 // Yocto writes SPDX 3.0 since 5.0 (scarthgap). SPDX 2.x, which older Yocto releases and
@@ -250,7 +250,7 @@ func spdx3Elements(raw []byte) ([]json.RawMessage, error) {
 		}
 		return top.Graph, nil
 	}
-	// A bare list of elements: each SPDX 3 element has a type.
+	// A bare list of elements, where each SPDX 3 element has a type.
 	var items []json.RawMessage
 	if err := json.Unmarshal(raw, &items); err != nil {
 		return nil, fmt.Errorf("not JSON, so not an SPDX 3.0 JSON-LD document (tag-value and RDF/XML aren't read): %s", want)
@@ -347,7 +347,7 @@ func Load(path string) (*Sbom, error) {
 		}
 		cveOf[sid] = cve
 		vi := info(cve)
-		// Yocto writes one element per recipe plus one from sbom-cve-check; keep the first text.
+		// Yocto writes one element per recipe plus one from sbom-cve-check. Keep the first text.
 		if vi.Description == "" {
 			if d := s(e.Description); d != "" {
 				vi.Description = d
@@ -446,8 +446,8 @@ func Load(path string) (*Sbom, error) {
 		}
 	}
 
-	// Build components: Yocto marks them with ".../recipe/..." ids, but any producer that links a
-	// component to the binary packages it builds (SPDX "generates") describes the same thing.
+	// Yocto marks build components with ".../recipe/..." ids. Any producer that links a component
+	// to the binary packages it builds (SPDX "generates") describes the same thing.
 	for _, src := range sb.Generates.Keys {
 		if sb.Packages[src].Role == "other" {
 			sb.Packages[src].Role = "recipe"

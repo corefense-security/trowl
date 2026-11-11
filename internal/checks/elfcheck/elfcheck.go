@@ -254,10 +254,10 @@ func Analyse(path string) (props *pyjson.Obj) {
 	}
 
 	syms := symbols(f)
-	// The canary and FORTIFY checks both work by name-matching symbols (dynamic imports, or
-	// local .symtab entries for a static binary); with none at all - a stripped static
-	// binary, since a stripped dynamic one keeps .dynsym - there's nothing to match against,
-	// and "no canary found" / "0 fortified" would misreport that as a hardening gap.
+	// The canary and FORTIFY checks both match symbol names (dynamic imports, or local .symtab
+	// entries for a static binary). A stripped static binary has no symbols at all (a stripped
+	// dynamic one keeps .dynsym). Then "no canary found" or "0 fortified" would wrongly report
+	// a hardening gap.
 	noSymbols := len(syms) == 0
 	props.Set("no_symbols", noSymbols)
 	canary := false
@@ -272,8 +272,8 @@ func Analyse(path string) (props *pyjson.Obj) {
 	if len(imp) == 0 {
 		imp = syms
 	}
-	// Per libc function: checked (__f_chk only), mixed (both: some call sites had no known
-	// buffer size) or unchecked (plain f only).
+	// Each libc function is checked (__f_chk only), mixed (both, because some call sites had no
+	// known buffer size) or unchecked (plain f only).
 	chk, plain := map[string]bool{}, map[string]bool{}
 	for s := range imp {
 		if strings.HasPrefix(s, "__") && strings.HasSuffix(s, "_chk") && len(s) >= 6 {
@@ -348,8 +348,8 @@ func FindingsFor(imagePath string, props *pyjson.Obj) []model.Finding {
 	}
 	ff := props.G("fortify").(*pyjson.Obj)
 	fortified, unfortified := ff.G("fortified").(int), ff.G("unfortified").(int)
-	// Only judge canaries where the binary handles buffers via libc; stub libraries and the
-	// dynamic loader legitimately have none.
+	// Only judge canaries where the binary handles buffers via libc. Stub libraries and the
+	// dynamic loader rightly have none.
 	if !props.G("canary").(bool) && (unfortified != 0 || fortified != 0) {
 		add("elf.canary", "low", fmt.Sprintf("No stack protector symbols (%s)", kind),
 			"Calls buffer-handling libc functions but has no __stack_chk_* references; build with -fstack-protector-strong.", nil)

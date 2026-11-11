@@ -69,15 +69,16 @@ func TestNewCheck(t *testing.T) {
 	}
 }
 
-// A site that rate-limits a burst of requests answers clearly later: every CVE still gets its
-// links, in the same scan, instead of being left without them until the next.
+// A site that rate-limits a burst of requests answers clearly later. Every CVE should still get
+// its links in the same scan, instead of being left without them until the next.
 func TestCheckLinksRetriesUnclearAnswers(t *testing.T) {
 	var mu sync.Mutex
 	refused := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
-		// The first 60 OSV requests are rate limited: more than its in-request retries ride out.
+		// The first 60 OSV requests are rate limited. That is more than the in-request retries
+		// ride out.
 		if r.URL.Path == "/osv" && refused < 60 {
 			refused++
 			w.WriteHeader(http.StatusTooManyRequests)
