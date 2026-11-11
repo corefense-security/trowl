@@ -56,16 +56,23 @@ export function cveSources(rows: CveRow[]) {
   return { total: installed.length, sbom, matched: installed.length - sbom };
 }
 
-function SourceNote({ rows, feed, inventory }: { rows: CveRow[]; feed: CveSection["sources"]["version_match"]; inventory?: string }) {
+/** The command-line option to pass, in the code font with a dim accent. */
+const Opt = ({ children }: { children: string }) => <code className="cmd">{children}</code>;
+
+function SourceNote({ rows, sources }: { rows: CveRow[]; sources: CveSection["sources"] }) {
   const s = cveSources(rows);
+  const feed = sources.version_match, inventory = sources.inventory;
+  // Without a kernel tree, kernel CVEs are version matches like any other.
+  const kernelNote = !sources.kernel_vex && rows.some((r) => r.kernel)
+    ? <> · kernel CVEs: version match only, <Opt>--kernel-tree</Opt> for VEX</> : null;
   if (inventory) {
     return <span title="No SBOM, so there are no Fixed or Not affected statuses from it: every match shows as Unpatched unless the kernel check clears it.">
       No SBOM passed · {inventory === "kernel only" && "kernel CVEs only · "}
-      {inventory === "binaries" && "versions read from binaries · "}version matches, backports not checked</span>;
+      {inventory === "binaries" && "versions read from binaries, no backports checked"}{kernelNote}</span>;
   }
   return (
     <span title={feed ? `Version match: ${feed.source}, updated ${feed.updated.slice(0, 10)}` : undefined}>
-      {s.sbom.toLocaleString()} listed in the SBOM · {s.matched.toLocaleString()} by version match (NVD, kernel CNA)
+      {s.sbom.toLocaleString()} listed in the SBOM · {s.matched.toLocaleString()} by version match (NVD, kernel CNA){kernelNote}
     </span>
   );
 }
@@ -82,7 +89,7 @@ function Attention({ s, rows, sources }: { s: CveSection["summary"]; rows: CveRo
   const openShare = fixed + ignored + open ? (100 * open) / (fixed + ignored + open) : 0;
   const lensX = 1000 - (openShare * 10);
   return (
-    <Card title="CVEs in installed packages" hint={<SourceNote rows={rows} feed={sources.version_match} inventory={sources.inventory} />} className="span-7">
+    <Card title="CVEs in installed packages" hint={<SourceNote rows={rows} sources={sources} />} className="span-7">
       <div className="ig">
         <div className="ig-row"><span><span><b className="num">{sources.inventory ? "–" : fixed.toLocaleString()}</b>{sources.inventory ? "Fixed: needs an SBOM" : "Fixed"}</span>
           {ignored > 0 && <span className="ig-ign"><b className="num">{ignored.toLocaleString()}</b>Not affected</span>}</span><span><b className="num">{open.toLocaleString()}</b>Unpatched</span></div>
@@ -158,7 +165,7 @@ function ByComponent({ s }: { s: CveSection["summary"] }) {
   );
 }
 
-const DEFIES_NOTE = "trowl's check of the kernel tree and image disagrees with the SBOM's status.";
+const DEFIES_NOTE = "Trowl's check of the kernel tree and image disagrees with the SBOM's status.";
 
 /** trowl's verdict on a kernel CVE (the kernel carrier's), when --kernel-tree ran. */
 const assessmentOf = (r: CveRow) => r.carriers.find((c) => c.kernel && c.assessment)?.assessment;
@@ -204,7 +211,7 @@ function StatusCell({ r, a, inventory }: { r: CveRow; a?: CveAssessment; invento
     <span><StatusLabel s={s} /><span className="muted"> ({source}){reason && ` · ${reason}`}</span></span>
   );
   const carrier = r.carriers.find((c) => c.status === r.status) ?? r.carriers[0];
-  const trowl = line(r.status, "trowl", a?.reason || (carrier?.source === "version-match" || inventory ? "version in range" : ""));
+  const trowl = line(r.status, "Trowl", a?.reason || (carrier?.source === "version-match" || inventory ? "version in range" : ""));
   if (a?.defies_sbom) {
     const said = a.sbom_status && a.sbom_status !== "unknown";
     return (
@@ -224,30 +231,39 @@ function StatusCell({ r, a, inventory }: { r: CveRow; a?: CveAssessment; invento
  *  their values and, for compiled code, whether it is built in or in which module. */
 function KernelFiles({ a }: { a: CveAssessment }) {
   return <>
-    {a.files.map((f) => (
-      <div className="kfile" key={f.path}>
-        <div className="kfile-h">
-          <code className="ellipsis" title={f.path}>{f.path}</code>
-          <span className="chip"><i className="swatch" style={{ borderRadius: 999, background: fileVerdict(f).color }} />{fileVerdict(f).label}</span>
+    {a.files.map((f) => {
+      // The config values that decide the file. Code that is placed (built in, or in a module)
+      // has its place as the reason and the values in config. Otherwise the reason is the values,
+      // unless the file has no gate or is undecided: then the reason is plain text.
+      const values = f.config || (f.verdict !== "unknown" && f.gate ? f.reason : "");
+      return (
+        <div className="kfile" key={f.path}>
+          <div className="kfile-h">
+            <code className="kfile-p">{f.path.split("/").map((part, i) => <span key={i}>{i > 0 && <>/<wbr /></>}{part}</span>)}</code>
+            <span className="chip"><i className="swatch" style={{ borderRadius: 999, background: fileVerdict(f).color }} />{fileVerdict(f).label}</span>
+          </div>
+          {f.reason !== values && <div className="kfile-r">{f.reason}</div>}
+          {values && <div className="kfile-r" title="The config values that decide where the code goes"><span className="kfile-l">gate:</span> {values}</div>}
+          {f.module && <div className="kfile-g" title="Where the module is, or would be, in the image">verify: <code>{f.module}</code></div>}
+          {f.verdict === "unknown" && f.gate && <div className="kfile-g" title="The file's config gate, as kcond reads it from the Makefiles">gate: <code>{f.gate}</code></div>}
         </div>
-        <div className="kfile-r">{f.reason}</div>
-        {f.module && <div className="kfile-g" title="Where the module is, or would be, in the image">verify: <code>{f.module}</code></div>}
-        {/* The config values that place the code, when the reason only says where. Otherwise the
-            gate itself, unless the reason already is the gate with its values. */}
-        {f.config ? <div className="kfile-g" title="The config values that put the code there">gate: <code>{f.config}</code></div>
-          : f.gate && f.gate !== f.reason && <div className="kfile-g" title="The file's config gate, as kcond reads it from the Makefiles">gate: <code>{f.gate}</code></div>}
-      </div>
-    ))}
+      );
+    })}
   </>;
 }
 
-function verdict(r: CveRow, notes?: string) {
+function verdict(r: CveRow, treeGiven: boolean, notes?: string) {
   // trowl only judges kernel CVEs the config can decide, never a fixed one, so its verdict leads.
   const a = assessmentOf(r);
   if (a) return assessedVerdict(a);
   const why = notes ? ` (${notes})` : "";
   if (r.status === "fixed") return <>The SBOM marks this CVE fixed{why}.</>;
   if (r.status === "ignored") return <>The SBOM marks this CVE not affected{why}.</>;
+  if (r.kernel) {
+    return treeGiven
+      ? <>Version match only. The CVE record names no source files, so the kernel tree couldn't be checked.</>
+      : <>Version match only. Pass <Opt>--kernel-tree</Opt> to Trowl for VEX analysis.</>;
+  }
   const shipped = r.carriers.filter((c) => c.shipped === "yes");
   const missing = r.carriers.filter((c) => c.shipped !== "yes");
   const names = (cs: typeof r.carriers) => cs.map((c) => c.name).join(", ");
@@ -353,7 +369,7 @@ function CveSheet({ r, sources, onClose }: { r: CveRow; sources: CveSection["sou
         ))}
 
         <h4>Assessment</h4>
-        <div className="verdict">{verdict(r, notes)}</div>
+        <div className="verdict">{verdict(r, !!sources.kernel_vex, notes)}</div>
 
         {a && (
           <>

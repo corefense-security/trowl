@@ -167,6 +167,8 @@ export interface CveSection {
     /** Set when there is no SBOM. Where the component list came from: rpm, opkg, dpkg, binaries
      *  (version strings, used when the image has no package database) or kernel only. */
     inventory?: string;
+    /** Set when --kernel-tree was given: the tree the kernel CVEs got their VEX status from. */
+    kernel_vex?: { tree: string; version: string } | null;
   };
   rows: CveRow[];
   /** Components with no product in NVD, so they couldn't be checked. Only without an SBOM. */

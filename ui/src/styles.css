@@ -615,10 +615,15 @@ tr.sel td { background: var(--accent-soft); }
 
 /* Kernel CVEs: trowl's verdict per file of the CVE record, and where it defies the SBOM. */
 .kfile { border: 1px solid var(--ring); border-radius: 8px; padding: 7px 10px; margin-bottom: 6px; }
-.kfile-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.kfile-h { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+/* Long paths wrap, at a slash where possible, instead of being cut off. */
+.kfile-p { min-width: 0; overflow-wrap: anywhere; }
+.kfile-h .chip { flex-shrink: 0; }
 .kfile-h code { font-size: 12px; min-width: 0; }
 .kfile-r { margin-top: 4px; font-family: var(--mono, ui-monospace, monospace); font-size: 11.5px; color: var(--ink-2); word-break: break-word; }
 .kfile-g { margin-top: 2px; font-size: 11px; color: var(--muted); word-break: break-word; }
+.kfile-l { color: var(--muted); }
+code.cmd { color: var(--accent); background: var(--accent-soft); padding: 0 4px; border-radius: 4px; font-size: 0.95em; }
 .kfile-g code { font-size: 11px; }
 .cve-d { margin-left: 3px; font-size: 10px; font-weight: 700; color: color-mix(in srgb, var(--warning) 70%, var(--ink)); }
 
