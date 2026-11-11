@@ -114,7 +114,7 @@ function FortifySheet({ b, onClose }: { b: Binary; onClose: () => void }) {
         <p className="ink2" style={{ fontSize: 13 }}>
           With <code>-D_FORTIFY_SOURCE</code>, the compiler routes a libc call through a bounds-checked <code>__name_chk</code>{" "}
           version whenever it knows the destination buffer's size. Calls where the size isn't known at compile time stay unchecked.
-          trowl reads this from the symbols the binary imports, so it counts functions, not individual call sites.
+          Trowl reads this from the symbols the binary imports, so it counts functions, not individual call sites.
         </p>
         <div className="fort-sum">
           <b className="num">{checked.length + mixed.length + unchecked.length}</b>
