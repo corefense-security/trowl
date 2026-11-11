@@ -18,14 +18,14 @@ const HELP: Record<string, string> = {
   "Search path": "RPATH / RUNPATH embedded in the binary. Relative or user-writable entries let a local user inject libraries.",
 };
 
-// soft: informational properties (CET/BTI) whose absence isn't a finding, so no red.
+// `soft` is for informational properties (CET/BTI). Their absence isn't a finding, so no red.
 function Mark({ v, soft = false }: { v: boolean | null | undefined; soft?: boolean }) {
   if (v === null || v === undefined) return <Minus size={15} className="muted" aria-label="not applicable" />;
   return v ? <Check size={16} className="ink2" aria-label="yes" /> : <X size={16} className={soft ? "muted" : "no"} aria-label="no" />;
 }
 
-/** The canary and FORTIFY checks both work by matching symbol names; a stripped static binary
- *  has none to match, which looks exactly like "no protection" unless called out separately. */
+/** The canary and FORTIFY checks both match symbol names. A stripped static binary has none,
+ *  which would look like "no protection" unless shown separately. */
 function CanaryCell({ b }: { b: Binary }) {
   if (b.no_symbols) {
     return <span className="muted" title="Statically linked and stripped: no symbol names left to check for __stack_chk_* references.">n/a (stripped)</span>;
@@ -33,7 +33,7 @@ function CanaryCell({ b }: { b: Binary }) {
   return <Mark v={b.canary} />;
 }
 
-/** A list of function names, capped: the first `max`, then "+N more". */
+/** A list of function names. Shows the first `max`, then "+N more". */
 function FnList({ names, cls, max = 5 }: { names: string[]; cls: string; max?: number }) {
   const [all, setAll] = useState(false);
   const shown = all ? names : names.slice(0, max);
@@ -87,7 +87,7 @@ function FortifyCell({ b, onOpen }: { b: Binary; onOpen: () => void }) {
   );
 }
 
-// Each band of the bar: its colour, label and count - the same three groups listed below it.
+// Colour, label and count for each band of the bar. These are the three groups listed below it.
 const BANDS: [string, string, (f: NonNullable<Binary["fortify"]>) => number][] = [
   ["fn-ok", "Checked", (f) => (f.checked ?? []).length],
   ["fn-mixed", "Partly checked", (f) => (f.mixed ?? []).length],

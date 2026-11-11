@@ -58,18 +58,18 @@ function frameNode(c: Core, n: cytoscape.CollectionReturnValue | NodeSingular, d
   c.animate({ zoom, pan }, { duration: reducedMotion() ? 0 : duration, easing: EASE });
 }
 
-// Node sizes per state; recipes are pills (width from label), packages are circles (size from files).
+// Node sizes per state. Recipes are pills (width from label) and packages are circles (size from files).
 const grow = (k: number) => (e: NodeSingular) => (e.data("role") === "recipe" ? e.data("width") * (1 + (k - 1) / 2) : e.data("size") * k);
 const growH = (k: number) => (e: NodeSingular) => (e.data("role") === "recipe" ? 24 * (1 + (k - 1) / 2) : e.data("size") * k);
 
 // Above this many nodes the graph starts at component level, and drawing switches to cheaper
-// settings. Cytoscape stays fluid with a few hundred nodes; thousands freeze the page.
+// settings. Cytoscape stays fluid with a few hundred nodes, but thousands freeze the page.
 const BIG = 600;
 // Beyond this the package view would freeze the browser, so it isn't offered.
 const MAX_PACKAGE_VIEW = 1500;
 
 export default function SbomGraph({ graph, params }: { graph: { nodes: GraphNode[]; edges: GraphEdge[] }; params?: URLSearchParams }) {
-  // A link can open the page filtered: ?status=present keeps one status, ?role=recipe|package one kind.
+  // A link can open the page filtered. ?status=present keeps one status, ?role=recipe|package one kind.
   const onlyStatus = params?.get("status") ?? null;
   const onlyRole = params?.get("role") ?? null;
   const box = useRef<HTMLDivElement>(null);
@@ -81,7 +81,7 @@ export default function SbomGraph({ graph, params }: { graph: { nodes: GraphNode
   const [hidden, setHidden] = useState<Set<string>>(() =>
     new Set(onlyStatus ? STATUS_ORDER.filter((s) => s !== onlyStatus) : ["build-only"]));
   const [showRecipes, setShowRecipes] = useState(onlyRole !== "package");
-  // Packages are hidden by default on big SBOMs; their dependencies are lifted to components.
+  // Packages are hidden by default on big SBOMs, and their dependencies are lifted to components.
   const [showPackages, setShowPackages] = useState(() => onlyRole === "package" ? true : onlyRole === "recipe" ? false
     : graph.nodes.filter((n) => n.status !== "build-only").length <= BIG);
   const [query, setQuery] = useState("");
@@ -110,8 +110,8 @@ export default function SbomGraph({ graph, params }: { graph: { nodes: GraphNode
   const [zoomPct, setZoomPct] = useState(100);
 
   const byId = useMemo(() => new Map(graph.nodes.map((n) => [n.id, n])), [graph]);
-  // Only the kinds the Show filter keeps: a package-only status (Changed, Partial) would
-  // otherwise be offered while components alone are shown, where ticking it does nothing.
+  // Only the kinds the Show filter keeps. Otherwise a package-only status (Changed, Partial)
+  // would be offered while only components are shown, where ticking it does nothing.
   const inRole = (n: GraphNode) => (n.role === "recipe" ? showRecipes || !showPackages : showPackages);
   const statusCounts = useMemo(() => {
     const m: Record<string, number> = {};
@@ -131,7 +131,7 @@ export default function SbomGraph({ graph, params }: { graph: { nodes: GraphNode
   const visible = useMemo(() => graph.nodes.filter((n) => !hidden.has(n.status) && inRole(n)),
     [graph, hidden, showRecipes, showPackages]);
   const big = visible.length > BIG;
-  // Too many nodes to draw without freezing the page: the table (paged) is the only view.
+  // Too many nodes to draw without freezing the page, so the paged table is the only view.
   const tooBig = visible.length > MAX_PACKAGE_VIEW;
   const view = tooBig ? "table" : viewChoice;
   // How many nodes turning packages on would draw. The table pages, so it has no such limit.
@@ -186,7 +186,7 @@ export default function SbomGraph({ graph, params }: { graph: { nodes: GraphNode
       elements,
       minZoom: 0.08,
       maxZoom: 3,
-      // On big graphs: draw a cached texture while panning or zooming, and skip edges meanwhile.
+      // On big graphs, draw a cached texture while panning or zooming and skip edges meanwhile.
       textureOnViewport: big, hideEdgesOnViewport: big, pixelRatio: big ? 1 : "auto",
       style: [
         {
@@ -223,7 +223,7 @@ export default function SbomGraph({ graph, params }: { graph: { nodes: GraphNode
         },
         { selector: "edge[kind = 'generates']", style: { "line-style": "dashed", "line-dash-pattern": [5, 4] } as cytoscape.Css.Edge },
         { selector: "edge[kind = 'build']", style: { "line-style": "dotted", opacity: 0.55 } },
-        // hover: the node swells a little and its own edges come forward
+        // on hover the node swells a little and its own edges come forward
         { selector: "node.hover", style: { width: grow(1.2), height: growH(1.2), "underlay-opacity": 0.12, "z-index": 11 } as cytoscape.Css.Node },
         { selector: "edge.hover", style: { width: 2, opacity: 1, "line-color": ink2, "target-arrow-color": ink2 } },
         // focus mode
@@ -250,7 +250,7 @@ export default function SbomGraph({ graph, params }: { graph: { nodes: GraphNode
     builtWith.current = layoutRef.current;
     prevSelected.current = null;
     c.fit(undefined, 90);
-    // A graph wide enough to fit fully can start too small to read; 25% is the floor.
+    // A graph wide enough to fit fully can start too small to read. 25% is the floor.
     if (c.zoom() < 0.25) c.zoom({ level: 0.25, renderedPosition: { x: c.width() / 2, y: c.height() / 2 } });
     setZoomPct(Math.round(c.zoom() * 100));
     c.on("zoom", () => setZoomPct(Math.round(c.zoom() * 100)));
@@ -592,8 +592,8 @@ function NodeDrawer({ n, rel, byId, onSelect, onClose, backTo, onBack }: {
   );
 }
 
-/** A component's build dependencies as a small fan: the component on the left, one curve to each
- *  thing it needs at build time. Click a dependency to open it. */
+/** A component's build dependencies as a small fan, with the component on the left and one curve
+ *  to each thing it needs at build time. Click a dependency to open it. */
 function BuildDeps({ n, ids, byId, onSelect }: {
   n: GraphNode; ids: string[]; byId: Map<string, GraphNode>; onSelect: (id: string) => void;
 }) {

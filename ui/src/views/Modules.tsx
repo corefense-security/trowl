@@ -23,7 +23,7 @@ const EXPLAIN: Record<string, { on: string; off: string }> = {
   },
 };
 
-/** One signing option as a compact value; what it means is in the tooltip. */
+/** One signing option as a compact value. The tooltip says what it means. */
 function Opt({ name, value }: { name: string; value: string | null | undefined }) {
   const on = value === "y";
   const raw = value === "y" ? "=y" : value === "n" ? "is not set" : value ? `=${value}` : "absent (its dependencies are off)";

@@ -1,4 +1,4 @@
-/* Tokens. Light is the base; dark is selected under the OS preference (unless the viewer
+/* Tokens. Light is the base. Dark applies under the OS preference (unless the viewer
    chose light) and under an explicit data-theme="dark". */
 :root {
   color-scheme: light;
@@ -21,7 +21,7 @@
   --upstream: #2a78d6;
   --downstream: #eb6834;
 
-  /* status (fixed in both modes; always paired with an icon or label) */
+  /* status (fixed in both modes, and always paired with an icon or label) */
   --good: #0ca30c;
   --warning: #fab219;
   --serious: #ec835a;
@@ -173,12 +173,6 @@ a { color: var(--accent); }
 .card-h .right { margin-left: auto; }
 
 /* segmented bar */
-.segbar { display: flex; gap: 2px; height: 14px; border-radius: 4px; overflow: hidden; }
-.segbar > div { min-width: 3px; transition: filter 0.12s; }
-.segbar > div:hover { filter: brightness(1.12); }
-.seglegend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px; font-size: 12.5px; }
-.seglegend span { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); }
-.seglegend b { color: var(--ink); font-weight: 600; }
 .swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; flex-shrink: 0; }
 
 /* horizontal bars */
@@ -321,8 +315,8 @@ pre.ev { background: var(--surface-2); padding: 10px; border-radius: 8px; font-s
 .fn-no { box-shadow: inset 0 0 0 1px var(--critical); color: var(--critical); background: none; }
 
 
-/* coverage pie: one blue ramp, darkest = first flag. Light starts no lighter than step 250,
-   dark ends no darker than step 600 (ordinal rule), so every slice clears 2:1 on its surface. */
+/* coverage pie uses one blue ramp, darkest for the first flag. Light starts no lighter than step
+   250 and dark ends no darker than step 600 (ordinal rule), so every slice clears 2:1 on its surface. */
 :root { --pie-1: #0d366b; --pie-2: #184f95; --pie-3: #256abf; --pie-4: #3987e5; --pie-5: #5f9fe9; --pie-6: #86b6ef; }
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) { --pie-1: #cde2fb; --pie-2: #9ec5f4; --pie-3: #6da7ec; --pie-4: #3987e5; --pie-5: #256abf; --pie-6: #184f95; }
@@ -361,9 +355,9 @@ table.mounts col.flag { width: 72px; }
 /* cards whose content should spread to the row height instead of leaving a gap at the bottom */
 .flexcol { display: flex; flex-direction: column; }
 
-/* Overview fills the viewport: KPI row and mounts take their size, the middle row takes the rest. */
+/* Overview fills the viewport. The KPI row and mounts take their size, the middle row takes the rest. */
 
-/* one KPI row of equal tiles on desktop; free wrapping only on narrow screens */
+/* one KPI row of equal tiles on desktop, free wrapping only on narrow screens */
 
 .gw-drawer { animation: slide-in 0.2s ease-out; }
 .gw-hover { animation: fade-in 0.12s ease-out; }
@@ -423,6 +417,8 @@ tr.sel td { background: var(--accent-soft); }
 .adv-pills a:hover { color: var(--accent); border-color: var(--accent); }
 .comp { display: flex; justify-content: space-between; align-items: center; gap: 8px; border: 1px solid var(--ring); border-radius: 8px; padding: 7px 10px; margin-bottom: 6px; }
 .comp code { font-size: 12px; }
+.comp-src { font-size: 11px; margin-top: 3px; }
+.comp-src code { font-size: 11px; }
 .verdict { border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 6px; padding: 8px 10px; font-size: 12.5px; }
 @media (max-width: 900px) { .ig-stats { grid-template-columns: 1fr; gap: 10px; } .ig-stats > div { border-left: 0; padding-left: 0; } }
 
@@ -430,7 +426,7 @@ tr.sel td { background: var(--accent-soft); }
 .fs-none { display: grid; gap: 4px; font-size: 13px; padding: 4px 0; }
 .fs-detail { display: inline-flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; font-size: 12.5px; }
 
-/* Overview: stat strip on top, main column + rail below */
+/* Overview layout with the stat strip on top, main column + rail below */
 .ov { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); grid-template-rows: auto 1fr; gap: 16px; min-height: 100%; }
 .ov.has-summary { grid-template-rows: auto auto 1fr; }
 .ov > .ov-summary { grid-column: 1 / -1; }
@@ -480,18 +476,18 @@ tr.sel td { background: var(--accent-soft); }
 @media (max-width: 1100px) { .ov, .ov.has-summary { grid-template-columns: 1fr; grid-template-rows: none; } }
 @media (max-width: 760px) { .shares { grid-template-columns: 1fr; } .stat { border-left: 0; border-top: 1px solid var(--grid); } }
 .fchip .x-mark { margin-left: 2px; color: var(--muted); }
-/* On taller windows the Overview's bottom row has room to spare; let its charts use some of it. */
+/* On taller windows the Overview's bottom row has room to spare. Its charts use some of it. */
 .ov .share-n b { font-size: clamp(28px, 3.6vh, 40px); }
 .ov .share-bar { height: clamp(8px, 1.1vh, 12px); }
 .ov .shares { row-gap: clamp(20px, 3vh, 36px); }
-/* SBOM card: the two measures stacked, each with its explanation on the right */
+/* SBOM card with the two measures stacked, each with its explanation on the right */
 .sbom-card .shares { grid-template-columns: 1fr; grid-template-rows: none; align-content: center; gap: 0; }
 .sbom-card .share { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 24px; align-items: center; padding: 14px 0; }
 .sbom-card .share + .share { border-top: 1px solid var(--grid); }
 .sbom-card .share-top { padding-top: 0; }
 .sbom-card .share-note { margin: 0; padding: 0 0 0 20px; border-left: 1px solid var(--grid); }
-/* Without a Key summary the bottom row takes all the spare height: share it out so the cards
-   fill it, rather than centring their content between blank bands. */
+/* Without a Key summary the bottom row takes all the spare height. Share it out so the cards
+   fill it instead of centring their content between blank bands. */
 .ov:not(.has-summary) .sbom-card .shares { grid-auto-rows: 1fr; align-content: stretch; }
 .ov:not(.has-summary) .donut-svg { width: clamp(150px, min(28vh, 15vw), 300px); }
 .ov:not(.has-summary) .ov-rail .pie-legend li { padding-top: clamp(5px, 1.4vh, 14px); padding-bottom: clamp(5px, 1.4vh, 14px); }
@@ -521,7 +517,7 @@ tr.sel td { background: var(--accent-soft); }
 .kopt-v.on { color: var(--good-ink); }
 .kopt-v.off { color: var(--critical); }
 
-/* Page headings: the same title and note on every page */
+/* Page headings, with the same title and note on every page */
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 14px; }
 .page-head:only-child { margin-bottom: 0; }
 .page-note { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; font-size: 12.5px; color: var(--muted); }
@@ -534,7 +530,7 @@ tr.sel td { background: var(--accent-soft); }
 /* Top bar: the scanned image */
 .tb-meta { margin-left: 18px; font-family: var(--mono); font-size: 12px; letter-spacing: -0.01em; color: var(--muted); white-space: nowrap; }
 .tb-name { font-family: var(--mono); font-size: 13px; font-weight: 500; letter-spacing: -0.01em; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70vw; }
-/* Overview tiles: red when something needs attention, green when nothing does */
+/* Overview tiles are red when something needs attention and green when nothing does */
 :root { --tile-bad: #c9402f; --tile-ok: #2a8a4a; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --tile-bad: #ef6a5b; --tile-ok: #3fb56a; } }
 :root[data-theme="dark"] { --tile-bad: #ef6a5b; --tile-ok: #3fb56a; }
@@ -567,7 +563,7 @@ tr.sel td { background: var(--accent-soft); }
 .bdeps-dep:hover { border-color: var(--accent); }
 .bdeps .swatch { flex: none; }
 
-/* SBOM card: step back to where it was opened from */
+/* SBOM card back button, to the card it was opened from */
 .gw-back { display: inline-flex; align-items: center; gap: 5px; max-width: 290px; margin-bottom: 8px; padding: 3px 8px 3px 6px;
   border: 1px solid var(--ring); border-radius: 999px; background: var(--surface-2); color: var(--ink-2);
   font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -626,5 +622,5 @@ tr.sel td { background: var(--accent-soft); }
 .kfile-g code { font-size: 11px; }
 .cve-d { margin-left: 3px; font-size: 10px; font-weight: 700; color: color-mix(in srgb, var(--warning) 70%, var(--ink)); }
 
-/* The overlay's Status cell when trowl and the SBOM disagree: one line each, labelled. */
+/* The overlay's Status cell when trowl and the SBOM disagree, with one labelled line each. */
 .st-stack { display: grid; gap: 4px; }
