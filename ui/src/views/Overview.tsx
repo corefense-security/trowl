@@ -5,7 +5,7 @@ import type { Report } from "../types";
 import { Card, CoverageDonut, type CoverageRow } from "../ui";
 import { cveSources } from "./Cves";
 
-/** A headline count. `bad` is how many of it need attention: red when any do, green when none. */
+/** A headline count. By default it is red when any need attention and green when none do. */
 function Stat({ icon, label, value, tone = value > 0 ? "stat-bad" : "stat-ok", foot, onClick }: {
   icon: ReactNode; label: string; value: number; tone?: string; foot: ReactNode; onClick: () => void;
 }) {
@@ -18,9 +18,7 @@ function Stat({ icon, label, value, tone = value > 0 ? "stat-bad" : "stat-ok", f
   );
 }
 
-/** One number out of a whole: a segmented bar (the number first, then what makes up the rest)
- *  and a line saying what it means. */
-/** The same layout with no data behind it: a grey bar and dashes, for a scan without an SBOM. */
+/** The Share layout with no data behind it (a grey bar and dashes), for a scan without an SBOM. */
 function ShareOff({ title, labels }: { title: string; labels: string[] }) {
   return (
     <div className="share share-off">
@@ -36,6 +34,8 @@ function ShareOff({ title, labels }: { title: string; labels: string[] }) {
   );
 }
 
+/** One number out of a whole. A segmented bar shows the number first, then what makes up the
+ *  rest, with a line saying what it means. */
 function Share({ title, n, of, nLabel, rest, note, color = "var(--violet)" }: {
   title: string; n: number; of: number; nLabel: string; color?: string;
   rest: { label: string; value: number; color: string }[]; note: ReactNode;
@@ -106,7 +106,7 @@ export default function Overview({ r, go }: { r: Report; go: (r: Route, p?: Reco
   const suid = execs.filter((b) => b.uid === 0 && ((b.mode ?? 0) & 0o4000) !== 0);
   const weak = suid.filter((b) => !b.pie || !b.nx || b.relro !== "full" || (!b.canary && !b.no_symbols)).length;
 
-  // "recipe" is the report's role for a build component: anything the SBOM says generates
+  // "recipe" is the report's role for a build component. That is anything the SBOM says generates
   // binary packages (a Yocto recipe, a Buildroot package, a source package elsewhere).
   const comp = { ship: sc["recipe:present"] ?? 0, build: sc["recipe:build-only"] ?? 0,
     gone: sc["recipe:absent"] ?? 0, unknown: sc["recipe:unknown"] ?? 0 };

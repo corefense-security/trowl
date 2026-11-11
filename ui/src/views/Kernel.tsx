@@ -3,8 +3,8 @@ import { ShieldCheck, Unlock } from "lucide-react";
 import type { KernelEntry, Report } from "../types";
 import { PageHead, usePage } from "../ui";
 
-// An option that isn't in the config is a fail: the protection isn't there either way. The row's
-// note still says why it is absent (dependencies off, or no compiler support).
+// An option missing from the config counts as a fail, since the protection isn't there either
+// way. The row's note still says why it is absent (dependencies off, or no compiler support).
 type Shown = "pass" | "fail" | "accepted" | "na";
 const shownStatus = (s: KernelEntry["status"]): Shown => (s === "missing" ? "fail" : s);
 
@@ -22,7 +22,7 @@ function show(v: string | number | { min: number } | null) {
   return v === "n" ? "not set" : String(v);
 }
 
-/** Enabling an attack-surface option increases attack surface; enabling a hardening option increases security. */
+/** Enabling an attack-surface option increases attack surface. Enabling a hardening option increases security. */
 const EFFECT = {
   attack_surface: { label: "Increases attack surface", icon: <Unlock size={14} />, cls: "eff-surface" },
   harden: { label: "Increases security", icon: <ShieldCheck size={14} />, cls: "eff-secure" },

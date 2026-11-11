@@ -23,7 +23,7 @@ function readRoute(): Route {
 }
 
 function loadTheme(): Theme {
-  // Saved choice first; otherwise start from the OS preference.
+  // Saved choice first, otherwise the OS preference.
   try {
     const saved = localStorage.getItem("trowl-theme");
     if (saved === "light" || saved === "dark") return saved;
@@ -42,7 +42,7 @@ export default function App({ initial, error }: { initial: Report | null; error?
   const [route, setRoute] = useState<Route>(readRoute);
   const [hash, setHash] = useState(window.location.hash);
   const [theme, setTheme] = useState<Theme>(loadTheme);
-  // Sidebar groups (Kernel) start collapsed; one is open while one of its pages is showing.
+  // Sidebar groups (Kernel) start collapsed. A group is open while one of its pages is showing.
   const [openGroup, setOpenGroup] = useState<string | null>(null);
 
   useEffect(() => {
@@ -66,7 +66,7 @@ export default function App({ initial, error }: { initial: Report | null; error?
   const cves = report.cves;
   const hasSecrets = report.findings.some((f) => f.check.startsWith("secrets."));
   const binaries = report.binaries.filter((b) => b.kind === "executable" || b.kind === "library").length;
-  // off: the sidebar note for a page with nothing to show, and why: its tooltip.
+  // `off` is the sidebar note for a page with nothing to show. `why` is its tooltip.
   const nav: { id: Route; label: string; icon: ReactNode; badge?: number; group?: string; off?: string; why?: string }[] = [
     { id: "overview", label: "Overview", icon: <LayoutDashboard size={17} /> },
     { id: "filesystems", label: "Filesystems", icon: <HardDrive size={17} />, badge: report.fstab.length || undefined,
@@ -84,7 +84,7 @@ export default function App({ initial, error }: { initial: Report | null; error?
       off: cves ? undefined : "Not found", why: "No SBOM, package database or kernel version to match CVEs against" },
   ];
   const current = nav.find((n) => n.id === route && !n.off) ?? nav[0];
-  // openGroup: a group name when the user opened it, "" when they closed the group they're in.
+  // openGroup is a group name when the user opened it, or "" when they closed the group they're in.
   const groupOpen = (g?: string) => !!g && (openGroup === g || (openGroup === null && current.group === g));
   const imageName = report.image.path.split("/").pop() || report.image.path;
 

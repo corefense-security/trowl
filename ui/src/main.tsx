@@ -2,7 +2,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import type { Report } from "./types";
-// Same faces as the Corefense dashboard, built into the page: a report must not call out.
+// Same fonts as the Corefense dashboard, built into the page so a report makes no network calls.
 import "@fontsource-variable/geist";
 import "@fontsource-variable/geist-mono";
 import "./styles.css";

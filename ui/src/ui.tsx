@@ -81,7 +81,7 @@ export function SearchBox({ value, onChange, placeholder }: {
   );
 }
 
-/** Compact select: "Label  Value ▾" button with a menu; closes on outside click or Escape. */
+/** Compact select. A "Label  Value ▾" button with a menu that closes on outside click or Escape. */
 export function Dropdown({ label, value, options, onChange }: {
   label: string; value: string; options: { value: string; label: string; n?: number }[]; onChange: (v: string) => void;
 }) {
@@ -115,8 +115,8 @@ export function Dropdown({ label, value, options, onChange }: {
   );
 }
 
-/** A dropdown of independent on/off choices (several can be on); the menu stays open while
- *  choosing. `summary` is what the closed button shows. */
+/** A dropdown of independent on/off choices, where several can be on. The menu stays open
+ *  while choosing. `summary` is what the closed button shows. */
 export function MultiDropdown({ label, summary, options, onToggle, align = "left" }: {
   label: string; summary: string;
   options: { value: string; label: string; on: boolean; n?: number; color?: string; hint?: string; disabled?: boolean }[];
@@ -172,44 +172,11 @@ function useTip() {
   return { setTip, node };
 }
 
-/** One part-to-whole bar with a labelled legend; every segment has its own hover readout. */
-export function SegBar({ parts, unit }: { parts: { key: string; label: string; value: number; color: string }[]; unit: string }) {
-  const { setTip, node } = useTip();
-  const total = parts.reduce((n, p) => n + p.value, 0) || 1;
-  const shown = parts.filter((p) => p.value > 0);
-  return (
-    <div>
-      <div className="segbar" role="img" aria-label={shown.map((p) => `${p.label} ${p.value}`).join(", ")}>
-        {shown.map((p) => (
-          <div
-            key={p.key}
-            style={{ flex: p.value, background: p.color }}
-            onPointerMove={(e) => setTip({
-              x: e.clientX, y: e.clientY, color: p.color, title: p.label,
-              value: `${p.value} ${unit} · ${Math.round((100 * p.value) / total)}%`,
-            })}
-            onPointerLeave={() => setTip(null)}
-          />
-        ))}
-      </div>
-      <div className="seglegend">
-        {parts.map((p) => (
-          <span key={p.key}>
-            <i className="swatch" style={{ background: p.color }} />
-            {p.label} <b className="num">{p.value}</b>
-          </span>
-        ))}
-      </div>
-      {node}
-    </div>
-  );
-}
-
 /** `parts` split a flag into kinds (RELRO full and partial), listed under it as "X of Y". */
 export type CoverageRow = { label: string; ok: number; total: number; parts?: { label: string; n: number; of: number }[] };
 
-/** One donut for every protection: arc = binaries that have it, one blue shade per flag.
- *  The centre shows how many binaries were analysed; the legend carries each flag's coverage. */
+/** One donut for all protections. Each arc is the binaries that have one flag, in its own blue
+ *  shade. The centre shows how many binaries were analysed. The legend shows each flag's coverage. */
 export function CoverageDonut({ rows, center, centerLabel }: {
   rows: CoverageRow[]; center: number; centerLabel: string;
 }) {
@@ -319,13 +286,13 @@ export function Switch({ label, on, onChange, title, disabled }: {
   );
 }
 
-export const PAGE_SIZE = 10; // the minimum; a page grows to fill the window
+const PAGE_SIZE = 10; // the minimum. A page grows to fill the window.
 
-/** Paging for a table: the rows of the current page, the pager to show under it, and a ref for
- *  the table's <tbody>. The page size fills the window below the table's top edge (never fewer
- *  than PAGE_SIZE rows) and follows window resizes. The page goes back to the first whenever
- *  `reset` changes (a new filter or search). With `stacked`, for tables sharing a page, the size
- *  stays at PAGE_SIZE and the pager always shows. */
+/** Paging for a table. Returns the current page's rows, the pager to show under it, and a ref
+ *  for the table's <tbody>. The page size fills the window below the table's top edge (at least
+ *  PAGE_SIZE rows) and follows resizes. The page resets to the first when `reset` changes (a new
+ *  filter or search). With `stacked` (tables sharing a page), the size stays at PAGE_SIZE and
+ *  the pager always shows. */
 export function usePage<T>(rows: T[], reset: unknown = null, stacked = false) {
   const [page, setPage] = useState(0);
   const [size, setSize] = useState(PAGE_SIZE);

@@ -13,7 +13,7 @@ const FLAGS: [string, string][] = [
   ["hidepid", "=1 restricts access to other users' /proc entries\n=2 hides them entirely"],
 ];
 
-/** The fstab entry whose mount point holds this path (longest prefix); "/" if none matches. */
+/** The fstab mount point that holds this path (longest prefix), or "/" if none matches. */
 function mountOf(path: string, mounts: Mount[]): string {
   let best = "/";
   for (const m of mounts) {

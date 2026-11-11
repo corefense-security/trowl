@@ -1,5 +1,4 @@
 export type Severity = "info" | "low" | "medium" | "high" | "critical";
-export const SEVERITIES: Severity[] = ["critical", "high", "medium", "low", "info"];
 
 export interface Finding {
   check: string;
@@ -32,10 +31,10 @@ export interface Binary {
   runpath?: string[];
   stripped?: boolean;
   cf_protection?: Record<string, boolean> | null;
-  /** No symbol names at all to check canary/FORTIFY against (a stripped static binary; a
-   *  stripped dynamic one keeps .dynsym, so this is almost always a static+stripped case). */
+  /** No symbol names to check canary/FORTIFY against. A stripped dynamic binary keeps
+   *  .dynsym, so this is almost always a stripped static binary. */
   no_symbols?: boolean;
-  /** From the image itself; absent if it couldn't be read. */
+  /** From the image itself. Absent if it couldn't be read. */
   mode?: number;
   uid?: number;
   gid?: number;
@@ -66,7 +65,7 @@ export interface GraphEdge {
   kind: "generates" | "runtime" | "build";
 }
 
-/** "review" is trowl's: in range, but the kernel tree couldn't trace the CVE's files. */
+/** trowl sets "review" when the version is in range but the kernel tree couldn't trace the CVE's files. */
 export type CveStatus = "unpatched" | "review" | "ignored" | "fixed" | "unknown";
 export type Shipped = "yes" | "build" | "no" | "unknown";
 
@@ -77,11 +76,11 @@ export interface CveCarrier {
   status: CveStatus;
   notes: string;
   kernel: boolean;
-  /** Where the status comes from: the SBOM's own VEX, or trowl's version match. */
+  /** Where the status comes from (the SBOM's own VEX or trowl's version match). */
   source?: "sbom" | "version-match";
-  /** Matched by package name alone: the SBOM gives no vendor, so it may be another product. */
+  /** Matched by package name alone. The SBOM gives no vendor, so it may be another product. */
   name_only?: boolean;
-  /** First upstream version with the fix, from the CVE record; "" if it gives none. */
+  /** First upstream version with the fix, from the CVE record. "" if the record gives none. */
   fixed_in?: string;
   /** Kernel only: the commit for fixed_in, whether fixed_in is the backport to this kernel's
    *  stable series, and the mainline fix. */
@@ -94,6 +93,9 @@ export interface CveCarrier {
   stable_commit?: string;
   /** Kernel only: trowl's own VEX verdict from the kernel tree, set when --kernel-tree ran. */
   assessment?: CveAssessment;
+  /** Set when there is no SBOM or package database. The files the version was read from
+   *  ("/usr/sbin/sshd"). */
+  found_in?: string[];
 }
 
 /** The verdict on one file a kernel CVE record names. */
@@ -112,14 +114,14 @@ export interface CveAssessment {
   files: {
     path: string;
     verdict: FileVerdict;
-    /** The file's config gate, as kcond writes it; "" for a file with none. */
+    /** The file's config gate, as kcond writes it. "" for a file with none. */
     gate: string;
     /** The gate's options with their values in this config, and where the code goes. */
     reason: string;
     /** The kernel module the verdict rests on, as the image names it. */
     module?: string;
-    /** The config values that put the code where reason says, when reason only says where:
-     *  "CONFIG_IP_SCTP=m && CONFIG_NET=y" beside "sctp.ko not in image". */
+    /** The config values that put the code where reason says, when reason only says where.
+     *  For example "CONFIG_IP_SCTP=m && CONFIG_NET=y" beside "sctp.ko not in image". */
     config?: string;
   }[];
   /** The SBOM's own status for the CVE, before trowl's ("" when it gave none). */
@@ -160,9 +162,10 @@ export interface CveSection {
     kev: { version: string; released: string; count: number } | null;
     epss: { date: string; model: string } | null;
     links: "open" | "all" | "none";
-    /** CVEs matched by component version against NVD and the kernel CNA; null when not run. */
+    /** CVEs matched by component version against NVD and the kernel CNA. null when not run. */
     version_match?: { source: string; updated: string; years: number; matches: number } | null;
-    /** Set when there is no SBOM: where the component list came from (rpm, opkg, dpkg, kernel only). */
+    /** Set when there is no SBOM. Where the component list came from: rpm, opkg, dpkg, binaries
+     *  (version strings, used when the image has no package database) or kernel only. */
     inventory?: string;
   };
   rows: CveRow[];
