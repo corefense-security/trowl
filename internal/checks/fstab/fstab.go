@@ -1,7 +1,7 @@
 // Package fstab checks mount option hygiene from /etc/fstab.
 //
-// Only what the image declares is judged; mounts set up elsewhere (systemd .mount units,
-// initramfs scripts) are a later pass.
+// Only what the image declares is judged. Mounts set up elsewhere (systemd .mount units,
+// initramfs scripts) are left for a later pass.
 package fstab
 
 import (
@@ -15,7 +15,7 @@ import (
 	"github.com/corefense-security/trowl/internal/pyjson"
 )
 
-// A read-write mount should carry all of these; the root filesystem needs exec and device
+// A read-write mount should carry all of these. The root filesystem needs exec and device
 // nodes, so it is judged only on being read-only and nosuid.
 var (
 	rwFlags   = []string{"nodev", "nosuid", "noexec"}
@@ -45,7 +45,7 @@ func Parse(text string) []*pyjson.Obj {
 }
 
 // Missing returns the secure flags a mount lacks. A proc mount also needs hidepid, so users
-// can't read other users' processes; "hidepid=1/2" is the suggestion when it isn't set.
+// can't read other users' processes. When it isn't set, "hidepid=1/2" is the suggestion.
 func Missing(mp, fstype string, opts []string) []string {
 	missing := []string{}
 	want := rwFlags

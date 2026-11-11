@@ -119,7 +119,7 @@ func SigningMode(config Config) string {
 	return "off"
 }
 
-// rglob lists files under root like Path.rglob("*"): it doesn't descend into symlinked
+// rglob lists files under root like Path.rglob("*"). It doesn't descend into symlinked
 // directories, but keeps symlinks to files.
 func rglob(root string) []string {
 	var out []string

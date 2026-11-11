@@ -1,5 +1,5 @@
-// Package vex gives kernel CVEs a VEX status from the kernel they were matched on: is the code a
-// CVE record names compiled by this image's config?
+// Package vex gives kernel CVEs a VEX status from the kernel they were matched on. It checks
+// whether this image's config compiles the code a CVE record names.
 //
 // The CVE record says which source files a CVE is in, the field sbom-cve-check reads too. kcond
 // reads the kernel tree for the config gate of each file, and the gates are evaluated here against
@@ -37,14 +37,15 @@ type Evaluator interface {
 	Assess(files []string) *sbom.Assessment
 }
 
-// Kernel is an Evaluator for one kernel: a tree, read once, and the config it was built with.
+// Kernel is an Evaluator for one kernel. It holds the tree, read once, and the config the kernel
+// was built with.
 type Kernel struct {
 	tree     *gate.Tree
 	config   kcond.Config
 	build    string
 	compiled map[string]string // the files the config's sources include, by the source reaching them
-	// modules are the modules the image ships for this kernel, nil when they
-	// weren't read: code compiled only into modules then counts as compiled.
+	// modules are the modules the image ships for this kernel. It is nil when they
+	// weren't read, and code compiled only into modules then counts as compiled.
 	modules *Modules
 }
 
@@ -87,17 +88,17 @@ const (
 	compiled    = "compiled"
 	notCompiled = "not compiled"
 	unknown     = "unknown"
-	// notShipped is code the config compiles, but only into modules the
-	// image doesn't have: present in the build, absent from the image.
+	// notShipped is code the config compiles only into modules the image
+	// doesn't have. The build has the code but the image doesn't.
 	notShipped = "module not shipped"
 )
 
 // judgement is the verdict on one file, with why, for the report.
 type judgement struct {
 	verdict, reason string
-	module          string // the module the verdict rests on, as the image names it; "" for none
-	// config is the config values that put the code where reason says, when reason only says
-	// where: "CONFIG_IP_SCTP=m && CONFIG_NET=y" beside "sctp.ko not in image".
+	module          string // the module the verdict rests on, as the image names it, or "" for none
+	// config holds the config values that put the code where reason says, when reason only says
+	// where. For example "CONFIG_IP_SCTP=m && CONFIG_NET=y" beside "sctp.ko not in image".
 	config string
 }
 
@@ -126,12 +127,12 @@ func (k *Kernel) evaluate(f gate.File) judgement {
 	return judgement{verdict: unknown, reason: "no Makefile lists it"}
 }
 
-// missing judges a file the record names but this tree lacks: added after
-// this release, or moved since. Alone it says nothing, but when no source
-// beside it in its directory is compiled, a source there wouldn't be either
-// (see gate.File.DirGate). A header gets no such verdict, since any file can
-// include it, nor does a file whose directory the tree lacks, as a renamed
-// directory may hold the code.
+// missing judges a file the record names but this tree lacks, because it was
+// added after this release or moved since. On its own that says nothing. But
+// when no source in its directory is compiled, a source there wouldn't be
+// either (see gate.File.DirGate). A header never gets this verdict, since any
+// file can include it. Neither does a file whose directory the tree lacks, as
+// a renamed directory may hold the code.
 func (k *Kernel) missing(f gate.File) judgement {
 	const why = "not in this tree: it may have been added or moved since this release"
 	if f.DirGate == "" {
@@ -163,31 +164,31 @@ func (k *Kernel) explain(cond string) (kcond.Tri, string) {
 }
 
 // place says where the code of a file the config compiles goes, from the
-// objects its Makefiles compile it into; gateWhy is why it is compiled.
+// objects its Makefiles compile it into. gateWhy is why it is compiled.
 //
 // The gate only says that the file is compiled. An m in it doesn't put the
-// file in a module: net/ipv6's mcast_snoop.c has the gate CONFIG_IPV6 and is
-// built into vmlinux with CONFIG_IPV6=m. Each link says where one way of
-// compiling it goes, so:
+// file in a module. For example, net/ipv6's mcast_snoop.c has the gate
+// CONFIG_IPV6 and is built into vmlinux with CONFIG_IPV6=m. Each link says
+// where one way of compiling the file goes:
 //
-//   - linked into vmlinux any way → compiled: the image has the code;
-//   - else a module the image ships → compiled;
-//   - else only modules the image lacks → not shipped.
+//   - linked into vmlinux any way → compiled, the image has the code
+//   - else in a module the image ships → compiled
+//   - else only in modules the image lacks → not shipped
 //
-// Whenever that can't be told the file stays compiled, as the gate says, so
-// that a file is never cleared on a guess: no links (a header, a source
+// When that can't be told, the file stays compiled as the gate says, so it is
+// never cleared on a guess. This covers no links (a header, or a source
 // #included elsewhere), a condition that depends on more than the config, the
-// image's modules not read, or a way of compiling it that is neither, such as
-// an extra-y object.
+// image's modules not read, and a link that is neither built in nor a module,
+// such as an extra-y object.
 func (k *Kernel) place(links []gate.Link, gateWhy string) judgement {
 	if len(links) == 0 {
 		return judgement{verdict: compiled, reason: gateWhy}
 	}
-	// Built in any way: the code is in vmlinux, whatever modules hold too.
+	// If any link builds the file in, the code is in vmlinux, whatever modules also hold it.
 	//
-	// Each judgement says where the code is in reason ("sctp.ko not in image"), the config values
-	// that put it there in config, and the module's full path in the image in module, so that the
-	// report can show each on a line of its own, to check against the .config and the image.
+	// Each judgement puts where the code is in reason ("sctp.ko not in image"), the config values
+	// that put it there in config, and the module's full path in the image in module. The report
+	// shows each on its own line, to check against the .config and the image.
 	unsure := false
 	for _, l := range links {
 		switch t, why := k.explain(l.Builtin); t {
@@ -200,7 +201,7 @@ func (k *Kernel) place(links []gate.Link, gateWhy string) judgement {
 	if unsure {
 		return judgement{verdict: compiled, reason: gateWhy + "; whether it is built in depends on more than the config"}
 	}
-	// Not built in: the modules it is compiled into decide.
+	// Not built in, so the modules it is compiled into decide.
 	var missing []judgement
 	for _, l := range links {
 		t, why := k.explain(l.Module)
@@ -219,10 +220,10 @@ func (k *Kernel) place(links []gate.Link, gateWhy string) judgement {
 	}
 	if len(missing) == 0 {
 		// Compiled, but neither built in nor a module, such as an extra-y
-		// object: nothing says the image lacks it.
+		// object. Nothing says the image lacks it.
 		return judgement{verdict: compiled, reason: gateWhy}
 	}
-	// Several only when the file goes into several modules, all missing.
+	// There are several only when the file goes into several modules, all missing.
 	j := judgement{verdict: notShipped}
 	for i, m := range missing {
 		if i > 0 {
@@ -237,10 +238,10 @@ func (k *Kernel) place(links []gate.Link, gateWhy string) judgement {
 	return j
 }
 
-// Assess follows sbom-cve-check: one compiled file keeps the CVE, and it is cleared only when no
-// file it names is. A file that can't be judged leaves it undecided, never cleared. Makefile,
-// Kconfig, documentation and tools say nothing either way, so they are left out; a record with
-// nothing else gets no verdict.
+// Assess follows sbom-cve-check. One compiled file keeps the CVE, and it is cleared only when no
+// file it names is compiled. A file that can't be judged leaves it undecided, never cleared.
+// Makefile, Kconfig, documentation and tools say nothing either way, so they are left out. A
+// record with nothing else gets no verdict.
 func (k *Kernel) Assess(files []string) *sbom.Assessment {
 	a := &sbom.Assessment{}
 	counts := map[string]int{}
@@ -284,8 +285,8 @@ func deciding(a *sbom.Assessment) string {
 	return notCompiled
 }
 
-// short is a file's verdict in a few words, for the report's status line: "file not in tree",
-// "module not in image". The file's evidence keeps the full reason.
+// short is a file's verdict in a few words for the report's status line, such as "file not in
+// tree" or "module not in image". The file's evidence keeps the full reason.
 func short(j judgement, f gate.File) string {
 	switch j.verdict {
 	case compiled:
@@ -310,10 +311,10 @@ func short(j judgement, f gate.File) string {
 	return "file not in any Makefile"
 }
 
-// decide gives a CVE its status from the verdicts on its files, counted by
-// verdict: one file in the image keeps it affected, one undecided file keeps
-// it open, and it is cleared only when every file is left out of the image,
-// by the config or by a module the image lacks.
+// decide gives a CVE its status from the counts of its file verdicts. One
+// file in the image keeps it affected. Otherwise one undecided file keeps it
+// open. It is cleared only when every file is left out of the image, by the
+// config or by a module the image lacks.
 func decide(counts map[string]int) (status, justification, detail string) {
 	switch {
 	case counts[compiled] > 0:
@@ -338,7 +339,7 @@ type Counts struct {
 // CVE's record, and inRange the {component, CVE} pairs whose version the CVE record covers.
 //
 // A fixed CVE stays fixed, as being compiled says nothing about a fix. So does a not_affected the
-// SBOM gives for any reason but the config: a disputed CVE doesn't become real by being compiled.
+// SBOM gives for any reason but the config. A disputed CVE doesn't become real by being compiled.
 func Apply(sb *sbom.Sbom, ev Evaluator, files map[string][]string, inRange map[[2]string]bool) Counts {
 	var n Counts
 	scanned := sb.AssessesKernel()
@@ -399,8 +400,8 @@ func judged(sb *sbom.Sbom, cve, comp, stated string, inRange map[[2]string]bool)
 }
 
 // defies reports whether trowl's status contradicts the SBOM's. Undecided (needs review)
-// contradicts a clear, since the SBOM claims to know what trowl can't confirm, but not an
-// "affected".
+// contradicts an SBOM clear, since the SBOM claims to know what trowl can't confirm. It doesn't
+// contradict an SBOM "affected".
 func defies(stated, status string) bool {
 	switch stated {
 	case Affected:

@@ -4,7 +4,7 @@
 // The data is the NVD feed mirrored by fkie-cad/nvd-json-data-feeds: one xz file per year,
 // cached under the cache directory and refreshed daily. Userland components are matched by
 // CPE against NVD's configurations. Linux kernel CVEs are matched against the kernel CNA's
-// version ranges first, since NVD has not analysed most recent ones; NVD's configurations are
+// version ranges first, since NVD has not analysed most recent ones. NVD's configurations are
 // the fallback.
 //
 // A version match can't see fixes backported without a version change, so it may report CVEs
@@ -99,11 +99,10 @@ type Result struct {
 
 func warn(format string, a ...any) { status.Warn(format, a...) }
 
-// Run fetches the feed when network is allowed and the cache is stale, then matches. It returns
-// nil when there is no feed to match against.
-// Run matches targets against the feed. listed are CVEs already known for a component, such as
-// from an SBOM, each with the fix version it names ("" if none): they get a fix too, even when
-// the version match itself doesn't hit.
+// Run fetches the feed when network is allowed and the cache is stale, then matches targets
+// against it. It returns nil when there is no feed to match against. listed are CVEs already
+// known for a component, such as from an SBOM, each with the fix version it names ("" if none).
+// They get a fix too, even when the version match itself doesn't hit.
 func Run(cacheDir string, network bool, targets []Target, listed map[Match]string) *Result {
 	if len(targets) == 0 {
 		return nil
@@ -239,7 +238,7 @@ func fetchYear(client *http.Client, dir, year string) error {
 	if err != nil {
 		return err
 	}
-	// The .meta checksum is of the uncompressed JSON; verify it before replacing the cache.
+	// The .meta checksum is of the uncompressed JSON. Verify it before replacing the cache.
 	want := metaSHA(meta)
 	if want != "" {
 		r, err := xz.NewReader(strings.NewReader(string(body)))
@@ -339,7 +338,7 @@ func match(files []string, targets []Target, listed map[Match]string) *Result {
 	byProduct := map[string][]Target{}
 	seenTarget := map[Target]bool{}
 	for _, t := range targets {
-		// Yocto gives the kernel recipe both linux:linux_kernel and linux:linux; both mean the
+		// Yocto gives the kernel recipe both linux:linux_kernel and linux:linux. Both mean the
 		// kernel, which is matched once, with the kernel rules.
 		if t.Product == "linux" && (t.Vendor == "linux" || t.Vendor == "*") {
 			t.Product, t.Vendor = "linux_kernel", "*"
@@ -493,7 +492,7 @@ func eachRecord(path string, fn func(*record)) error {
 }
 
 // affects returns the components a record affects. For each product the CNA's own version
-// data decides when it has any (NVD has not analysed most recent CVEs); NVD's CPE
+// data decides when it has any (NVD has not analysed most recent CVEs). NVD's CPE
 // configurations are the fallback. That is the precedence sbom-cve-check uses.
 func affects(rec *record, byProduct map[string][]Target) (hits []hit, products []string) {
 	var out []hit
@@ -557,7 +556,7 @@ func dedupe(xs []hit) []hit {
 // upperBoundRe finds the exclusive bound in a GitHub-style range such as ">= 2.17, < 2.41.6".
 var upperBoundRe = regexp.MustCompile(`<\s*([^=,\s][^,\s]*)`)
 
-// recordFix is the fix version a record gives for t, whether or not t's version is affected: a
+// recordFix is the fix version a record gives for t, whether or not t's version is affected. A
 // CVE the SBOM lists may be fixed in the installed version already, or by a backported patch.
 func recordFix(rec *record, t Target) string {
 	kernel := t.Product == "linux_kernel"
@@ -574,11 +573,11 @@ func recordFix(rec *record, t Target) string {
 	return highestFix(blocks)
 }
 
-// fixDetails picks the fix to show. A kernel CVE takes the backport to t's stable series if there
-// is one, then the version the SBOM names so the two agree, then the mainline fix: a stable release
-// of another series isn't something to update to, so the record's next fix is only a last resort,
-// and otherwise kept as Stable for the overlay. stated is the SBOM's version, "" if none; version
-// is the record's next fix.
+// fixDetails picks the fix to show. version is the record's next fix and stated is the SBOM's
+// ("" if none). A kernel CVE takes the backport to t's stable series if there is one, then the
+// SBOM's version so the two agree, then the mainline fix. A stable release of another series
+// isn't something to update to. So the record's next fix is only a last resort, and is otherwise
+// kept as Stable for the overlay.
 func fixDetails(rec *record, t Target, version, stated string) Fix {
 	kernel := t.Product == "linux_kernel"
 	blocks := cnaBlocks(rec, t.Product, kernel)
@@ -635,8 +634,8 @@ func mainlineFix(blocks []affectedData) string {
 var commitRe = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
 // kernelCommits maps each fix version to its commit. The kernel CNA lists the fix commits and the
-// fix versions separately, in the same order, so they pair by position; checked against
-// linux-stable. If the two lists differ in length nothing is paired.
+// fix versions separately, in the same order, so they pair by position (checked against
+// linux-stable). If the two lists differ in length nothing is paired.
 func kernelCommits(rec *record) map[string]string {
 	var hashes, versions []string
 	for _, a := range rec.Affected {
@@ -713,7 +712,7 @@ func highestFix(blocks []affectedData) string {
 var versionRe = regexp.MustCompile(`^[0-9][0-9A-Za-z.+~_-]{0,31}$`)
 
 // cnaFix is the first version after v with the fix. A fix in v's own stable series ("6.18.54" for
-// 6.18.52) wins, since that is the update to take; otherwise it's the lowest later fix.
+// 6.18.52) wins, since that is the update to take. Otherwise it's the lowest later fix.
 func cnaFix(v string, blocks []affectedData, kernel bool) string {
 	inSeries, next := "", ""
 	lowest := func(cur, c string) string {
@@ -753,7 +752,7 @@ func cnaFix(v string, blocks []affectedData, kernel bool) string {
 }
 
 // cnaBlocks returns the CNA's affected blocks for a product that carry at least one version
-// entry trowl can compare. The kernel's come only from the kernel CNA; other products
+// entry trowl can compare. The kernel's come only from the kernel CNA. Other products
 // match by name (case-insensitive) against the CPE product.
 func cnaBlocks(rec *record, product string, kernel bool) []affectedData {
 	var out []affectedData
@@ -820,8 +819,8 @@ func usable(v cnaVersion) bool {
 	return strings.ContainsAny(ver, "0123456789")
 }
 
-// cnaAffected reads one CNA block (CVE 5 "affected" semantics): any matching "unaffected"
-// entry clears the version; otherwise it is affected when an affected entry or the default
+// cnaAffected reads one CNA block with CVE 5 "affected" semantics. Any matching "unaffected"
+// entry clears the version. Otherwise it is affected when an affected entry or the default
 // says so.
 func cnaAffected(v string, b affectedData, kernel bool) bool {
 	affected := b.DefaultStatus == "affected"
@@ -844,9 +843,9 @@ func cnaAffected(v string, b affectedData, kernel bool) bool {
 
 // kernelAffected reads all of a kernel CVE's CNA blocks together. The kernel CNA writes one
 // block of affected ranges per stable branch and one of fixed versions. A branch range with a
-// real start ("6.18.20 <= v < 6.18.54": the bug was backported into that branch) is the most
-// precise statement and decides first; otherwise an "unaffected" entry in either block clears
-// the version.
+// real start, such as "6.18.20 <= v < 6.18.54", means the bug was backported into that branch.
+// That is the most precise statement and decides first. Otherwise an "unaffected" entry in
+// either block clears the version.
 func kernelAffected(v string, blocks []affectedData) bool {
 	for _, b := range blocks {
 		for _, e := range b.Versions {
@@ -866,8 +865,8 @@ func kernelAffected(v string, blocks []affectedData) bool {
 	return cnaAffected(v, merged, true)
 }
 
-// vendorAgrees: when the SBOM names a CPE vendor, the CNA's vendor must not name a different
-// one ("ruby" for the Ruby zlib gem is not "gnu" or "zlib").
+// vendorAgrees reports whether the CNA's vendor fits the SBOM's CPE vendor. When the SBOM names
+// one, the CNA must not name a different one ("ruby" for the Ruby zlib gem is not "gnu" or "zlib").
 func vendorAgrees(cpeVendor, cnaVendor string) bool {
 	if cpeVendor == "" || cpeVendor == "*" {
 		return true
@@ -888,7 +887,8 @@ func vendorAgrees(cpeVendor, cnaVendor string) bool {
 	return b == "" || b == "na" || strings.Contains(b, a) || strings.Contains(a, b)
 }
 
-// fixedInOlderSeries: the kernel CNA lists one fix per stable series. A version newer than the
+// fixedInOlderSeries reports whether v is past every series the kernel CNA lists a fix for. The
+// CNA lists one fix per stable series. A version newer than the
 // newest series with a fix contains it, even when the record has no mainline entry (common in
 // CVEs assigned years after the fix). sbom-cve-check reads the records the same way.
 func fixedInOlderSeries(v string, b affectedData) bool {
@@ -990,7 +990,7 @@ func cpeAffects(rec *record, ts []Target) []hit {
 }
 
 // cpeHit reports whether the record covers t. The fix is the highest exclusive end among the
-// ranges that cover t, the first version past all of them; NVD gives none for an inclusive end.
+// ranges that cover t, the first version past all of them. NVD gives none for an inclusive end.
 func cpeHit(rec *record, t Target) (found bool, fix string) {
 	for _, c := range rec.Configurations {
 		for _, n := range c.Nodes {
@@ -1017,7 +1017,7 @@ func cpeHit(rec *record, t Target) (found bool, fix string) {
 	return found, fix
 }
 
-// distroRe matches a distro build such as 4.18.0-193.el8, or a date as NVD gives for gcc: neither
+// distroRe matches a distro build such as 4.18.0-193.el8, or a date as NVD gives for gcc. Neither
 // is an upstream version to update to.
 var distroRe = regexp.MustCompile(`(?i)\.(el|fc|amzn)\d|ubuntu|deb\d|^\d{4}-\d{2}-\d{2}$`)
 
@@ -1063,7 +1063,7 @@ func inRange(v, cpeVersion, cpeUpdate string, m cpeMatch) bool {
 	case "*":
 		return true // every version
 	case "-", "":
-		return false // "not applicable"; not a version claim
+		return false // "not applicable", which is not a version claim
 	}
 	want := cpeVersion
 	if cpeUpdate != "*" && cpeUpdate != "-" && cpeUpdate != "" {

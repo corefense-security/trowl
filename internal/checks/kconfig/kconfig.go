@@ -1,12 +1,14 @@
 // Package kconfig checks the kernel configuration against the baseline lists in baseline/.
 //
-// The config is read from the image itself: /boot/config-*, else the copy the kernel embeds in its
-// own image when built with CONFIG_IKCONFIG (the same data extract-ikconfig recovers). A config or
-// kernel tree given on the command line is only used when the image has neither.
+// The config is read from the image itself. It comes from /boot/config-*, or else from the copy
+// the kernel embeds in its own image when built with CONFIG_IKCONFIG (the same data
+// extract-ikconfig recovers). A config or kernel tree given on the command line is only used when
+// the image has neither.
 //
-// The lists decide what is expected; this package only compares. An option absent from the config
-// is not the same as "is not set": Kconfig drops options whose dependencies are off, so for an
-// option expected on, absence is reported as "missing" rather than passed or silently ignored.
+// The lists decide what is expected, and this package only compares. An option absent from the
+// config is not the same as "is not set", because Kconfig drops options whose dependencies are
+// off. So for an option expected on, absence is reported as "missing". It is neither passed nor
+// silently ignored.
 package kconfig
 
 import (
@@ -113,7 +115,7 @@ func payloads(blob []byte, yield func([]byte) bool) {
 	}{{[]byte{0x1f, 0x8b, 0x08}, "gzip"}, {[]byte("\xfd7zXZ\x00"), "xz"}, {[]byte{0x28, 0xb5, 0x2f, 0xfd}, "zstd"}}
 	for _, f := range formats {
 		start := 0
-		for n := 0; n < 8; n++ { // a few candidates per format is plenty; real payloads come first
+		for n := 0; n < 8; n++ { // a few candidates per format is plenty, since real payloads come first
 			off := bytes.Index(blob[start:], f.magic)
 			if off < 0 {
 				break
@@ -150,7 +152,7 @@ func payloads(blob []byte, yield func([]byte) bool) {
 	}
 }
 
-// inflate reads up to maxKernelBytes; a stream cut short still yields what was decoded, as
+// inflate reads up to maxKernelBytes. A stream cut short still yields what was decoded, as
 // Python's decompressobj does.
 func inflate(open func() (io.Reader, error)) ([]byte, bool) {
 	r, err := open()
@@ -597,7 +599,7 @@ func Check(rootfs, kernelConfig, kernelSrc, policyPath string) (*pyjson.Obj, []m
 		"policy", pol2, "modules", modules), findings, nil
 }
 
-// expectString renders row["expect"] the way Python's f-string does: a dict prints as its repr.
+// expectString renders row["expect"] the way Python's f-string does. A dict prints as its repr.
 func expectString(out any, raw any) string {
 	if s, ok := out.(string); ok {
 		return s

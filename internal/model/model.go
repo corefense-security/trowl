@@ -1,4 +1,5 @@
-// Package model holds shared result types. Every check emits Findings; the report is plain JSON.
+// Package model holds shared result types. Every check emits Findings, and the report is plain
+// JSON.
 package model
 
 import (
@@ -8,9 +9,10 @@ import (
 	"github.com/corefense-security/trowl/internal/pyjson"
 )
 
-// version is set at build time with -ldflags "-X .../internal/model.version=v1.2.3"; the
+// version is set at build time with -ldflags "-X .../internal/model.version=v1.2.3". The
 // Dockerfile and the release workflow pass the git tag. Without it, the version comes from the
-// Go build info: the module version for "go install", or the VCS revision for a local build.
+// Go build info. That is the module version for "go install", or the VCS revision for a local
+// build.
 var version string
 
 // Version is what the tool reports, e.g. "0.2.0" or "0.1.0-dev+a1b2c3d".

@@ -13,7 +13,7 @@ import (
 	"unicode/utf8"
 )
 
-// DecodeReplace decodes UTF-8 like bytes.decode(errors="replace"): each invalid byte becomes U+FFFD.
+// DecodeReplace decodes UTF-8 like bytes.decode(errors="replace"). Each invalid byte becomes U+FFFD.
 func DecodeReplace(b []byte) string {
 	if utf8.Valid(b) {
 		return string(b)
@@ -112,7 +112,7 @@ func CleanPath(p string) string {
 	return j
 }
 
-// SortPaths orders paths like sorted() over pathlib.Path objects: by path components.
+// SortPaths orders paths by their components, like sorted() over pathlib.Path objects.
 func SortPaths(paths []string) {
 	sort.SliceStable(paths, func(i, j int) bool {
 		a, b := strings.Split(paths[i], string(filepath.Separator)), strings.Split(paths[j], string(filepath.Separator))
@@ -149,7 +149,8 @@ func Exists(p string) bool {
 	return err == nil
 }
 
-// Resolve mirrors Path.resolve(strict=False): absolute, symlinks resolved as far as the path exists.
+// Resolve mirrors Path.resolve(strict=False). It makes p absolute and resolves symlinks as far as
+// the path exists.
 func Resolve(p string) string {
 	abs, err := filepath.Abs(p)
 	if err != nil {
@@ -169,7 +170,7 @@ func Resolve(p string) string {
 const maxLinks = 40
 
 // InRoot is where path p inside an unpacked image really is. Links are followed as the image
-// would follow them: an absolute link starts again at root and ".." stops there, so no link in
+// would follow them. An absolute link starts again at root and ".." stops there, so no link in
 // the image can lead to the host. A missing part is left as it is. Too many links give a path
 // that can't exist, as the last link may still point out of the image.
 func InRoot(root, p string) string {

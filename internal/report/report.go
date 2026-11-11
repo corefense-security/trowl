@@ -71,7 +71,7 @@ func WriteHTML(r *pyjson.Obj, path string) (bool, error) {
 // rescan. ok is false when the UI wasn't built or the file isn't JSON.
 func RenderJSON(raw []byte) ([]byte, bool) {
 	var compact bytes.Buffer
-	if err := json.Compact(&compact, raw); err != nil { // keeps key order: it only drops whitespace
+	if err := json.Compact(&compact, raw); err != nil { // keeps key order, as it only drops whitespace
 		return nil, false
 	}
 	return render(compact.Bytes(), gzip.BestSpeed)
@@ -87,7 +87,7 @@ func render(compactJSON []byte, level int) ([]byte, bool) {
 	if !strings.Contains(template, slot) {
 		return nil, false
 	}
-	// Gzip + base64 keeps the page a fraction of the JSON size (the CVE list dominates); the
+	// Gzip + base64 keeps the page a fraction of the JSON size (the CVE list dominates). The
 	// viewer inflates it with the browser's DecompressionStream. Base64 has no "</" in it.
 	var buf bytes.Buffer
 	zw, _ := gzip.NewWriterLevel(&buf, level)

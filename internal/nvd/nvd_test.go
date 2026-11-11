@@ -173,7 +173,7 @@ func TestFixDetails(t *testing.T) {
 	if want := (Fix{"6.18.54", h1, true, "7.3", h2, "", ""}); got != want {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
-	// No fix in 6.12 and nothing from an SBOM: mainline, with the next stable fix kept alongside.
+	// No fix in 6.12 and nothing from an SBOM gives mainline, with the next stable fix kept alongside.
 	got = fixDetails(rec, Target{Product: "linux_kernel", Version: "6.12.1"}, "6.18.54", "")
 	if got.Version != "7.3" || got.Backport || got.Commit != h2 || got.Stable != "6.18.54" || got.StableCommit != h1 {
 		t.Errorf("want mainline: %+v", got)
@@ -187,7 +187,7 @@ func TestFixDetails(t *testing.T) {
 	if got := fixDetails(rec, target, "", "7.2.10"); got.Version != "6.18.54" || !got.Backport {
 		t.Errorf("a backport beats the SBOM: %+v", got)
 	}
-	// One commit missing: pairing by position would link the wrong one.
+	// With one commit missing, pairing by position would link the wrong one.
 	rec.Affected[0].AffectedData[0].Versions = rec.Affected[0].AffectedData[0].Versions[:1]
 	if got := fixDetails(rec, target, "6.18.54", ""); got.Commit != "" {
 		t.Errorf("uneven lists must not pair: %+v", got)

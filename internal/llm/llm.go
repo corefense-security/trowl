@@ -1,5 +1,5 @@
-// Package llm runs the local model (llama.cpp's llama-server). For now: a short plain-English
-// summary of the scan.
+// Package llm runs the local model (llama.cpp's llama-server). For now it writes a short
+// plain-English summary of the scan.
 //
 // The model is fetched into the cache directory at scan time (pinned revision, SHA-256
 // checked) and runs on CPU. It is only given numbers and titles this scan already computed and
@@ -126,7 +126,8 @@ func fileSha256(path string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// ensureModel returns the model file, downloading it on first use; "" if it can't be had.
+// ensureModel returns the model file, downloading it on first use. It returns "" if the file
+// can't be had.
 func ensureModel(name, cache string) string {
 	sp := Models[name]
 	path := filepath.Join(cache, "models", sp.File)
@@ -169,7 +170,7 @@ func ensureModel(name, cache string) string {
 	return path
 }
 
-// Runner holds the llama-server process for one scan; started on first use.
+// Runner holds the llama-server process for one scan. The process starts on first use.
 type Runner struct {
 	name, cache string
 	cmd         *exec.Cmd
@@ -247,8 +248,8 @@ func (r *Runner) complete(system, user string, maxTokens int) string {
 		return ""
 	}
 	body, _ := json.Marshal(map[string]any{
-		// Reasoning off and greedy sampling: on these small models reasoning was slower, less
-		// accurate and could use up the token limit, and the summary should repeat run to run.
+		// Reasoning is off and sampling is greedy. On these small models reasoning was slower,
+		// less accurate and could use up the token limit. The summary should also repeat run to run.
 		"messages": []map[string]string{{"role": "system", "content": system},
 			{"role": "user", "content": user}},
 		"chat_template_kwargs": map[string]any{"enable_thinking": false},
@@ -276,7 +277,7 @@ func (r *Runner) complete(system, user string, maxTokens int) string {
 // thinkRe matches the reasoning block, including one cut off by the token limit.
 var thinkRe = regexp.MustCompile(`(?s)<think>.*?(?:</think>|$)`)
 
-// chat is one completion; "" if llama.cpp or the model isn't available.
+// chat is one completion. It returns "" if llama.cpp or the model isn't available.
 func (r *Runner) chat(system, user string, maxTokens int) string {
 	return strings.TrimSpace(thinkRe.ReplaceAllString(r.complete(system, user, maxTokens), ""))
 }
@@ -292,9 +293,9 @@ var bulletRe = regexp.MustCompile(`^\s*(?:[-*\x{2022}]|\d+[.)])\s+(.+)$`)
 // emphasisRe matches markdown bold and code marks, which the page would show literally.
 var emphasisRe = regexp.MustCompile("\\*\\*|`")
 
-// Overview returns the key points for the Overview page, as [{topic, text}]: one request with
-// every section's facts, so the model can connect findings across them. topic is the bullet's
-// position, since a bullet may span sections.
+// Overview returns the key points for the Overview page, as [{topic, text}]. It sends one request
+// with every section's facts, so the model can connect findings across them. topic is the
+// bullet's position, since a bullet may span sections.
 func Overview(r *Runner, facts *pyjson.Obj) *pyjson.Obj {
 	name := r.name
 	points := []any{}
@@ -313,8 +314,8 @@ func Summarise(r *Runner, facts string) []string {
 }
 
 // bullets returns the reply's bullet lines without their markers, labels or markdown emphasis, at
-// most maxPoints of them. Other lines (a heading or preamble) are dropped, unless the reply has no
-// bullet markers at all: then each line that isn't a heading is a point.
+// most maxPoints of them. Other lines (a heading or preamble) are dropped. If the reply has no
+// bullet markers at all, each line that isn't a heading is a point.
 func bullets(text string) []string {
 	var marked, plain []string
 	for _, line := range py.SplitLines(text) {

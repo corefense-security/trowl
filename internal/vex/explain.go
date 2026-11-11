@@ -6,18 +6,18 @@ import (
 	"github.com/corefense-security/kcond"
 )
 
-// explain evaluates a gate against the config as kcond's Eval does and says why, in the gate's own
-// shape: each option it names with the value the config gives it, joined by the gate's && and ||.
-// An && that one failing option decides, or an || that one holding branch decides, is explained by
-// that operand alone, so a compiled file shows the branch that compiled it and a file left out the
-// option that left it out:
+// explain evaluates a gate against the config as kcond's Eval does, and says why. The reason keeps
+// the gate's shape. Each option the gate names appears with its config value, joined by the gate's
+// && and ||. When one failing operand decides an &&, or one holding branch decides an ||, that
+// operand alone is the reason. So a compiled file shows the branch that compiled it, and a file
+// left out shows the option that left it out:
 //
 //	CONFIG_DLM || (CONFIG_IP_SCTP && CONFIG_NET), DLM unset, IP_SCTP=m, NET=y
 //	  → true,  "CONFIG_IP_SCTP=m && CONFIG_NET=y"
 //	the same with NET unset
 //	  → false, "CONFIG_DLM=n || CONFIG_NET=n"
 //
-// The third result tells the caller that the reason joins operands, so it goes in parentheses.
+// The third result reports whether the reason joins operands, so the caller puts it in parentheses.
 func explain(e *kcond.Expr, cfg kcond.Config) (kcond.Tri, string, bool) {
 	switch e.Op {
 	case kcond.OpConst:
@@ -41,7 +41,7 @@ func explain(e *kcond.Expr, cfg kcond.Config) (kcond.Tri, string, bool) {
 		short, res, sep = kcond.True, kcond.False, " || "
 	}
 	parts := make([]string, 0, len(e.Args))
-	seen := map[string]bool{} // an operand an || branch explains may also be one of its own
+	seen := map[string]bool{} // an || operand's reason can repeat another operand's
 	for _, a := range e.Args {
 		t, why, joined := explain(a, cfg)
 		if t == short {
@@ -61,9 +61,9 @@ func explain(e *kcond.Expr, cfg kcond.Config) (kcond.Tri, string, bool) {
 	return res, strings.Join(parts, sep), len(parts) > 1
 }
 
-// leaf evaluates one option test, or its negation, and writes the value the config gives the
-// option, adding what the gate needed when that is not the value: CONFIG_NET=y,
-// CONFIG_KVM=m (needs y), CONFIG_X=y (must be off).
+// leaf evaluates one option test, or its negation, and writes the option's config value, such as
+// CONFIG_NET=y. When the test fails it adds what the gate needed, as in CONFIG_KVM=m (needs y) or
+// CONFIG_X=y (must be off).
 func leaf(v *kcond.Expr, cfg kcond.Config, negated bool) (kcond.Tri, string) {
 	if !kcond.IsSymbol(v.Name) {
 		return kcond.Unknown, v.Name + " (not a config option)"
@@ -86,8 +86,8 @@ func leaf(v *kcond.Expr, cfg kcond.Config, negated bool) (kcond.Tri, string) {
 	case negated:
 		why += " (must not be " + wanted(v.State) + ")"
 	case v.State != kcond.Enabled && val != "n":
-		// Only a value of the wrong kind needs saying: an unset option fails
-		// =y and =m alike, and X=y || X=m then reads as one CONFIG_X=n.
+		// Only a value of the wrong kind needs a note. An unset option fails
+		// =y and =m alike, so X=y || X=m then reads as one CONFIG_X=n.
 		why += " (needs " + wanted(v.State) + ")"
 	}
 	return t, why

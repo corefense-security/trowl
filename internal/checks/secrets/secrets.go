@@ -1,7 +1,7 @@
 // Package secrets finds private keys, baked-in host keys and well-known token formats.
 //
-// Matched values are never written to the report in full: evidence carries a short,
-// redacted preview and the SHA-256 of the match so identical secrets across images
+// Matched values are never written to the report in full. Evidence carries a short,
+// redacted preview and the SHA-256 of the match, so identical secrets across images
 // can be correlated without leaking them.
 package secrets
 
@@ -24,8 +24,8 @@ const maxBytes = 4 * 1024 * 1024
 
 var elfMagic = []byte("\x7fELF")
 
-// The BEGIN line; the matching END line (same kind, within 8192 bytes) is found by hand because
-// Go's regexp has no backreferences.
+// pemBegin matches the BEGIN line. The matching END line (same kind, within 8192 bytes) is found
+// by hand because Go's regexp has no backreferences.
 var pemBegin = regexp.MustCompile(`-----BEGIN ((?:RSA |EC |DSA |OPENSSH |ENCRYPTED |ED25519 )?PRIVATE KEY)-----`)
 
 const pemMaxBody = 8192
@@ -111,14 +111,14 @@ func ScanFile(imagePath, real string) []model.Finding {
 		return findings
 	}
 	if bytes.HasPrefix(data, elfMagic) {
-		return findings // binaries are covered by the ELF checks; keys there are rare and noisy
+		return findings // the ELF checks cover binaries, and keys there are rare and noisy
 	}
 
 	for _, m := range pemMatches(data) {
 		encrypted := strings.HasPrefix(m.kind, "ENCRYPTED") || bytes.Contains(m.body, []byte("Proc-Type: 4,ENCRYPTED"))
 		if m.kind == "OPENSSH PRIVATE KEY" && !encrypted {
-			// The base64 body names the cipher; "none" means an unprotected key.
-			// bytes.split() with no argument: ASCII whitespace only
+			// The base64 body names the cipher, and "none" means an unprotected key.
+			// Split on ASCII whitespace only, as Python's bytes.split() does with no argument.
 			joined := bytes.Join(bytes.FieldsFunc(m.body, func(r rune) bool {
 				return r == ' ' || r == '\t' || r == '\n' || r == '\r' || r == '\v' || r == '\f'
 			}), nil)
