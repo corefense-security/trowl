@@ -4,7 +4,7 @@ package sbom
 //
 // The status comes from the SBOM's own VEX assessments (Yocto's cve-check / sbom-cve-check):
 // affected -> unpatched, not_affected -> ignored, fixed -> fixed. Whether the CVE matters for
-// this image is decided per CVE across every component that carries it: a CVE only stops
+// this image is decided per CVE across every component that carries it. A CVE only stops
 // mattering when none of its carriers ship. That is package-level evidence only.
 
 import (
@@ -19,25 +19,26 @@ import (
 var statusOfVex = map[string]string{"affected": "unpatched", "not_affected": "ignored", "fixed": "fixed",
 	"under_investigation": "unknown", "": "unknown"}
 
-// Worst first: the row shows the worst status among the carriers that decide it.
-// "review" is trowl's own: a CVE in range whose files the kernel tree couldn't trace (see reviewed).
+// Worst first. The row shows the worst status among the carriers that decide it.
+// "review" is trowl's own status for a CVE in range whose files the kernel tree couldn't trace
+// (see reviewed).
 var statusOrder = []string{"unpatched", "review", "unknown", "ignored", "fixed"}
 
 var shippedOfRecipe = map[string]string{"present": "yes", "modified": "yes", "partial": "yes", "build-only": "build",
 	"absent": "no", "unknown": "unknown"}
 
-// MayShip reports whether a shipped value leaves a CVE in play: "unknown" can't be ruled out.
+// MayShip reports whether a shipped value leaves a CVE in play. "unknown" can't be ruled out.
 func MayShip(shipped string) bool { return shipped != "no" && shipped != "build" }
 
 var vectors = map[string]string{"N": "network", "A": "adjacent", "L": "local", "P": "physical"}
 var avRe = regexp.MustCompile(`\bAV:([NALP])\b`)
 
-// Fixed CVEs are most of the list (≈20k on a Yocto image) and rarely opened; keep their
-// summaries short so the self-contained dashboard stays small.
+// Fixed CVEs are most of the list (≈20k on a Yocto image) and rarely opened. Their summaries
+// are kept short so the self-contained dashboard stays small.
 const fixedSummaryChars = 240
 
-// source says where a carrier's status comes from: the SBOM's own VEX, or trowl's match
-// of the component's version against the CVE data.
+// source says where a carrier's status comes from, either the SBOM's own VEX or trowl's
+// match of the component's version against the CVE data.
 func source(sb *Sbom, cve, comp string) string {
 	if sb.Matched(cve, comp) {
 		return "version-match"
@@ -86,7 +87,7 @@ func severity(score float64, has bool) string {
 	return "low"
 }
 
-// pickCVSS takes the highest of v3/v4; v2 only when nothing newer exists.
+// pickCVSS takes the highest of v3 and v4. It uses v2 only when nothing newer exists.
 func pickCVSS(vi *VulnInfo) *pyjson.Obj {
 	var best *pyjson.Obj
 	var bestScore float64
@@ -116,11 +117,11 @@ type carrier struct {
 	kernel  bool
 }
 
-// reviewed reports whether trowl's judgement makes a pair "Needs review": the CVE is in range,
-// trowl couldn't tell whether the kernel compiles its code (a file the tree lacks, a gate that
-// depends on more than the config), and the SBOM didn't itself say affected. That replaces the
-// SBOM's own clear, which trowl can't confirm, and a bare version match; an SBOM "affected"
-// stays, as the safer status.
+// reviewed reports whether trowl's judgement makes a pair "Needs review". That is when the CVE
+// is in range, trowl couldn't tell whether the kernel compiles its code (a file the tree lacks,
+// or a gate that depends on more than the config), and the SBOM didn't itself say affected.
+// Needs review replaces an SBOM clear, which trowl can't confirm, and a bare version match. An
+// SBOM "affected" stays, as the safer status.
 func reviewed(a *Assessment) bool {
 	return a != nil && a.Status == "under_investigation" && a.Stated != "affected"
 }
@@ -165,6 +166,15 @@ func BuildCVEs(sb *Sbom, status *Status) []*pyjson.Obj {
 					"stable", fix.Stable, "stable_commit", fix.StableCommit)}
 			if a != nil {
 				c.obj.Set("assessment", assessmentObj(a))
+			}
+			// Without an SBOM a component's files are where its version was read from (binary
+			// fingerprints). An SBOM's own file lists only show presence, so they are left out.
+			if sb.Inventory != "" && len(pkg.Files) > 0 {
+				paths := make([]string, len(pkg.Files))
+				for i, f := range pkg.Files {
+					paths[i] = f.Name
+				}
+				c.obj.Set("found_in", paths)
 			}
 			if _, ok := carriers[cve]; !ok {
 				order = append(order, cve)

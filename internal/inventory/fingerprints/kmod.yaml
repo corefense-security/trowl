@@ -1,0 +1,15 @@
+# kmod --version prints "kmod version 34.2". The library only has Yocto's debug path.
+package: kmod
+cpes: ["cpe:2.3:a:*:kmod"]
+evidence:
+  - files: [kmod]
+    pattern: '\x00kmod version (?P<version>\d+(?:\.\d+)?)\x00'
+  - files: [kmod, libkmod.so*]
+    pattern: '/usr/src/debug/kmod/(?P<version>[0-9][^/\x00]*)/'
+examples:
+  - file: kmod
+    contains: " single char\x0a\0kmod version 34.2\0-ZSTD +XZ +ZLI"
+    version: "34.2"
+  - file: libkmod.so.2.5.1
+    contains: "\0\0\0\0/usr/src/debug/kmod/34.2/libkmod/libkmo"
+    version: "34.2"

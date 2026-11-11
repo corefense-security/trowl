@@ -1,0 +1,10 @@
+# BusyBox prints "BusyBox v1.37.0 (...)" in its usage text and syslogd banner.
+package: busybox
+cpes: [cpe:2.3:a:busybox:busybox]
+evidence:
+  - files: [busybox, busybox.*]
+    pattern: 'BusyBox v(?P<version>\d+\.\d+\.\d+)[ \x00]'
+examples:
+  - file: busybox.nosuid
+    contains: "logd started: BusyBox v1.37.0\0\0\0\0\0\0\0\0\x0amode \""
+    version: 1.37.0

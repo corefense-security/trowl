@@ -1,0 +1,14 @@
+# The programs' --version text, UTIL_LINUX_VERSION ("util-linux 2.41.6"), as its own string.
+# Yocto installs them under alternative names (sulogin.util-linux). BusyBox applets of the same
+# name are links and aren't read.
+package: util-linux
+# NVD files it under "kernel". Its own advisories (GitHub, the CNA) use "util-linux", and NVD
+# leaves many of those unanalysed, so both are needed.
+cpes: [cpe:2.3:a:kernel:util-linux, cpe:2.3:a:util-linux:util-linux]
+evidence:
+  - files: [sulogin*, agetty*, login.util-linux, su.util-linux, mount*, umount*, fdisk*, sfdisk*, cfdisk*, lsblk*, blkid*, findmnt*, losetup*, dmesg*, hwclock*, fsck*, mkswap*, swapon*, swapoff*, lscpu*, nsenter*, unshare*, kill.util-linux, more*, logger*, flock*, getopt*]
+    pattern: '\x00util-linux (?P<version>\d+\.\d+(?:\.\d+)?)\x00'
+examples:
+  - file: sulogin.util-linux
+    contains: "ent\0%s from %s\0util-linux 2.41.6\0features:\0 (%s"
+    version: 2.41.6

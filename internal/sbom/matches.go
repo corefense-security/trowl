@@ -12,8 +12,9 @@ type CPE struct {
 	Comp, Vendor, Product, Version string
 }
 
-// FromInventory stands in for an SBOM when the image has none: the components found in the
-// image, all present, with no VEX. CPE product is the component's name unless it has its own CPE.
+// FromInventory builds a stand-in SBOM when the image has none. It holds the components found in
+// the image, all present, with no VEX. CPE product is the component's name unless it has its own
+// CPE.
 func FromInventory(source string, comps []Package) (*Sbom, *Status) {
 	s := &Sbom{Packages: map[string]*Package{}, Generates: newIDList(), RuntimeDeps: newIDList(), BuildDeps: newIDList(),
 		Vulns: newIDList(), vex: map[pair]string{}, vexNotes: map[pair]string{}, stated: map[pair]string{}, matched: map[pair]bool{}, nameOnly: map[pair]bool{}, fixes: map[pair]Fix{},
@@ -22,6 +23,9 @@ func FromInventory(source string, comps []Package) (*Sbom, *Status) {
 	for i := range comps {
 		p := comps[i]
 		p.ID, p.Role = "inventory/"+p.Name, "recipe"
+		if _, dup := s.Packages[p.ID]; dup {
+			p.ID += "@" + p.Version // two versions of one package, as binaries can show
+		}
 		if len(p.Cpes) == 0 {
 			p.Cpes = []string{"cpe:2.3:a:*:" + strings.ToLower(p.Name) + ":" + p.Version + ":*:*:*:*:*:*:*"}
 		}
@@ -69,7 +73,7 @@ func (s *Sbom) MatchTargets() []CPE {
 }
 
 // AddMatch records that a version match found cve in component comp. The SBOM's own
-// assessment of that pair, when it has one, is kept; otherwise the CVE counts as affected.
+// assessment of that pair, when it has one, is kept. Otherwise the CVE counts as affected.
 // info fills in what the SBOM doesn't know about the CVE.
 func (s *Sbom) AddMatch(comp, cve string, info *VulnInfo) {
 	if _, ok := s.Packages[comp]; !ok {
@@ -109,7 +113,6 @@ func (s *Sbom) AddMatch(comp, cve string, info *VulnInfo) {
 	}
 }
 
-// Matched reports whether the pair's status came from a version match, not from the SBOM.
 // Listed returns each component's CVEs as [comp, cve] pairs.
 func (s *Sbom) Listed() [][2]string {
 	var out [][2]string
@@ -135,11 +138,12 @@ func (s *Sbom) SetFix(comp, cve string, fix Fix) { s.fixes[pair{cve, comp}] = fi
 // FixOf is the upstream fix, zero if unknown.
 func (s *Sbom) FixOf(cve, comp string) Fix { return s.fixes[pair{cve, comp}] }
 
+// Matched reports whether the pair's status came from a version match rather than the SBOM.
 func (s *Sbom) Matched(cve, comp string) bool { return s.matched[pair{cve, comp}] }
 
-// MarkNameOnly records that a version match rests on the package name alone: the SBOM gives no
-// vendor, so the CVE may be for another product of the same name. A CVE the SBOM lists itself
-// isn't affected.
+// MarkNameOnly records that a version match rests on the package name alone. The SBOM gives no
+// vendor, so the CVE may be for another product of the same name. A CVE the SBOM lists itself is
+// left unmarked.
 func (s *Sbom) MarkNameOnly(comp, cve string) {
 	if s.Matched(cve, comp) {
 		s.nameOnly[pair{cve, comp}] = true
@@ -162,7 +166,7 @@ type Assessment struct {
 }
 
 // Assess records a. A decided status replaces the one the pair had. under_investigation leaves
-// the VEX status as it was; the report shows such a pair as Needs review (see reviewed).
+// the VEX status as it was, and the report shows such a pair as Needs review (see reviewed).
 func (s *Sbom) Assess(cve, comp string, a *Assessment) {
 	k := pair{cve, comp}
 	s.assessed[k] = a
@@ -205,7 +209,7 @@ func (p *Package) IsKernel() bool {
 }
 
 // AssessesKernel reports whether the SBOM carries a CVE scanner's verdicts on the kernel. Only a
-// scanner states "affected": a plain Yocto SBOM lists the recipe's own CVE_STATUS lines, all fixed
+// scanner states "affected". A plain Yocto SBOM lists the recipe's own CVE_STATUS lines, all fixed
 // or not affected, and says nothing about the thousands of CVEs nobody wrote a line for.
 func (s *Sbom) AssessesKernel() bool {
 	for _, comp := range s.KernelComponents() {

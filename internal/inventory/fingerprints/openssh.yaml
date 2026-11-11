@@ -1,0 +1,15 @@
+# Portable OpenSSH's version banner, SSH_VERSION ("OpenSSH_10.3p1"), as a NUL-terminated string.
+# sshd also holds compatibility patterns for other SSH servers ("OpenSSH_3.*"), so the version
+# must be followed by the portable suffix and the string's end.
+package: openssh
+cpes: [cpe:2.3:a:openbsd:openssh]
+evidence:
+  - files: [sshd, sshd-session, sshd-auth, ssh, ssh.*, scp, scp.*, sftp, sftp.*, sftp-server, ssh-keygen, ssh-keyscan, ssh-agent, ssh-add]
+    pattern: '\x00OpenSSH_(?P<version>\d+\.\d+p\d+)\x00'
+examples:
+  - file: sshd
+    contains: "\x0a\0command-line\0OpenSSH_10.3p1\0%s, %s\x0a\0/dev/n"
+    version: 10.3p1
+rejects:
+  - file: sshd
+    contains: "X proposal: %s\0OpenSSH_3.*\0Sun_SSH_1.0*\0"

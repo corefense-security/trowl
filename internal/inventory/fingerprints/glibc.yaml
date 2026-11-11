@@ -1,0 +1,10 @@
+# libc.so.6 carries the banner it prints when run as a program.
+package: glibc
+cpes: [cpe:2.3:a:gnu:glibc]
+evidence:
+  - files: [libc.so.6, libc-*.so]
+    pattern: 'GNU C Library \(GNU libc\) [a-z ]*release version (?P<version>\d+\.\d+(?:\.\d+)?)'
+examples:
+  - file: libc.so.6
+    contains: "\0\0\0\0GNU C Library (GNU libc) stable release version 2.43.\x0aCopyright (C"
+    version: "2.43"

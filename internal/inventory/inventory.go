@@ -40,8 +40,8 @@ func Read(rootfs string) ([]Component, string) {
 	return nil, ""
 }
 
-// parseStatus reads an opkg or dpkg status file. A package names its source in Source: a recipe
-// file for opkg ("busybox_1.37.0.bb"), a package name for dpkg ("glibc (2.36-9)").
+// parseStatus reads an opkg or dpkg status file. A package names its source in Source, as a
+// recipe file for opkg ("busybox_1.37.0.bb") or a package name for dpkg ("glibc (2.36-9)").
 func parseStatus(text string) []Component {
 	found := map[string]string{}
 	for _, block := range strings.Split(text, "\n\n") {
@@ -64,7 +64,7 @@ func parseStatus(text string) []Component {
 	return sorted(found)
 }
 
-// upstream drops a package version's epoch and packaging revision: 1:2.36-r0 is 2.36.
+// upstream drops a package version's epoch and packaging revision, so 1:2.36-r0 becomes 2.36.
 func upstream(v string) string {
 	if _, rest, ok := strings.Cut(v, ":"); ok {
 		v = rest
@@ -97,7 +97,7 @@ func readRpm(path string) []Component {
 		if err != nil {
 			continue
 		}
-		// Source packages are what CVEs are filed against; gpg-pubkey entries have none.
+		// Source packages are what CVEs are filed against. gpg-pubkey entries have none.
 		if m := sourceRpm.FindStringSubmatch(headerString(blob, 1044)); m != nil {
 			found[m[1]] = m[2]
 		}
@@ -105,8 +105,8 @@ func readRpm(path string) []Component {
 	return sorted(found)
 }
 
-// headerString reads a string tag from an rpm header blob: an entry count, a data size, 16-byte
-// index entries (tag, type, offset, count), then the data.
+// headerString reads a string tag from an rpm header blob. The blob holds an entry count, a data
+// size, 16-byte index entries (tag, type, offset, count), then the data.
 func headerString(b []byte, tag uint32) string {
 	if len(b) < 8 {
 		return ""

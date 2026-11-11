@@ -37,7 +37,7 @@ type Options struct {
 	KernelSrc    string
 	KernelTree   string // source tree of the image's kernel, for the VEX of kernel CVEs
 	KernelPolicy string
-	Started      time.Time // when the scan began, including unpacking; zero means when Run was called
+	Started      time.Time // when the scan began, including unpacking (zero means when Run was called)
 }
 
 type Result struct {
@@ -158,7 +158,7 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 		for _, k := range keys {
 			statusCounts.Set(k.role+":"+k.status, statusN[k])
 		}
-		// Counted as the Overview counts them: a package with no files can't be seen either way.
+		// Counted the same way as the Overview. A package with no files can't be seen either way.
 		shipped := statusN[rs{"package", "present"}] + statusN[rs{"package", "modified"}] + statusN[rs{"package", "partial"}]
 		inImage := fmt.Sprintf("%d of %d packages in image", shipped, shipped+statusN[rs{"package", "absent"}])
 		if shipped == 0 {
@@ -266,7 +266,7 @@ func truthy(v any) bool {
 }
 
 // overviewFacts are the facts the model interprets for the Overview summary. Every number is
-// computed here; the model only explains them. Keys are numbered in the order to cover them.
+// computed here, and the model only explains them. Keys are numbered in the order to cover them.
 func overviewFacts(findings []any, binaries []any, kernel, sb, cv *pyjson.Obj) *pyjson.Obj {
 	facts := pyjson.New()
 	sv := pyjson.New()
@@ -374,7 +374,7 @@ func hardeningFacts(binaries []any) *pyjson.Obj {
 				missing.Add("FORTIFY", 1)
 			}
 		}
-		// Only x86 and arm64 ELF notes record these; other architectures have no cf_protection.
+		// Only x86 and arm64 ELF notes record these. Other architectures have no cf_protection.
 		if cf, _ := bo.G("cf_protection").(*pyjson.Obj); cf != nil {
 			cfChecked++
 			if !truthy(cf.G("ibt")) && !truthy(cf.G("bti")) {
@@ -402,8 +402,9 @@ func hardeningFacts(binaries []any) *pyjson.Obj {
 	return out
 }
 
-// topCVE names the highest-CVSS unpatched CVE on a shipped package, with its component; userland
-// leaves out kernel CVEs. Equal scores go to the lowest id, so the fact is the same every run.
+// topCVE names the highest-CVSS unpatched CVE on a shipped package, with its component. With
+// userland set it leaves out kernel CVEs. Equal scores go to the lowest id, so the fact is the
+// same every run.
 func topCVE(rows []any, userland bool) string {
 	var best *pyjson.Obj
 	top := -1.0
@@ -501,11 +502,17 @@ func cveFacts(sv, cv *pyjson.Obj, hasSBOM bool) {
 	summary := cv.G("summary").(*pyjson.Obj)
 	rows := cv.G("rows").([]any)
 	if !hasSBOM {
-		inventory := "the image's package database"
-		if s, ok := sources.G("inventory").(string); ok && s != "" {
-			inventory = "the image's " + s + " database"
+		from := "came from the image's package database"
+		switch s, _ := sources.G("inventory").(string); s {
+		case "":
+		case "kernel only":
+			from = "unknown: the image has no package database, so only the kernel was checked"
+		case inventory.FromBinaries:
+			from = "were read from the image's binaries (it has no package database)"
+		default:
+			from = "came from the image's " + s + " database"
 		}
-		sv.Set("SBOM", "Not supplied; package versions came from "+inventory)
+		sv.Set("SBOM", "Not supplied; package versions "+from)
 	}
 	found := "Matched by package version; not confirmed as exploitable on this image"
 	if !hasSBOM {
@@ -596,7 +603,7 @@ func cveFacts(sv, cv *pyjson.Obj, hasSBOM bool) {
 const maxSecretDirs = 40
 
 // secretDirs counts the secrets per directory, so the model can tell test fixtures from real
-// material by path. Past limit it keeps the shallowest directories: real config sits near the
+// material by path. Past limit it keeps the shallowest directories. Real config sits near the
 // root, and deep test trees must not push it out.
 func secretDirs(paths []string, limit int) *pyjson.Obj {
 	counts := map[string]int{}
@@ -627,7 +634,7 @@ func secretDirs(paths []string, limit int) *pyjson.Obj {
 
 var kernelRelease = regexp.MustCompile(`^\d+(\.\d+)*`)
 
-// checkKernelVersion stops the scan when the SBOM's kernel isn't the one in /lib/modules: the
+// checkKernelVersion stops the scan when the SBOM's kernel isn't the one in /lib/modules. The
 // SBOM then describes a different build, and every CVE from it would be for the wrong kernel.
 func checkKernelVersion(sb *sbom.Sbom, modules string) error {
 	if modules == "" {
@@ -637,7 +644,7 @@ func checkKernelVersion(sb *sbom.Sbom, modules string) error {
 	for _, id := range sb.PackageOrder {
 		for _, c := range sb.Packages[id].Cpes {
 			if f := strings.Split(c, ":"); len(f) > 5 && f[4] == "linux_kernel" {
-				// Compare release numbers only: a CPE may carry a suffix such as 6.6.0+git.
+				// Compare release numbers only, since a CPE may carry a suffix such as 6.6.0+git.
 				if v := kernelRelease.FindString(f[5]); v != "" {
 					versions[v] = true
 				}
@@ -655,15 +662,16 @@ func checkKernelVersion(sb *sbom.Sbom, modules string) error {
 	return fmt.Errorf("kernel version mismatch: the SBOM lists %s but /lib/modules has %s", strings.Join(listed, ", "), modules)
 }
 
-// kernelVersion is the version the kernel check found: from the kernel config's header, else
+// kernelVersion is the version the kernel check found, from the kernel config's header or else
 // from /lib/modules.
 func kernelVersion(kernel *pyjson.Obj) string {
 	v, _ := kernel.G("version").(string)
 	return v
 }
 
-// imageInventory builds the component list for CVE matching without an SBOM: the kernel at the
-// version given, the rest from the image's package database. It is nil when it finds nothing.
+// imageInventory builds the component list for CVE matching without an SBOM. The kernel is added
+// at the version given. The rest come from the image's package database, or from version strings
+// in its binaries when it has none. It returns nil when it finds nothing.
 func imageInventory(rootfs, kernel string) (*sbom.Sbom, *sbom.Status) {
 	st := status.Start("reading package database")
 	var comps []sbom.Package
@@ -686,14 +694,36 @@ func imageInventory(rootfs, kernel string) (*sbom.Sbom, *sbom.Status) {
 			addKernel(v)
 		}
 	}
+	// With no package database, recognise packages from version strings in the binaries
+	// (internal/inventory/fingerprints).
+	var recognised []inventory.Found
+	if source == "" {
+		var err error
+		if recognised, err = inventory.Fingerprint(rootfs); err != nil {
+			status.Warn("reading versions from binaries: %v", err)
+		}
+		for _, f := range recognised {
+			files := make([]sbom.File, len(f.Files))
+			for i, p := range f.Files {
+				files[i] = sbom.File{Name: p}
+			}
+			comps = append(comps, sbom.Package{Name: f.Name, Version: f.Version, Cpes: f.CPEs, Files: files})
+		}
+		if len(recognised) > 0 {
+			source = inventory.FromBinaries
+		}
+	}
 	if len(comps) == 0 {
 		st.Fail("not found, and no kernel modules; CVEs not checked")
 		return nil, nil
 	}
-	if source == "" {
+	switch source {
+	case "":
 		st.Fail("not found; only the kernel is checked for CVEs")
 		source = "kernel only"
-	} else {
+	case inventory.FromBinaries:
+		st.Ok(fmt.Sprintf("not found; %d packages recognised from their binaries", len(recognised)))
+	default:
 		st.Ok(fmt.Sprintf("%s, %d packages", source, len(found)))
 	}
 	return sbom.FromInventory(source, comps)
@@ -763,12 +793,19 @@ func cveSection(sb *sbom.Sbom, presence *sbom.Status, rootfs string, opt Options
 	out := pyjson.O("summary", sbom.Summary(rows), "sources", sources, "rows", rowsOut)
 	if sb.Inventory != "" {
 		sources.Set("inventory", sb.Inventory)
-		// A component NVD has no product for can't be checked: its CVEs, if any, are filed under
-		// another name. Only known once the feed has been read.
+		// A component NVD has no product for can't be checked, because its CVEs (if any) are filed
+		// under another name. This is only known once the feed has been read.
 		unmapped := []any{}
 		for _, id := range sb.PackageOrder {
 			p := sb.Packages[id]
-			if product := strings.ToLower(p.Name); known != nil && !known[product] && p.Name != "linux" {
+			// The CPE's product, when the component has one (a fingerprint's), else its name.
+			product := strings.ToLower(p.Name)
+			if len(p.Cpes) > 0 {
+				if f := strings.Split(p.Cpes[0], ":"); len(f) > 4 {
+					product = strings.ToLower(f[4])
+				}
+			}
+			if known != nil && !known[product] && p.Name != "linux" {
 				unmapped = append(unmapped, pyjson.O("name", p.Name, "version", p.Version))
 			}
 		}
@@ -778,9 +815,9 @@ func cveSection(sb *sbom.Sbom, presence *sbom.Status, rootfs string, opt Options
 }
 
 // assessKernel sets the VEX status of the kernel's CVEs from the config gates of the files their
-// CNA records name. The result is for the report's sources: what was read and what it decided, nil
-// when nothing ran. A tree that can't be used stops the scan: asked for, it would otherwise leave
-// the report looking as if it had been checked.
+// CNA records name. It returns what was read and what it decided, for the report's sources, or nil
+// when nothing ran. A tree that can't be used stops the scan. Otherwise the user asked for a check
+// that didn't run, and the report would look as if it had.
 func assessKernel(sb *sbom.Sbom, feed *nvd.Result, rootfs string, opt Options) (any, error) {
 	if len(sb.KernelComponents()) == 0 {
 		return nil, nil
@@ -805,8 +842,8 @@ func assessKernel(sb *sbom.Sbom, feed *nvd.Result, rootfs string, opt Options) (
 		return nil, err
 	}
 	for _, comp := range sb.KernelComponents() {
-		// The release of the tree must be the kernel's: the gates of another release can clear
-		// CVEs this one has.
+		// The tree's release must be the kernel's. The gates of another release can clear CVEs
+		// this one has.
 		if v := kernelRelease.FindString(sb.Packages[comp].Version); v != "" && v != ev.Version() {
 			st.Fail("")
 			return nil, fmt.Errorf("kernel version mismatch: the tree is %s but the image's kernel is %s", ev.Version(), v)
@@ -855,12 +892,12 @@ func modulePackages(rootfs string, kernel *pyjson.Obj, sb *sbom.Sbom) {
 		return
 	}
 	// The SBOM links a package to a module only through the file path it declares, so the join
-	// is by path. Two things make a naive lookup unreliable:
-	//   - the spelling need not match the one the scan used: on a merged-/usr image the SBOM
-	//     names the module /usr/lib/... while the scan read it through the /lib symlink. Both
-	//     name the same file, so each side is resolved against the image before comparing.
-	//   - a file is usually declared by two packages, its own and the image's, which lists
-	//     every file in the image. The one declaring fewest files is the specific owner.
+	// is by path. A plain lookup goes wrong in two ways.
+	//   - The spelling may differ from the scan's. On a merged-/usr image the SBOM names the
+	//     module /usr/lib/... while the scan read it through the /lib symlink. Both name the
+	//     same file, so each side is resolved against the image before comparing.
+	//   - A file is usually declared by two packages, its own and the image's (which lists
+	//     every file in the image). The one declaring the fewest files is the specific owner.
 	real := func(path string) string {
 		r := py.InRoot(rootfs, path)
 		if rel, err := filepath.Rel(rootfs, r); err == nil {
@@ -906,8 +943,8 @@ func hasModuleSuffix(name string) bool {
 
 // versionMatch adds the CVEs that NVD and the kernel CNA list for each component's version,
 // as Trivy and Grype do. The SBOM's own VEX statuses are kept. It returns the data's
-// provenance for the report, the products the feed knows and the CVEs it has records for, or
-// nil when nothing was matched. feed is the match itself, nil the same way.
+// provenance for the report, the products the feed knows, the CVEs it has records for, and
+// the match itself as feed. All four are nil when nothing was matched.
 func versionMatch(sb *sbom.Sbom, opt Options) (meta any, known, inFeed map[string]bool, feed *nvd.Result) {
 	if opt.CacheDir == "" {
 		return nil, nil, nil, nil

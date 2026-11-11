@@ -1,0 +1,10 @@
+# liblzma's file name carries the release, because xz keeps the library version equal to the package's.
+package: xz
+cpes: [cpe:2.3:a:tukaani:xz]
+evidence:
+  - files: [liblzma.so.*]
+    name_pattern: '^liblzma\.so\.(?P<version>\d+\.\d+\.\d+)$'
+examples:
+  - file: liblzma.so.5.8.2
+    contains: "\x7fELF"
+    version: 5.8.2
