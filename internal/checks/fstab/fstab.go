@@ -88,7 +88,7 @@ func contains(xs []string, s string) bool {
 func Check(rootfs string) ([]*pyjson.Obj, []model.Finding) {
 	path := py.InRoot(rootfs, "etc/fstab")
 	if !py.IsFile(path) {
-		return []*pyjson.Obj{}, []model.Finding{{Check: "fstab.missing", Severity: "info", Path: "/etc/fstab",
+		return []*pyjson.Obj{}, []model.Finding{{Check: "fstab.missing", Path: "/etc/fstab",
 			Title: "No /etc/fstab in the image", Detail: "Mount options could not be assessed statically."}}
 	}
 	raw, _ := os.ReadFile(path)
@@ -104,11 +104,7 @@ func Check(rootfs string) ([]*pyjson.Obj, []model.Finding) {
 		if len(missing) == 0 {
 			continue
 		}
-		sev := "low"
-		if contains(missing, "noexec") || contains(missing, "nosuid") {
-			sev = "medium"
-		}
-		findings = append(findings, model.Finding{Check: "fstab.mount-options", Severity: sev, Path: "/etc/fstab",
+		findings = append(findings, model.Finding{Check: "fstab.mount-options", Path: "/etc/fstab",
 			Title: fmt.Sprintf("%s is missing %s", mp, strings.Join(missing, ", ")),
 			Detail: fmt.Sprintf("%s mount at %s (line %d) is missing a secure flag: add %s.", fstype, mp,
 				e.G("line").(int), strings.Join(missing, ", ")),

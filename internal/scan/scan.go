@@ -46,7 +46,6 @@ type Result struct {
 	Files      int
 	Binaries   int
 	Format     string
-	Counts     *pyjson.Counter
 	SbomCounts *pyjson.Obj // nil without an SBOM
 }
 
@@ -184,18 +183,14 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 
 	sort.SliceStable(findings, func(i, j int) bool {
 		a, b := findings[i], findings[j]
-		if ra, rb := model.SeverityRank(a.Severity), model.SeverityRank(b.Severity); ra != rb {
-			return ra > rb
-		}
 		if a.Check != b.Check {
 			return a.Check < b.Check
 		}
 		return a.Path < b.Path
 	})
-	bySev, byCheck, elfKinds := pyjson.NewCounter(), pyjson.NewCounter(), pyjson.NewCounter()
+	byCheck, elfKinds := pyjson.NewCounter(), pyjson.NewCounter()
 	findingObjs := make([]any, len(findings))
 	for i, f := range findings {
-		bySev.Add(f.Severity, 1)
 		byCheck.Add(f.Check, 1)
 		findingObjs[i] = f.Obj()
 	}
@@ -217,7 +212,6 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 		"tool", pyjson.O("name", "trowl", "version", model.Version),
 		"image", pyjson.O("path", py.CleanPath(image), "format", u.SourceFormat, "files", fileCount, "notes", notes),
 		"summary", pyjson.O(
-			"findings", bySev,
 			"by_check", byCheck,
 			"elf", elfKinds,
 			"scanned_at", started.UTC().Format(time.RFC3339),
@@ -244,7 +238,7 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 	}
 	result.G("summary").(*pyjson.Obj).Set("duration_s", py.Round2(time.Since(started).Seconds()))
 	res := &Result{Report: result, Findings: findings, Files: fileCount, Binaries: len(binaries),
-		Format: u.SourceFormat, Counts: bySev}
+		Format: u.SourceFormat}
 	if sbomSection != nil {
 		res.SbomCounts = sbomSection.G("status_counts").(*pyjson.Obj)
 	}

@@ -87,21 +87,6 @@ func Paint(style, s string) string {
 	return style + s + Reset
 }
 
-// SeverityStyle is the colour a finding severity is shown in.
-func SeverityStyle(severity string) string {
-	switch severity {
-	case "critical":
-		return Bold + Red
-	case "high":
-		return Red
-	case "medium":
-		return Yellow
-	case "low":
-		return Cyan
-	}
-	return Dim
-}
-
 // Banner lists what the scan will look at, as {name, value} rows under a title.
 func Banner(title string, rows ...[2]string) {
 	mu.Lock()

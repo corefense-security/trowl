@@ -564,9 +564,9 @@ func Check(rootfs, kernelConfig, kernelSrc, policyPath string) (*pyjson.Obj, []m
 		entries = append(entries, row)
 		if s := row.G("status").(string); s == "fail" || s == "missing" {
 			exposed := row.G("bucket") == "attack_surface"
-			check, sev := "kernel.hardening", "low"
+			check := "kernel.hardening"
 			if exposed {
-				check, sev = "kernel.attack-surface", "medium"
+				check = "kernel.attack-surface"
 			}
 			shown := "missing"
 			if a, ok := actual.(string); ok && a != "" {
@@ -576,7 +576,7 @@ func Check(rootfs, kernelConfig, kernelSrc, policyPath string) (*pyjson.Obj, []m
 			for _, k := range []string{"subsystem", "bucket", "ref", "note"} {
 				ev.Set(k, row.G(k))
 			}
-			findings = append(findings, model.Finding{Check: check, Severity: sev,
+			findings = append(findings, model.Finding{Check: check,
 				Title:  fmt.Sprintf("CONFIG_%s is %s, expected %s", option, shown, expectString(expectOut, expect)),
 				Detail: why, Evidence: ev})
 		}
@@ -586,7 +586,7 @@ func Check(rootfs, kernelConfig, kernelSrc, policyPath string) (*pyjson.Obj, []m
 	if modules.G("mode") == "enforced" {
 		for _, m := range modules.G("items").([]any) {
 			if signed, ok := m.(*pyjson.Obj).G("signed").(bool); ok && !signed {
-				findings = append(findings, model.Finding{Check: "kernel.unsigned-module", Severity: "low",
+				findings = append(findings, model.Finding{Check: "kernel.unsigned-module",
 					Path: m.(*pyjson.Obj).G("path").(string), Title: "Unsigned module will be refused by this kernel (MODULE_SIG_FORCE=y)"})
 			}
 		}
