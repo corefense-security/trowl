@@ -3,7 +3,6 @@ import { useMemo, type ReactNode } from "react";
 import type { Route } from "../App";
 import type { Report } from "../types";
 import { Card, CoverageDonut, type CoverageRow } from "../ui";
-import { cveSources } from "./Cves";
 
 /** A headline count. By default it is red when any need attention and green when none do. */
 function Stat({ icon, label, value, tone = value > 0 ? "stat-bad" : "stat-ok", foot, onClick }: {
@@ -36,11 +35,13 @@ function ShareOff({ title, labels }: { title: string; labels: string[] }) {
 
 /** One number out of a whole. A segmented bar shows the number first, then what makes up the
  *  rest, with a line saying what it means. */
-function Share({ title, n, of, nLabel, rest, note, color = "var(--violet)" }: {
+function Share({ title, n, of, nLabel, rest, note, color = "var(--violet)", split }: {
   title: string; n: number; of: number; nLabel: string; color?: string;
   rest: { label: string; value: number; color: string }[]; note: ReactNode;
+  /** The headline number in several segments, in place of the single nLabel one. */
+  split?: { label: string; value: number; color: string }[];
 }) {
-  const parts = [{ label: nLabel, value: n, color }, ...rest].filter((x) => x.value > 0);
+  const parts = [...(split ?? [{ label: nLabel, value: n, color }]), ...rest].filter((x) => x.value > 0);
   return (
     <div className="share">
       <div className="share-top">
@@ -99,9 +100,13 @@ export default function Overview({ r, go }: { r: Report; go: (r: Route, p?: Reco
   const sc = sbom?.status_counts ?? {};
   const cves = r.cves;
   // A CVE is off the device only when none of the packages that carry it ship.
+  // CVEs whose code doesn't reach the device: on build-time components, or kernel CVEs the
+  // kernel tree cleared (module not shipped, or code the config leaves out).
   const offDevice = cves?.rows.filter((x) => x.shipped === "build" || x.shipped === "no") ?? [];
-  const offOpen = offDevice.filter((x) => x.status === "unpatched").length;
-  const src = cveSources(cves?.rows ?? []);
+  const cleared = (why: string) => cves?.rows.filter((x) => x.kernel &&
+    x.carriers.some((c) => c.kernel && c.assessment?.status === "not_affected" && c.assessment.justification === why)).length ?? 0;
+  const moduleOff = cleared("component_not_present"), notCompiled = cleared("vulnerable_code_not_present");
+  const away = offDevice.length + moduleOff + notCompiled;
   // A normal image has setuid root binaries, so the tile only turns amber for a weakly built one.
   const suid = execs.filter((b) => b.uid === 0 && ((b.mode ?? 0) & 0o4000) !== 0);
   const weak = suid.filter((b) => !b.pie || !b.nx || b.relro !== "full" || (!b.canary && !b.no_symbols)).length;
@@ -163,26 +168,26 @@ export default function Overview({ r, go }: { r: Report; go: (r: Route, p?: Reco
                 rest={[{ label: "Build-time only", value: comp.build, color: "var(--neutral)" },
                   { label: "Packages not installed", value: comp.gone, color: "var(--violet-soft)" },
                   { label: "Unknown", value: comp.unknown, color: "var(--ink-2)" }]}
-                note={<>Each component in the SBOM builds one or more packages, and only installed packages ship. Build-time components
-                  never ship, so their CVEs don't apply to it.{" "}
+                note={<>Only components with installed packages that reach the image. Build-time dependencies don't ship.{" "}
                   <button className="share-link" onClick={() => go("sbom", { role: "recipe", status: "present", view: "table" })}>
                     Show them <ChevronRight size={13} /></button></>} />
               <Share title="Packages in SBOM" n={pk.match} of={declared} nLabel="Files match"
                 rest={[{ label: "Changed after build", value: pk.changed, color: "var(--warning)" },
                   { label: "Files missing", value: pk.partial + pk.absent, color: "var(--critical)" }]}
                 note={<>{pk.changed + pk.partial + pk.absent === 0 ? <>Every installed file has the hash the SBOM recorded.</>
-                  : <>Compared by path and SHA-256.{changedPaths.length > 0 && <> {changedPaths.length} file{changedPaths.length === 1 ? "" : "s"} changed
+                  : <>Installed files checked against SBOM by path and SHA-256.{changedPaths.length > 0 && <> {changedPaths.length} file{changedPaths.length === 1 ? "" : "s"} changed
                     across {pk.changed} package{pk.changed === 1 ? "" : "s"}: {changedPaths.slice(0, 3).map((p, i) =>
                     <span key={p}>{i > 0 && ", "}<code>{p}</code></span>)}{changedPaths.length > 3 && ` +${changedPaths.length - 3} more`}.</>}</>}{" "}
                   <button className="share-link" onClick={() => go("sbom", { role: "package", status: "present" })}>
                     Show them <ChevronRight size={13} /></button></>} />
               {cves && (
-                <Share title="CVEs not in image" n={offDevice.length} of={cves.rows.length} nLabel="Not in image" color="var(--good)"
-                  rest={[{ label: "On installed packages", value: cves.rows.length - offDevice.length, color: "var(--neutral)" }]}
-                  note={<>No package carrying these CVEs is installed, so they can't affect the device
-                    {offOpen ? <>; {offOpen} are still unpatched in the SBOM</> : ""}. Of the {src.total.toLocaleString()} on installed
-                    packages, {src.sbom.toLocaleString()} are listed in the SBOM and {src.matched.toLocaleString()} were found by matching package
-                    versions against NVD and the kernel CNA.{" "}
+                <Share title="CVEs not in image" n={away} of={cves.rows.length} nLabel="Not in image"
+                  split={[{ label: "Build time", value: offDevice.length, color: "var(--good)" },
+                    { label: "Kernel module not shipped", value: moduleOff, color: "var(--violet)" },
+                    { label: "Kernel code not compiled", value: notCompiled, color: "var(--violet-soft)" }]}
+                  rest={[{ label: "Potentially in image", value: cves.rows.length - away, color: "var(--neutral)" }]}
+                  note={<>Vulnerable code in build tools, or kernel code that's not compiled or whose module doesn't ship.{!cves.sources.kernel_vex && <> Scan with <code className="cmd">--kernel-tree</code> to
+                    clear kernel CVEs too.</>}{" "}
                     <button className="share-link" onClick={() => go("cves", { status: "all", shipped: "no" })}>
                       Show them <ChevronRight size={13} /></button></>} />
               )}
