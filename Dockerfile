@@ -36,19 +36,20 @@ RUN git clone --depth 1 --branch "${LLAMA_CPP_TAG}" https://github.com/ggml-org/
 # --- Runtime -----------------------------------------------------------------
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update \
- && apt-get install -y --no-install-recommends e2fsprogs squashfs-tools sqlite3 zstd ca-certificates libgomp1 \
+ && apt-get install -y --no-install-recommends e2fsprogs squashfs-tools sqlite3 zstd xz-utils ca-certificates libgomp1 \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/trowl /usr/local/bin/trowl
-# The licenses of what the binary includes (kcond, MIT), which must ship with it.
-COPY LICENSE THIRD_PARTY_NOTICES.md /usr/share/doc/trowl/
-# The model itself is not in the image: it is downloaded into /cache on the first scan.
+# trowl's license and notice, and the licenses of the third-party code the binary includes,
+# which must ship with it.
+COPY LICENSE NOTICE THIRD_PARTY_NOTICES.md /usr/share/doc/trowl/
+# The model itself is not in the image. It is downloaded into /cache on the first scan.
 COPY --from=llama /llama/build/bin/llama-server /usr/local/bin/llama-server
 COPY --from=llama /llama/LICENSE /usr/share/doc/llama.cpp/LICENSE
 
 RUN useradd --create-home --uid 10001 trowl && mkdir /cache && chown trowl /cache
 USER trowl
 WORKDIR /work
-# The model, KEV, EPSS and link results are cached here; mount a volume to reuse them across
+# The model, KEV, EPSS and link results are cached here. Mount a volume to reuse them across
 # runs (otherwise each run downloads the ~2.5 GB model again).
 ENV TROWL_HOST=0.0.0.0 XDG_CACHE_HOME=/cache
 VOLUME ["/cache"]

@@ -10,7 +10,7 @@
 # Go and Node are downloaded into a temporary directory for the build and removed afterwards.
 set -euo pipefail
 
-GO_VERSION=1.26.0 # at least go.mod's go line: GOTOOLCHAIN=local below won't fetch a newer one
+GO_VERSION=1.26.0 # at least go.mod's go line, since GOTOOLCHAIN=local below won't fetch a newer one
 GO_SHA_amd64=aac1b08a0fb0c4e0a7c1555beb7b59180b05dfc5a3d62e40e9de90cd42f88235
 GO_SHA_arm64=bd03b743eb6eb4193ea3c3fd3956546bf0e3ca5b7076c8226334afe6b75704cd
 NODE_VERSION=22.12.0
@@ -111,10 +111,11 @@ say "Building Trowl"
 bindir="$prefix/bin"
 $sudo mkdir -p "$bindir"
 $sudo install -m 0755 "$work/trowl-bin" "$bindir/trowl"
-# The licenses of what the binary includes (kcond, MIT), which must ship with it.
+# trowl's license and notice, and the licenses of the third-party code the binary includes,
+# which must ship with it.
 docdir="$prefix/share/doc/trowl"
 $sudo mkdir -p "$docdir"
-$sudo install -m 0644 "$src/LICENSE" "$src/THIRD_PARTY_NOTICES.md" "$docdir/"
+$sudo install -m 0644 "$src/LICENSE" "$src/NOTICE" "$src/THIRD_PARTY_NOTICES.md" "$docdir/"
 # Debian keeps debugfs in /usr/sbin, which isn't on a normal user's PATH.
 [ -e "$bindir/debugfs" ] || $sudo ln -s "$(PATH=$PATH:/usr/sbin:/sbin command -v debugfs)" "$bindir/debugfs"
 
