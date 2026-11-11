@@ -61,20 +61,8 @@ func fromBuildInfo(v, rev string, dirty bool) string {
 	return devVersion + "+" + rev
 }
 
-var Severities = []string{"info", "low", "medium", "high", "critical"}
-
-func SeverityRank(sev string) int {
-	for i, s := range Severities {
-		if s == sev {
-			return i
-		}
-	}
-	return -1
-}
-
 type Finding struct {
 	Check    string // e.g. "secrets.private-key", "elf.pie", "fstab.nosuid"
-	Severity string
 	Path     string // path inside the image ("/usr/bin/foo"), or "" for image-wide findings
 	Title    string
 	Detail   string
@@ -86,6 +74,6 @@ func (f Finding) Obj() *pyjson.Obj {
 	if ev == nil {
 		ev = pyjson.New()
 	}
-	return pyjson.O("check", f.Check, "severity", f.Severity, "path", f.Path, "title", f.Title,
+	return pyjson.O("check", f.Check, "path", f.Path, "title", f.Title,
 		"detail", f.Detail, "evidence", ev)
 }

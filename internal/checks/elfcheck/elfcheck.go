@@ -327,23 +327,23 @@ func FindingsFor(imagePath string, props *pyjson.Obj) []model.Finding {
 		return nil
 	}
 	var out []model.Finding
-	add := func(check, sev, title, detail string, ev *pyjson.Obj) {
-		out = append(out, model.Finding{Check: check, Severity: sev, Path: imagePath, Title: title, Detail: detail, Evidence: ev})
+	add := func(check, title, detail string, ev *pyjson.Obj) {
+		out = append(out, model.Finding{Check: check, Path: imagePath, Title: title, Detail: detail, Evidence: ev})
 	}
 	if !props.G("nx").(bool) {
-		add("elf.nx", "high", fmt.Sprintf("Executable stack (%s)", kind),
+		add("elf.nx", fmt.Sprintf("Executable stack (%s)", kind),
 			"PT_GNU_STACK is missing or marked executable; link with -z noexecstack.", nil)
 	}
 	if pie, ok := props.G("pie").(bool); ok && !pie {
-		add("elf.pie", "medium", "Executable is not PIE",
+		add("elf.pie", "Executable is not PIE",
 			"Loaded at a fixed address, so ASLR does not apply; build with -fPIE -pie.", nil)
 	}
 	switch props.G("relro") {
 	case "none":
-		add("elf.relro", "medium", fmt.Sprintf("No RELRO (%s)", kind),
+		add("elf.relro", fmt.Sprintf("No RELRO (%s)", kind),
 			"GOT and other relocation targets stay writable; link with -z relro -z now.", nil)
 	case "partial":
-		add("elf.relro", "low", fmt.Sprintf("Partial RELRO (%s)", kind),
+		add("elf.relro", fmt.Sprintf("Partial RELRO (%s)", kind),
 			"Lazy binding leaves the PLT GOT writable; link with -z now.", nil)
 	}
 	ff := props.G("fortify").(*pyjson.Obj)
@@ -351,11 +351,11 @@ func FindingsFor(imagePath string, props *pyjson.Obj) []model.Finding {
 	// Only judge canaries where the binary handles buffers via libc. Stub libraries and the
 	// dynamic loader rightly have none.
 	if !props.G("canary").(bool) && (unfortified != 0 || fortified != 0) {
-		add("elf.canary", "low", fmt.Sprintf("No stack protector symbols (%s)", kind),
+		add("elf.canary", fmt.Sprintf("No stack protector symbols (%s)", kind),
 			"Calls buffer-handling libc functions but has no __stack_chk_* references; build with -fstack-protector-strong.", nil)
 	}
 	if unfortified != 0 && fortified == 0 {
-		add("elf.fortify", "low", fmt.Sprintf("Not fortified (%s)", kind),
+		add("elf.fortify", fmt.Sprintf("Not fortified (%s)", kind),
 			fmt.Sprintf("Calls %d fortifiable libc function(s) with no *_chk variants; build with -O2 -D_FORTIFY_SOURCE=2 (or 3).", unfortified),
 			ff)
 	}
@@ -368,7 +368,7 @@ func FindingsFor(imagePath string, props *pyjson.Obj) []model.Finding {
 			}
 		}
 		if len(bad) > 0 {
-			add("elf."+tag, "medium", fmt.Sprintf("Insecure %s (%s)", strings.ToUpper(tag), strings.Join(bad, ", ")),
+			add("elf."+tag, fmt.Sprintf("Insecure %s (%s)", strings.ToUpper(tag), strings.Join(bad, ", ")),
 				"A relative or user-writable library search path lets a local user inject libraries.",
 				pyjson.O(tag, paths))
 		}

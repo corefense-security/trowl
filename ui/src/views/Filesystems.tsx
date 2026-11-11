@@ -1,6 +1,6 @@
 import { TriangleAlert } from "lucide-react";
 import type { Finding, Report } from "../types";
-import { PageHead, SevBadge, usePage } from "../ui";
+import { PageHead, usePage } from "../ui";
 
 type Mount = Report["fstab"][number];
 
@@ -70,7 +70,7 @@ export default function Filesystems({ r }: { r: Report }) {
                     <td>{e.fstype}</td>
                     <td className="ink2 ellipsis" title={e.spec}>{e.spec}</td>
                     <td title={`Options: ${e.options.join(",")}`}>{missing.length
-                      ? <span className="fs-missing"><TriangleAlert size={14} /> (add {missing.join(", ")})</span>
+                      ? <span className="fs-missing"><TriangleAlert size={14} /><span>add: {missing.map((m, i) => <span key={m}>{i > 0 && ", "}<code>{m}</code></span>)}</span></span>
                       : <span className="muted">–</span>}</td>
                     <td className="c">{n ? <b className="no num">{n}</b> : <span className="muted">–</span>}</td>
                   </tr>
@@ -92,13 +92,12 @@ export default function Filesystems({ r }: { r: Report }) {
           </div>
         ) : (<>
           <table>
-            <thead><tr><th>Path</th><th>What</th><th>Severity</th><th>Hash</th></tr></thead>
+            <thead><tr><th>Path</th><th>What</th><th>Hash</th></tr></thead>
             <tbody ref={secretPage.bodyRef}>
               {secretPage.rows.map(({ f, i }) => (
                   <tr key={`${f.path}:${f.title}:${i}`}>
                     <td><code>{f.path}</code></td>
                     <td>{f.title}</td>
-                    <td><SevBadge s={f.severity} /></td>
                     <td>{detail(f)}</td>
                   </tr>
                 ))}

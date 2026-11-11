@@ -1,8 +1,5 @@
-export type Severity = "info" | "low" | "medium" | "high" | "critical";
-
 export interface Finding {
   check: string;
-  severity: Severity;
   path: string;
   title: string;
   detail: string;
@@ -191,7 +188,6 @@ export interface Report {
   tool: { name: string; version: string };
   image: { path: string; format: string; files: number; notes: string[] };
   summary: {
-    findings: Partial<Record<Severity, number>>;
     scanned_at?: string;
     duration_s: number;
   };

@@ -1,14 +1,5 @@
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
-import type { Severity } from "./types";
-
-export const SEV_COLOR: Record<Severity, string> = {
-  critical: "var(--critical)",
-  high: "var(--serious)",
-  medium: "var(--warning)",
-  low: "var(--accent)",
-  info: "var(--neutral)",
-};
 
 export const STATUS: Record<string, { label: string; color: string; hint: string }> = {
   present: { label: "In image", color: "var(--good)", hint: "All declared files found with matching hashes" },
@@ -19,15 +10,6 @@ export const STATUS: Record<string, { label: string; color: string; hint: string
   "no-files": { label: "No files declared", color: "var(--violet)", hint: "Meta package; presence can't be decided from files" },
   unknown: { label: "Unknown", color: "var(--axis)", hint: "Only file-less packages; presence undecided" },
 };
-
-export function SevBadge({ s }: { s: Severity }) {
-  return (
-    <span className="sev">
-      <i style={{ background: SEV_COLOR[s] }} />
-      {s}
-    </span>
-  );
-}
 
 export function StatusChip({ s }: { s: string }) {
   const st = STATUS[s] ?? STATUS.unknown;

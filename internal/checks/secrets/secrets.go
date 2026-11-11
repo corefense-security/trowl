@@ -33,18 +33,18 @@ const pemMaxBody = 8192
 var putty = regexp.MustCompile(`PuTTY-User-Key-File-\d: [\w-]+\r?\nEncryption: ([\w-]+)`)
 
 type token struct {
-	check, title, sev string
-	re                *regexp.Regexp
+	check, title string
+	re           *regexp.Regexp
 }
 
 // Kept to formats with a low false-positive rate.
 var tokens = []token{
-	{"secrets.aws-access-key", "AWS access key ID", "high", regexp.MustCompile(`\b(?:AKIA|ASIA)[0-9A-Z]{16}\b`)},
-	{"secrets.github-token", "GitHub token", "high", regexp.MustCompile(`\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{60,})\b`)},
-	{"secrets.gitlab-token", "GitLab personal access token", "high", regexp.MustCompile(`\bglpat-[A-Za-z0-9_-]{20,}\b`)},
-	{"secrets.slack-token", "Slack token", "high", regexp.MustCompile(`\bxox[abposr]-[A-Za-z0-9-]{10,}\b`)},
-	{"secrets.google-api-key", "Google API key", "medium", regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{35}\b`)},
-	{"secrets.private-key-json", "Private key embedded in JSON", "high", regexp.MustCompile(`"private_key"\s*:\s*"-----BEGIN`)},
+	{"secrets.aws-access-key", "AWS access key ID", regexp.MustCompile(`\b(?:AKIA|ASIA)[0-9A-Z]{16}\b`)},
+	{"secrets.github-token", "GitHub token", regexp.MustCompile(`\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{60,})\b`)},
+	{"secrets.gitlab-token", "GitLab personal access token", regexp.MustCompile(`\bglpat-[A-Za-z0-9_-]{20,}\b`)},
+	{"secrets.slack-token", "Slack token", regexp.MustCompile(`\bxox[abposr]-[A-Za-z0-9-]{10,}\b`)},
+	{"secrets.google-api-key", "Google API key", regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{35}\b`)},
+	{"secrets.private-key-json", "Private key embedded in JSON", regexp.MustCompile(`"private_key"\s*:\s*"-----BEGIN`)},
 }
 
 // Host keys generated at build time are shared by every device flashed with the image.
@@ -96,7 +96,7 @@ func ScanFile(imagePath, real string) []model.Finding {
 	var findings []model.Finding
 	if hostKeyPaths.MatchString(imagePath) {
 		findings = append(findings, model.Finding{
-			Check: "secrets.baked-host-key", Severity: "high", Path: imagePath,
+			Check: "secrets.baked-host-key", Path: imagePath,
 			Title: "SSH host key baked into the image",
 			Detail: "Every device flashed with this image shares the same host identity; " +
 				"generate host keys on first boot instead.",
@@ -132,29 +132,29 @@ func ScanFile(imagePath, real string) []model.Finding {
 				encrypted = !bytes.Contains(raw, []byte("none"))
 			}
 		}
-		sev, word := "high", "Unencrypted"
+		word := "Unencrypted"
 		if encrypted {
-			sev, word = "medium", "Encrypted"
+			word = "Encrypted"
 		}
 		ev := pyjson.O("offset", m.start, "encrypted", encrypted)
 		redact(data[m.start:m.end], ev)
-		findings = append(findings, model.Finding{Check: "secrets.private-key", Severity: sev, Path: imagePath,
+		findings = append(findings, model.Finding{Check: "secrets.private-key", Path: imagePath,
 			Title: fmt.Sprintf("%s %s", word, strings.ToLower(m.kind)), Evidence: ev})
 	}
 	for _, loc := range putty.FindAllSubmatchIndex(data, -1) {
 		encrypted := string(data[loc[2]:loc[3]]) != "none"
-		sev, word := "high", "Unencrypted"
+		word := "Unencrypted"
 		if encrypted {
-			sev, word = "medium", "Encrypted"
+			word = "Encrypted"
 		}
-		findings = append(findings, model.Finding{Check: "secrets.private-key", Severity: sev, Path: imagePath,
+		findings = append(findings, model.Finding{Check: "secrets.private-key", Path: imagePath,
 			Title: word + " PuTTY private key", Evidence: pyjson.O("offset", loc[0], "encrypted", encrypted)})
 	}
 	for _, t := range tokens {
 		for _, loc := range t.re.FindAllIndex(data, -1) {
 			ev := pyjson.O("offset", loc[0])
 			redact(data[loc[0]:loc[1]], ev)
-			findings = append(findings, model.Finding{Check: t.check, Severity: t.sev, Path: imagePath,
+			findings = append(findings, model.Finding{Check: t.check, Path: imagePath,
 				Title: t.title, Evidence: ev})
 		}
 	}

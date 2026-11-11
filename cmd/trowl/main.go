@@ -67,8 +67,6 @@ func commands() []*command {
 			opts: []opt{
 				{names: []string{"--sbom"}, value: true, help: "SPDX 3.0 JSON-LD SBOM for the image"},
 				{names: []string{"-o", "--output"}, value: true, def: "trowl-report", help: "output directory"},
-				{names: []string{"--fail-on"}, value: true, choices: model.Severities,
-					help: "exit 1 if any finding is at or above this severity (for CI)"},
 				{names: []string{"--kernel-config"}, value: true, help: "kernel .config to check when the image carries none " +
 					"(/boot/config-* or a config embedded in the kernel image)"},
 				{names: []string{"--kernel-src"}, value: true, help: "kernel build tree whose .config to use when the image carries none"},
@@ -360,22 +358,11 @@ func cmdScan(a args) int {
 		st.Fail("dashboard UI not built")
 	}
 
-	// The summary keeps its words and order, which scripts may read. On a terminal it's coloured,
-	// with each severity in its own colour and the counts that are zero dimmed.
+	// The summary keeps its words and order, which scripts may read. On a terminal it's coloured.
 	paint := status.Paint
 	fmt.Fprintln(os.Stderr)
 	fmt.Printf("%s %s: %d files (%s), %d ELF\n", paint(status.Bold, "trowl"), model.Version, res.Files, res.Format, res.Binaries)
-	var parts []string
-	for i := len(model.Severities) - 1; i >= 0; i-- {
-		s := model.Severities[i]
-		n := res.Counts.Get(s)
-		style := status.SeverityStyle(s)
-		if n == 0 {
-			style = status.Dim
-		}
-		parts = append(parts, paint(style, fmt.Sprintf("%d %s", n, s)))
-	}
-	fmt.Println(paint(status.Bold, "findings:") + " " + strings.Join(parts, ", "))
+	fmt.Println(paint(status.Bold, "findings:") + " " + findingAreas(res.Findings))
 	if res.SbomCounts != nil {
 		var kv []string
 		for _, k := range res.SbomCounts.Keys() {
@@ -389,21 +376,44 @@ func cmdScan(a args) int {
 		fmt.Printf("%s %s (UI not built: no index.html)\n", paint(status.Bold, "wrote"), jsonPath)
 	}
 
-	exit := 0
-	if f := a["fail-on"]; f != "" {
-		threshold := model.SeverityRank(f)
-		over := 0
-		for _, fd := range res.Findings {
-			if model.SeverityRank(fd.Severity) >= threshold {
-				over++
+	return 0
+}
+
+// findingAreas counts findings by the dashboard page that shows them, such as
+// "5 mount options, 19 kernel config, 6 binaries", or "none".
+func findingAreas(findings []model.Finding) string {
+	areas := []struct{ prefix, name string }{
+		{"fstab.", "mount options"}, {"kernel.", "kernel config"}, {"elf.", "binaries"},
+		{"secrets.", "secrets"}, {"sbom.", "SBOM"},
+	}
+	counts := make([]int, len(areas))
+	other := 0
+	for _, f := range findings {
+		found := false
+		for i, a := range areas {
+			if strings.HasPrefix(f.Check, a.prefix) {
+				counts[i]++
+				found = true
+				break
 			}
 		}
-		if over > 0 {
-			status.Warn("failing: %d finding(s) at or above %s (--fail-on)", over, f)
-			exit = 1
+		if !found {
+			other++
 		}
 	}
-	return exit
+	var parts []string
+	for i, a := range areas {
+		if counts[i] > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", counts[i], a.name))
+		}
+	}
+	if other > 0 {
+		parts = append(parts, fmt.Sprintf("%d other", other))
+	}
+	if len(parts) == 0 {
+		return "none"
+	}
+	return strings.Join(parts, ", ")
 }
 
 func cmdUnpack(a args) int {

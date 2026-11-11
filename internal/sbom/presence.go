@@ -180,15 +180,15 @@ func Compare(sb *Sbom, rootfs string, otherPartitions bool) *Comparison {
 				if r, ok := sb.Packages[producer[pid]]; ok {
 					recipe = r.Name
 				}
-				findings = append(findings, model.Finding{Check: "sbom.package-not-installed", Severity: "medium",
+				findings = append(findings, model.Finding{Check: "sbom.package-not-installed",
 					Title:    fmt.Sprintf("SBOM lists package %s but none of its %d file(s) are in the image", label, c.G("declared").(int)),
 					Evidence: pyjson.O("spdxId", pid, "recipe", recipe)})
 			case "partial":
-				findings = append(findings, model.Finding{Check: "sbom.package-partial", Severity: "low",
+				findings = append(findings, model.Finding{Check: "sbom.package-partial",
 					Title:    fmt.Sprintf("Package %s: %d of %d declared file(s) missing", label, c.G("missing").(int), c.G("declared").(int)),
 					Evidence: withID(pid, c)})
 			case "modified":
-				findings = append(findings, model.Finding{Check: "sbom.package-modified", Severity: "info",
+				findings = append(findings, model.Finding{Check: "sbom.package-modified",
 					Title:    fmt.Sprintf("Package %s: %d file(s) differ from the SBOM hash", label, c.G("modified").(int)),
 					Detail:   "Usually post-install edits (config files, alternatives); check if unexpected.",
 					Evidence: withID(pid, c)})
@@ -215,7 +215,7 @@ func Compare(sb *Sbom, rootfs string, otherPartitions bool) *Comparison {
 				}
 			}
 		}
-		findings = append(findings, model.Finding{Check: "sbom.cves-not-in-image", Severity: "info",
+		findings = append(findings, model.Finding{Check: "sbom.cves-not-in-image",
 			Title: fmt.Sprintf("%d CVE(s) belong to %d component(s) that are not in the image (%d not already fixed or not_affected in the SBOM)",
 				n, len(notPresent), open),
 			Detail:   "Candidates for VEX not_affected / component_not_present.",
