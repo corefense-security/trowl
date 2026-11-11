@@ -1,9 +1,9 @@
 // Package unpack turns an image (directory, tarball, ext2/3/4, squashfs, or partitioned disk)
 // into a directory tree.
 //
-// Nothing is mounted and nothing needs root: filesystems are extracted with debugfs/unsquashfs,
-// partitioned images are split by reading the MBR/GPT ourselves. Compressed wrappers
-// (.zst/.xz/.gz/.bz2) are detected by magic, not by file extension.
+// Nothing is mounted and nothing needs root. Filesystems are extracted with debugfs/unsquashfs,
+// and partitioned images are split by reading the MBR/GPT ourselves. Compressed wrappers
+// (.zst/.xz/.gz/.bz2) are detected by their magic bytes. The file extension is ignored.
 package unpack
 
 import (
@@ -40,14 +40,14 @@ type Unpacked struct {
 	Rootfs       string
 	SourceFormat string
 	Notes        []string
-	Perms        map[string]Perm // regular files by image path; nil if they couldn't be read
+	Perms        map[string]Perm // regular files by image path, or nil if they couldn't be read
 	// OtherPartitions says the disk has partitions besides Rootfs, such as a boot partition that
 	// may be in a filesystem trowl can't read.
 	OtherPartitions bool
 }
 
-// Perm is a file's owner and mode as the image records them. The extracted copy can't keep them:
-// without root, every file ends up owned by whoever runs trowl.
+// Perm is a file's owner and mode as the image records them. The extracted copy can't keep them,
+// because without root every file ends up owned by whoever runs trowl.
 type Perm struct{ Mode, UID, GID int }
 
 func magic(path string, n int) []byte {
@@ -61,24 +61,23 @@ func magic(path string, n int) []byte {
 	return b[:m]
 }
 
-func decompress(src, work string) (string, string, error) {
+// decompress unwraps one compression layer, counting the compressed bytes read as progress.
+// zstd and xz go through their command-line tools. Go's standard library has no zstd decoder,
+// and the xz tool is many times faster than the Go decoder (it is tuned C, and decodes the
+// blocks of a multi-threaded xz file in parallel). Without the xz tool, the Go decoder is used.
+func decompress(src, work string, p Progress) (string, string, error) {
 	head := magic(src, 8)
 	dst := filepath.Join(work, filepath.Base(src)+".raw")
 	if bytes.HasPrefix(head, []byte{0x28, 0xb5, 0x2f, 0xfd}) {
 		if _, err := exec.LookPath("zstd"); err != nil {
 			return "", "", errorf("zstd is required to read .zst images")
 		}
-		out, err := os.Create(dst)
-		if err != nil {
-			return "", "", err
+		return dst, "zstd", withTool("zstd", []string{"-dcq"}, src, dst, p)
+	}
+	if bytes.HasPrefix(head, []byte("\xfd7zXZ\x00")) {
+		if _, err := exec.LookPath("xz"); err == nil {
+			return dst, "xz", withTool("xz", []string{"-dcq", "-T0"}, src, dst, p)
 		}
-		defer out.Close()
-		cmd := exec.Command("zstd", "-dcq", src)
-		cmd.Stdout = out
-		if err := cmd.Run(); err != nil {
-			return "", "", errorf("zstd can't read the image; it may be corrupt")
-		}
-		return dst, "zstd", nil
 	}
 	var kind string
 	switch {
@@ -96,14 +95,16 @@ func decompress(src, work string) (string, string, error) {
 		return "", "", err
 	}
 	defer in.Close()
+	p.Stage("decompressing "+kind, fileSize(src))
+	counted := counting{in, p}
 	var r io.Reader
 	switch kind {
 	case "gzip":
-		r, err = gzip.NewReader(in)
+		r, err = gzip.NewReader(counted)
 	case "xz":
-		r, err = xz.NewReader(in)
+		r, err = xz.NewReader(counted)
 	case "bzip2":
-		r = bzip2.NewReader(in)
+		r = bzip2.NewReader(counted)
 	}
 	if err != nil {
 		return "", "", err
@@ -117,6 +118,29 @@ func decompress(src, work string) (string, string, error) {
 		return "", "", err
 	}
 	return dst, kind, nil
+}
+
+// withTool decompresses src into dst with tool, which reads stdin rather than the file, so the
+// bytes it has read can be counted as progress.
+func withTool(tool string, args []string, src, dst string, p Progress) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	p.Stage("decompressing "+tool, fileSize(src))
+	cmd := exec.Command(tool, args...)
+	cmd.Stdin = counting{in, p}
+	cmd.Stdout = out
+	if err := cmd.Run(); err != nil {
+		return errorf("%s can't read the image; it may be corrupt", tool)
+	}
+	return nil
 }
 
 func isExt(path string) bool {
@@ -187,7 +211,7 @@ func partitions(path string) [][2]int64 {
 		}
 		return parts
 	}
-	// Plain MBR; extended partitions are not followed (rare in embedded images).
+	// Plain MBR. Extended partitions are not followed (rare in embedded images).
 	var parts [][2]int64
 	for _, e := range entries {
 		if e.ptype != 0 && e.ptype != 0x05 && e.ptype != 0x0f {
@@ -197,7 +221,7 @@ func partitions(path string) [][2]int64 {
 	return parts
 }
 
-func carve(path string, offset, size int64, dst string) error {
+func carve(path string, offset, size int64, dst string, p Progress) error {
 	in, err := os.Open(path)
 	if err != nil {
 		return err
@@ -211,17 +235,19 @@ func carve(path string, offset, size int64, dst string) error {
 	if _, err := in.Seek(offset, io.SeekStart); err != nil {
 		return err
 	}
-	_, err = io.CopyN(out, in, size)
+	p.Stage("copying", size)
+	_, err = io.CopyN(out, counting{in, p}, size)
 	if errors.Is(err, io.EOF) {
 		err = nil
 	}
 	return err
 }
 
-func extractExt(img, dest string) (map[string]Perm, error) {
+func extractExt(img, dest string, p Progress) (map[string]Perm, error) {
 	if _, err := exec.LookPath("debugfs"); err != nil {
 		return nil, errorf("debugfs (e2fsprogs) is required to read ext2/3/4 images")
 	}
+	p.Stage("listing ext files", 0)
 	entries, err := extList(img)
 	if err != nil {
 		return nil, err
@@ -230,21 +256,32 @@ func extractExt(img, dest string) (map[string]Perm, error) {
 	if err != nil {
 		return nil, err
 	}
+	// debugfs exits 0 after failing to write a file, so the sizes are checked after extracting.
+	// It escapes names outside plain ASCII, so those are left out of the check. Progress counts
+	// against the total size.
+	sizes := map[string]int64{}
+	var total int64
+	for _, e := range entries {
+		if e.mode&0o170000 == 0o100000 {
+			total += e.size
+			if !strings.Contains(e.path, "M-") && !strings.Contains(e.path, "^") {
+				sizes[e.path] = e.size
+			}
+		}
+	}
 	os.MkdirAll(dest, 0o755)
+	p.Stage("extracting ext", total)
+	stop := watchDir(dest, p)
 	var stderr bytes.Buffer
 	cmd := exec.Command("debugfs", "-R", "rdump / .", abs)
 	cmd.Dir = dest
 	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
+	err = cmd.Run()
+	stop()
+	if err != nil {
 		return nil, errorf("debugfs failed: %s", strings.TrimSpace(stderr.String()))
 	}
-	// debugfs exits 0 after failing to write a file, and escapes names outside plain ASCII.
-	sizes := map[string]int64{}
-	for _, e := range entries {
-		if e.mode&0o170000 == 0o100000 && !strings.Contains(e.path, "M-") && !strings.Contains(e.path, "^") {
-			sizes[e.path] = e.size
-		}
-	}
+	p.Stage("checking extracted files", 0)
 	if err := checkExtracted(dest, sizes); err != nil {
 		return nil, err
 	}
@@ -286,7 +323,7 @@ var (
 const extRootInode = 2
 
 // extList walks the image and refuses one that rdump can't extract safely. debugfs is only ever
-// given inode numbers: it runs lines starting "!" in a shell and doesn't check names, so a name
+// given inode numbers. It runs lines starting "!" in a shell and doesn't check names, so a name
 // from the image must not reach its command line or rdump's output path.
 func extList(img string) ([]extEntry, error) {
 	var entries []extEntry
@@ -430,21 +467,31 @@ func dirPerms(root string) map[string]Perm {
 	return perms
 }
 
-func extractSquashfs(img, dest string) (map[string]Perm, error) {
+func extractSquashfs(img, dest string, p Progress) (map[string]Perm, error) {
 	if _, err := exec.LookPath("unsquashfs"); err != nil {
 		return nil, errorf("unsquashfs (squashfs-tools) is required to read squashfs images")
 	}
+	p.Stage("listing squashfs files", 0)
 	out, err := exec.Command("unsquashfs", "-lln", img).Output()
 	if err != nil {
 		return nil, errorf("unsquashfs can't read the image; it may be corrupt")
 	}
 	perms, sizes := parseSquashList(string(out))
-	// -no-xattrs/-ignore-errors: device nodes and xattrs can't be created without root, so the
-	// exit status can't tell those from a lost file. checkExtracted does.
+	var total int64
+	for _, n := range sizes {
+		total += n
+	}
+	// Device nodes and xattrs can't be created without root, hence -no-xattrs and -ignore-errors.
+	// The exit status then can't tell those from a lost file, so checkExtracted does. -quiet turns
+	// off unsquashfs's own progress bar, and the bytes written are counted instead, as for debugfs.
+	p.Stage("extracting squashfs", total)
+	stop := watchDir(dest, p)
 	exec.Command("unsquashfs", "-no-xattrs", "-ignore-errors", "-quiet", "-f", "-d", dest, img).Run()
+	stop()
 	if !py.IsDir(dest) {
 		return nil, errorf("unsquashfs produced no output")
 	}
+	p.Stage("checking extracted files", 0)
 	return perms, checkExtracted(dest, sizes)
 }
 
@@ -453,20 +500,24 @@ func looksLikeRootfs(path string) bool {
 		(py.IsDir(py.InRoot(path, "usr")) || py.Exists(py.InRoot(path, "bin")))
 }
 
-func extractFilesystem(img, dest string) (string, map[string]Perm, error) {
+func extractFilesystem(img, dest string, p Progress) (string, map[string]Perm, error) {
 	if isExt(img) {
-		perms, err := extractExt(img, dest)
+		perms, err := extractExt(img, dest, p)
 		return "ext", perms, err
 	}
 	if isSquashfs(img) {
-		perms, err := extractSquashfs(img, dest)
+		perms, err := extractSquashfs(img, dest, p)
 		return "squashfs", perms, err
 	}
 	return "", nil, nil
 }
 
-// Unpack unpacks image under workdir (a temp dir if empty) and returns the rootfs path.
-func Unpack(image, workdir string) (*Unpacked, error) {
+// Unpack unpacks image under workdir (a temp dir if empty) and returns the rootfs path. It
+// reports its stages and progress to p, which may be nil.
+func Unpack(image, workdir string, p Progress) (*Unpacked, error) {
+	if p == nil {
+		p = noProgress{}
+	}
 	if py.IsDir(image) {
 		return &Unpacked{Rootfs: image, SourceFormat: "directory", Perms: dirPerms(image)}, nil
 	}
@@ -486,7 +537,7 @@ func Unpack(image, workdir string) (*Unpacked, error) {
 
 	current := py.Resolve(image)
 	for {
-		dec, kind, err := decompress(current, work)
+		dec, kind, err := decompress(current, work, p)
 		if err != nil {
 			return nil, err
 		}
@@ -498,7 +549,7 @@ func Unpack(image, workdir string) (*Unpacked, error) {
 	}
 
 	dest := filepath.Join(work, "rootfs")
-	kind, perms, err := extractFilesystem(current, dest)
+	kind, perms, err := extractFilesystem(current, dest, p)
 	if err != nil {
 		return nil, err
 	}
@@ -508,7 +559,7 @@ func Unpack(image, workdir string) (*Unpacked, error) {
 	}
 
 	if isTar(current) {
-		skipped, perms, err := extractTar(current, dest)
+		skipped, perms, err := extractTar(current, dest, p)
 		if err != nil {
 			return nil, err
 		}
@@ -519,6 +570,7 @@ func Unpack(image, workdir string) (*Unpacked, error) {
 		return &Unpacked{Rootfs: dest, SourceFormat: strings.Join(formats, "+"), Notes: notes, Perms: perms}, nil
 	}
 
+	p.Stage("reading the partition table", 0)
 	parts := partitions(current)
 	if len(parts) == 0 {
 		return nil, errorf("unrecognised image format: %s", py.CleanPath(image))
@@ -526,14 +578,15 @@ func Unpack(image, workdir string) (*Unpacked, error) {
 	formats = append(formats, "disk")
 	chosen := ""
 	var chosenPerms map[string]Perm
-	for i, p := range parts {
+	for i, part := range parts {
 		n := i + 1
 		partImg := filepath.Join(work, fmt.Sprintf("part%d.img", n))
-		if err := carve(current, p[0], p[1], partImg); err != nil {
+		pp := partProgress{p, fmt.Sprintf("partition %d: ", n)}
+		if err := carve(current, part[0], part[1], partImg, pp); err != nil {
 			return nil, err
 		}
 		partDir := filepath.Join(work, fmt.Sprintf("part%d", n))
-		kind, perms, err := extractFilesystem(partImg, partDir)
+		kind, perms, err := extractFilesystem(partImg, partDir, pp)
 		os.Remove(partImg)
 		if err != nil {
 			return nil, err
@@ -557,7 +610,8 @@ func Unpack(image, workdir string) (*Unpacked, error) {
 }
 
 // IterFiles calls fn(imagePath, realPath) for regular files, never following symlinks, in the
-// order os.walk visits them: each directory's files in directory order, then its subdirectories.
+// order os.walk visits them. That is each directory's files in directory order, then its
+// subdirectories.
 func IterFiles(rootfs string, fn func(imagePath, real string)) {
 	var walk func(dir, rel string)
 	walk = func(dir, rel string) {
@@ -565,7 +619,7 @@ func IterFiles(rootfs string, fn func(imagePath, real string)) {
 		if err != nil {
 			return
 		}
-		entries, _ := f.ReadDir(-1) // unsorted: the filesystem's own order, as os.scandir gives it
+		entries, _ := f.ReadDir(-1) // unsorted, in the filesystem's own order as os.scandir gives it
 		f.Close()
 		var dirs []string
 		for _, e := range entries {

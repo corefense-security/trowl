@@ -1,4 +1,4 @@
-// Command trowl: static analysis of embedded Linux root filesystems.
+// Command trowl runs static analysis of embedded Linux root filesystems.
 package main
 
 import (
@@ -185,11 +185,7 @@ func parse(c *command, argv []string) (args, int, bool) {
 		case strings.HasSuffix(p, "?"):
 			a[name] = c.posDefault[name]
 		default:
-			var missing []string
-			for _, q := range c.positionals[i:] {
-				missing = append(missing, q)
-			}
-			return nil, fail(c.name, "the following arguments are required: "+strings.Join(missing, ", ")), false
+			return nil, fail(c.name, "the following arguments are required: "+strings.Join(c.positionals[i:], ", ")), false
 		}
 	}
 	if len(pos) > len(c.positionals) {
@@ -295,9 +291,9 @@ func cmdScan(a args) int {
 			return 1
 		}
 	}
-	// NVD matching reads what was saved in the cache, so one that can't be written would quietly
-	// drop CVEs from the report: keep this run's data with the unpacked image instead. With
-	// --no-network nothing is saved, so a read-only cache is fine.
+	// NVD matching reads what was saved in the cache, so a cache that can't be written would
+	// quietly drop CVEs from the report. Keep this run's data with the unpacked image instead.
+	// With --no-network nothing is saved, so a read-only cache is fine.
 	cache := a["cache-dir"]
 	if cache != "" && !a.flag("no-network") {
 		if err := writable(cache); err != nil {
@@ -318,7 +314,7 @@ func cmdScan(a args) int {
 			}
 		}()
 		st := status.Start("unpacking filesystem")
-		u, err := unpack.Unpack(a["image"], work)
+		u, err := unpack.Unpack(a["image"], work, st)
 		if err != nil {
 			st.Fail("")
 			var ue *unpack.Error
@@ -364,25 +360,33 @@ func cmdScan(a args) int {
 		st.Fail("dashboard UI not built")
 	}
 
+	// The summary keeps its words and order, which scripts may read. On a terminal it's coloured,
+	// with each severity in its own colour and the counts that are zero dimmed.
+	paint := status.Paint
 	fmt.Fprintln(os.Stderr)
-	fmt.Printf("trowl %s: %d files (%s), %d ELF\n", model.Version, res.Files, res.Format, res.Binaries)
+	fmt.Printf("%s %s: %d files (%s), %d ELF\n", paint(status.Bold, "trowl"), model.Version, res.Files, res.Format, res.Binaries)
 	var parts []string
 	for i := len(model.Severities) - 1; i >= 0; i-- {
 		s := model.Severities[i]
-		parts = append(parts, fmt.Sprintf("%d %s", res.Counts.Get(s), s))
+		n := res.Counts.Get(s)
+		style := status.SeverityStyle(s)
+		if n == 0 {
+			style = status.Dim
+		}
+		parts = append(parts, paint(style, fmt.Sprintf("%d %s", n, s)))
 	}
-	fmt.Println("findings: " + strings.Join(parts, ", "))
+	fmt.Println(paint(status.Bold, "findings:") + " " + strings.Join(parts, ", "))
 	if res.SbomCounts != nil {
 		var kv []string
 		for _, k := range res.SbomCounts.Keys() {
 			kv = append(kv, fmt.Sprintf("%s=%d", k, res.SbomCounts.G(k)))
 		}
-		fmt.Println("sbom: " + strings.Join(kv, ", "))
+		fmt.Println(paint(status.Bold, "sbom:") + " " + strings.Join(kv, ", "))
 	}
 	if html {
-		fmt.Printf("wrote %s and %s (static dashboard)\n", jsonPath, htmlPath)
+		fmt.Printf("%s %s and %s (static dashboard)\n", paint(status.Bold, "wrote"), jsonPath, htmlPath)
 	} else {
-		fmt.Printf("wrote %s (UI not built: no index.html)\n", jsonPath)
+		fmt.Printf("%s %s (UI not built: no index.html)\n", paint(status.Bold, "wrote"), jsonPath)
 	}
 
 	exit := 0
@@ -403,8 +407,10 @@ func cmdScan(a args) int {
 }
 
 func cmdUnpack(a args) int {
-	u, err := unpack.Unpack(a["image"], a["dest"])
+	st := status.Start("unpacking filesystem")
+	u, err := unpack.Unpack(a["image"], a["dest"], st)
 	if err != nil {
+		st.Fail("")
 		fmt.Fprintf(os.Stderr, "trowl: %v\n", err)
 		var ue *unpack.Error
 		if errors.As(err, &ue) {
@@ -412,6 +418,7 @@ func cmdUnpack(a args) int {
 		}
 		return 1
 	}
+	st.Ok(u.SourceFormat)
 	fmt.Printf("%s: rootfs at %s\n", u.SourceFormat, py.CleanPath(u.Rootfs))
 	for _, n := range u.Notes {
 		fmt.Printf("  note: %s\n", n)
@@ -430,15 +437,15 @@ func cmdView(a args) int {
 	return 0
 }
 
-// serve serves a report folder. The folder itself stays plain static files; this only adds
+// serve serves a report folder. The folder itself stays plain static files. This only adds
 // no-store headers so a rescan shows up on reload instead of a cached copy.
 func serve(dir, host string, port int) {
 	files := http.FileServer(http.Dir(dir))
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		// The page is rendered from report.json on each request, with the UI built into this
-		// binary, rather than served from the index.html the scan wrote: that file carries the
-		// UI as it was at scan time, so a UI change would otherwise need a rescan to show.
+		// binary. The index.html the scan wrote carries the UI as it was at scan time, so a UI
+		// change would otherwise need a rescan to show.
 		if r.URL.Path == "/" || r.URL.Path == "/index.html" {
 			if raw, err := os.ReadFile(filepath.Join(dir, "report.json")); err == nil {
 				if page, ok := report.RenderJSON(raw); ok {
