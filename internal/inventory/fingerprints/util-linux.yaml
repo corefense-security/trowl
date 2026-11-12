@@ -8,7 +8,21 @@ cpes: [cpe:2.3:a:kernel:util-linux, cpe:2.3:a:util-linux:util-linux]
 evidence:
   - files: [sulogin*, agetty*, login.util-linux, su.util-linux, mount*, umount*, fdisk*, sfdisk*, cfdisk*, lsblk*, blkid*, findmnt*, losetup*, dmesg*, hwclock*, fsck*, mkswap*, swapon*, swapoff*, lscpu*, nsenter*, unshare*, kill.util-linux, more*, logger*, flock*, getopt*]
     pattern: '\x00util-linux (?P<version>\d+\.\d+(?:\.\d+)?)\x00'
+  # BusyBox images often ship only util-linux's libraries. libblkid keeps its version next to its
+  # release date. NVD files all util-linux CVEs under one product, so this also reports CVEs in
+  # programs the image may not ship. We accept that rather than miss the libraries' own CVEs.
+  - files: [libblkid.so*]
+    pattern: '\x00(?P<version>\d+\.\d+(?:\.\d+)?)\x00\d{2}-[A-Z][a-z]{2}-\d{4}\x00'
+  # Yocto builds also keep the version in the libraries' debug paths.
+  - files: [libblkid.so*, libmount.so*, libuuid.so*, libfdisk.so*, libsmartcols.so*]
+    pattern: '/usr/src/debug/util-linux/(?P<version>[0-9][^/\x00]*)/'
 examples:
   - file: sulogin.util-linux
     contains: "ent\0%s from %s\0util-linux 2.41.6\0features:\0 (%s"
     version: 2.41.6
+  - file: libblkid.so.1.1.0
+    contains: "llx, type %s\x002.39.3\x0004-Dec-2023\x00aix\0"
+    version: 2.39.3
+  - file: libblkid.so.1.1.0 # debug path only
+    contains: ")\0\0\0/usr/src/debug/util-linux/2.39.3/libblkid/src/probe.c"
+    version: 2.39.3

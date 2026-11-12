@@ -23,7 +23,7 @@ When provided with an SBOM (`--sbom`), Trowl also maps dependencies and detects 
 - **Filesystems:** ext2/3/4, squashfs, tar, or an unpacked directory.
 - **Disk images:** `.wic` and other MBR/GPT images (ext or squashfs partitions). Scans the detected rootfs only.
 - **Compression:** zstd, xz, gzip, bzip2.
-- **SBOMs:** SPDX 3.0 JSON-LD from Yocto, including `sbom-cve-check` output.
+- **SBOMs:** SPDX 3.0 JSON-LD from Yocto, including `sbom-cve-check` output, and SPDX 2.2 from Yocto's `create-spdx-2.2` (the scarthgap default): pass `IMAGE.spdx.tar.zst` or a directory of its documents.
 
 ### Local LLM (experimental)
 

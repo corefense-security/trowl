@@ -1,0 +1,19 @@
+{
+  "spdxVersion": "SPDX-2.2",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "busybox-syslog",
+  "documentNamespace": "http://spdx.org/spdxdocs/busybox-syslog-3333",
+  "creationInfo": {"created": "2026-11-12T00:00:00Z", "creators": ["Tool: OpenEmbedded Core create-spdx.bbclass"]},
+  "externalDocumentRefs": [
+    {"externalDocumentId": "DocumentRef-recipe-busybox", "spdxDocument": "http://spdx.org/spdxdocs/recipe-busybox-4444", "checksum": {"algorithm": "SHA1", "checksumValue": "0"}}
+  ],
+  "packages": [
+    {"SPDXID": "SPDXRef-Package-busybox-syslog", "name": "busybox-syslog", "versionInfo": "1.36.1",
+     "downloadLocation": "NOASSERTION", "licenseConcluded": "NOASSERTION", "licenseDeclared": "GPL-2.0-only", "copyrightText": "NOASSERTION"}
+  ],
+  "relationships": [
+    {"spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES", "relatedSpdxElement": "SPDXRef-Package-busybox-syslog"},
+    {"spdxElementId": "SPDXRef-Package-busybox-syslog", "relationshipType": "GENERATED_FROM", "relatedSpdxElement": "DocumentRef-recipe-busybox:SPDXRef-Recipe-busybox"}
+  ]
+}

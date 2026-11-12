@@ -61,7 +61,7 @@ Chosen from the binaries in a Yocto core-image-minimal (wrynose, x86-64):
 | openssh.yaml | `OpenSSH_10.3p1` |
 | openssl.yaml | `OpenSSL 3.5.9 29 Sep 2026` |
 | zlib.yaml | `deflate 1.3.2 Copyright` |
-| util-linux.yaml | `util-linux 2.41.6` |
+| util-linux.yaml | `util-linux 2.41.6`, or in libblkid `2.39.3` next to `04-Dec-2023`, or the Yocto debug path in its libraries |
 | xz.yaml | the library's file name, `liblzma.so.5.8.2` |
 | acl.yaml | the library's file name, `libacl.so.1.1.2302` (revision 2302 is 2.3.2) |
 | attr.yaml | the library's file name, `libattr.so.1.1.2502` (revision 2502 is 2.5.2) |
