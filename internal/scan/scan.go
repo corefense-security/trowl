@@ -125,7 +125,11 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 			st.Fail("")
 			return nil, fmt.Errorf("%s lists no components", py.CleanPath(opt.SBOM))
 		}
-		st.Ok(fmt.Sprintf("%d components", len(sb.PackageOrder)))
+		format := sb.Format
+		if sb.Documents > 0 {
+			format += fmt.Sprintf(" (%d documents)", sb.Documents)
+		}
+		st.Ok(fmt.Sprintf("%s, %d components", format, len(sb.PackageOrder)))
 		st = status.Start("matching SBOM to image")
 		if err := checkKernelVersion(sb, kconfig.ModulesVersion(rootfs)); err != nil {
 			st.Fail("")
@@ -168,6 +172,8 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 		sbomSection = pyjson.O(
 			"file", py.CleanPath(opt.SBOM),
 			"name", sb.Name,
+			"format", sb.Format,
+			"documents", sb.Documents,
 			"components", roles,
 			"status_counts", statusCounts,
 			"not_present", cmp.NotPresent,
