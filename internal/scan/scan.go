@@ -598,6 +598,44 @@ func cveFacts(sv, cv *pyjson.Obj, hasSBOM bool) {
 	if n, _ := summary.G("unpatched_not_shipped").(int); n > 0 {
 		sv.Set("Unpatched CVEs on packages that don't ship", n)
 	}
+	if d := disagreementFacts(rows); d != nil {
+		sv.Set("Kernel CVEs where Trowl's VEX check of the kernel tree disagrees with the SBOM", d)
+	}
+}
+
+// disagreementFacts counts the kernel CVEs whose status from the kernel tree check differs from
+// the SBOM's, by which way they moved. It is nil when no kernel tree was checked or none differ.
+func disagreementFacts(rows []any) *pyjson.Obj {
+	cleared, affected, review := 0, 0, 0
+	for _, x := range rows {
+		row := x.(*pyjson.Obj)
+		carriers, _ := row.G("carriers").([]any)
+		for _, c := range carriers {
+			co := c.(*pyjson.Obj)
+			a, _ := co.G("assessment").(*pyjson.Obj)
+			if !truthy(co.G("kernel")) || a == nil {
+				continue
+			}
+			if truthy(a.G("defies_sbom")) {
+				switch a.G("status") {
+				case "not_affected":
+					cleared++
+				case "affected":
+					affected++
+				default:
+					review++
+				}
+			}
+			break
+		}
+	}
+	if cleared+affected+review == 0 {
+		return nil
+	}
+	return pyjson.O("Total", cleared+affected+review,
+		"SBOM says unpatched, but the vulnerable code is not compiled or its module is not shipped (not affected)", cleared,
+		"SBOM says not affected or fixed, but the vulnerable code is compiled into this kernel (affected)", affected,
+		"SBOM status that the kernel tree check could not confirm (needs review)", review)
 }
 
 const maxSecretDirs = 40
