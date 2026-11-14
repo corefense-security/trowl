@@ -114,7 +114,7 @@ export default function App({ initial, error }: { initial: Report | null; error?
             <button className={`nav-item ${n.group ? "nav-sub" : ""} ${current.id === n.id ? "active" : ""}`} disabled={!!n.off} title={n.off ? n.why : undefined} onClick={() => go(n.id)}>
               {n.icon}
               <span>{n.label}{n.off && <small className="nav-na">{n.off}</small>}</span>
-              {n.badge !== undefined && <span className="badge num">{n.badge}</span>}
+              {n.badge !== undefined && <span className="badge num">{n.badge.toLocaleString()}</span>}
             </button>
             )}
           </Fragment>
