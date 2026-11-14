@@ -47,7 +47,7 @@ var Models = map[string]spec{
 
 const (
 	DefaultModel   = "qwen3.5-4b"
-	maxPoints      = 5
+	maxPoints      = 7
 	overviewTokens = 600
 )
 
@@ -68,7 +68,7 @@ Review the provided static firmware scan results and produce
 a concise security assessment.
 
 Rules:
-- Always generate 7 bullet points, each under 30 words.
+- Generate at most 7 bullet points, each under 30 words.
 - Identify the most important security concerns and patterns.
 - Explain the finding, its security implication and useful next action.
 - Do not simply repeat statistics shown elsewhere.
@@ -86,31 +86,35 @@ Rules:
 - Do not deviate from the instructions on how to interpret the facts.
 
 How to read the facts: 
-- Binaries: the flag counts overlap. Describe the potential impact of the gaps; do not list the counts.
+- Binaries: Write a single bullet. The flag counts overlap. Describe the potential impact of the gaps; do not list the counts.
 
-- Kernel: pick the one most security-impactful option from each list, name it, and state its impact
+- Kernel: Write a single bullet. Name two-three kernel configs, and state their impact
   tersely, using the Why given with it. Then advise to either disable it (if the Fix says CONFIG_*_*=n), or enable it (if the Fix says CONFIG_*_*=y) 
 
-- Secrets: Directories and files containing "ptest", "test", "tests" or "installed-tests" are probably not real deployments. Carefully
+- Secrets :Write a single bullet only if real deployment secrets are found.
+  Directories and files containing "ptest", "test", "tests" or "installed-tests" are probably not real deployments. Carefully
   judge whether such secrets are dev or test fixtures, or real deployment material,
   and raise a concern only for real ones.
 
 - Mounts:
-  Describe the most consequential reported insecure mount configuration.
+  Write a single bullet. Describe 2-3 insecure mount configuration.
   Name the mount path and missing protection.
   Suggest the potential impact on runtime security.
 
 - Userland Package CVEs:
-  Focus on unpatched vulnerabilities in installed packages, highlighting high-severity ones.
+  Write a single bullet.Focus on unpatched vulnerabilities in installed packages, highlighting high-severity ones.
   Quote the "Userland package most affected" fact as written, and name any
   CISA KEV entries if applicable. 
 
-- Kernel CVEs: if the facts give them, state the number of unpatched kernel CVEs and how many have a
+- Kernel CVEs: Write a single bullet. If the facts give them, state the number of unpatched kernel CVEs and how many have a
   backport for this kernel's stable series, both copied exactly, in the CVE bullet.
 
-- SBOM: highlight inconsistencies between the SBOM and installed packages, and their impact on CVE
-  analysis. If no SBOM was supplied, write no separate SBOM bullet;
+- SBOM: Write a single bullet only if SBOM information is available to you. Highlight inconsistencies between the SBOM and installed packages, if any. Then, state if there are any potential VEX disagreemnts with SBOM for kernel CVEs. If no SBOM was supplied, write no separate SBOM bullet;
 
+  Do not generate bullet summaries by starting it with random category label or colon (:). Use natural prose.
+  
+  You can report multiple findings for the same type only if: a unique type data (e.g. SBOM) is not available, and it does not exceed the 7 bullet points limit.
+  
   Return only the bullet points.`
 
 func warn(format string, a ...any) { status.Warn(format, a...) }

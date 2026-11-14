@@ -125,7 +125,11 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 			st.Fail("")
 			return nil, fmt.Errorf("%s lists no components", py.CleanPath(opt.SBOM))
 		}
-		st.Ok(fmt.Sprintf("%d components", len(sb.PackageOrder)))
+		format := sb.Format
+		if sb.Documents > 0 {
+			format += fmt.Sprintf(" (%d documents)", sb.Documents)
+		}
+		st.Ok(fmt.Sprintf("%s, %d components", format, len(sb.PackageOrder)))
 		st = status.Start("matching SBOM to image")
 		if err := checkKernelVersion(sb, kconfig.ModulesVersion(rootfs)); err != nil {
 			st.Fail("")
@@ -168,6 +172,8 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 		sbomSection = pyjson.O(
 			"file", py.CleanPath(opt.SBOM),
 			"name", sb.Name,
+			"format", sb.Format,
+			"documents", sb.Documents,
 			"components", roles,
 			"status_counts", statusCounts,
 			"not_present", cmp.NotPresent,
@@ -592,6 +598,44 @@ func cveFacts(sv, cv *pyjson.Obj, hasSBOM bool) {
 	if n, _ := summary.G("unpatched_not_shipped").(int); n > 0 {
 		sv.Set("Unpatched CVEs on packages that don't ship", n)
 	}
+	if d := disagreementFacts(rows); d != nil {
+		sv.Set("Kernel CVEs where Trowl's VEX check of the kernel tree disagrees with the SBOM", d)
+	}
+}
+
+// disagreementFacts counts the kernel CVEs whose status from the kernel tree check differs from
+// the SBOM's, by which way they moved. It is nil when no kernel tree was checked or none differ.
+func disagreementFacts(rows []any) *pyjson.Obj {
+	cleared, affected, review := 0, 0, 0
+	for _, x := range rows {
+		row := x.(*pyjson.Obj)
+		carriers, _ := row.G("carriers").([]any)
+		for _, c := range carriers {
+			co := c.(*pyjson.Obj)
+			a, _ := co.G("assessment").(*pyjson.Obj)
+			if !truthy(co.G("kernel")) || a == nil {
+				continue
+			}
+			if truthy(a.G("defies_sbom")) {
+				switch a.G("status") {
+				case "not_affected":
+					cleared++
+				case "affected":
+					affected++
+				default:
+					review++
+				}
+			}
+			break
+		}
+	}
+	if cleared+affected+review == 0 {
+		return nil
+	}
+	return pyjson.O("Total", cleared+affected+review,
+		"SBOM says unpatched, but the vulnerable code is not compiled or its module is not shipped (not affected)", cleared,
+		"SBOM says not affected or fixed, but the vulnerable code is compiled into this kernel (affected)", affected,
+		"SBOM status that the kernel tree check could not confirm (needs review)", review)
 }
 
 const maxSecretDirs = 40

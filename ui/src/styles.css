@@ -243,6 +243,7 @@ pre.ev { background: var(--surface-2); padding: 10px; border-radius: 8px; font-s
 }
 .gw-top { top: 14px; left: 14px; right: 14px; padding: 10px; display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
 .gw-top .spacer { flex: 1; }
+.gw-format { font-size: 12px; color: var(--ink-2); padding: 4px 8px; border: 1px solid var(--ring); border-radius: 999px; white-space: nowrap; }
 .gw-legend { left: 14px; bottom: 14px; padding: 10px 12px; font-size: 12px; display: grid; gap: 5px; }
 .gw-legend .row { display: flex; align-items: center; gap: 8px; color: var(--ink-2); }
 .gw-legend .shape-r { width: 16px; height: 9px; border-radius: 3px; border: 1.5px solid var(--ink-2); }
@@ -325,22 +326,27 @@ pre.ev { background: var(--surface-2); padding: 10px; border-radius: 8px; font-s
 /* top bar scan metadata, styled like the Corefense page sub-line */
 .meta { display: flex; align-items: center; flex-wrap: wrap; gap: 0; min-width: 0; font-family: var(--mono); font-size: 12.5px; color: var(--ink-2); }
 
-/* coverage donut */
-.pie-wrap { display: flex; align-items: center; gap: 28px; flex-wrap: wrap; }
-.pie-wrap svg { flex-shrink: 0; }
-.pie-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; flex: 1; min-width: 190px; }
-.pie-legend li { display: grid; grid-template-columns: 12px 1fr auto 64px; align-items: center; gap: 10px; padding: 5px 8px; border-radius: 6px; font-size: 13px; transition: opacity 0.12s; }
-.pie-legend li:hover { background: var(--hover); }
-.pie-legend li.dim { opacity: 0.45; }
-.pie-legend .pie-name { color: var(--ink-2); }
-.pie-legend .num:last-child { text-align: right; font-size: 12px; }
-.pie-legend li.pie-sub { padding-top: 0 !important; padding-bottom: 2px !important; font-size: 12.5px; }
-.pie-legend li.pie-sub:hover { background: none; }
-.pie-legend li.pie-sub .pie-name { grid-column: 2 / -1; padding-left: 12px; border-left: 1px solid var(--grid); }
-.pie-legend li.pie-sub .num { font-size: 12.5px; text-align: left; }
-.donut-svg { overflow: visible; width: 168px; height: auto; }
-.donut-n { font-family: var(--mono); font-size: 34px; font-weight: 500; letter-spacing: -0.02em; fill: var(--ink); }
-.donut-l { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; fill: var(--muted); }
+/* A donut of parts with its legend (Overview CVEs) */
+.dn { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 32px; align-items: center; }
+.dn-svg { display: block; width: 150px; height: 150px; overflow: visible; }
+.dn-n { font-size: 21px; font-weight: 600; letter-spacing: -0.02em; fill: var(--ink); font-variant-numeric: tabular-nums; }
+.dn-l { font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.14em; text-transform: uppercase; fill: var(--muted); }
+.dn-side { padding-left: 32px; border-left: 1px solid var(--grid); min-width: 0; }
+.dn-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.dn-legend li { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 10px; align-items: center; font-size: 13px; color: var(--ink-2); transition: opacity 0.12s; }
+.dn-legend li.dim { opacity: 0.45; }
+.dn-legend li span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dn-legend b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.dn-hint { margin: 12px 0 0; font-size: 12px; color: var(--muted); }
+
+/* A bar per protection (Overview hardening) */
+.cov { list-style: none; margin: 0; padding: 0; display: grid; align-content: space-evenly; flex: 1; gap: 14px; }
+.cov li { display: grid; grid-template-columns: 96px minmax(0, 1fr) 44px 48px; gap: 12px; align-items: center; font-size: 13px; color: var(--ink-2); }
+.cov-l { white-space: nowrap; }
+.cov-track { height: 8px; border-radius: 999px; background: var(--grid); overflow: hidden; }
+.cov-track i { display: block; height: 100%; border-radius: 999px; background: var(--pie-4); }
+.cov b { text-align: right; color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.cov-f { text-align: right; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* mounts */
 table.mounts { table-layout: fixed; }
@@ -424,22 +430,32 @@ tr.sel td { background: var(--accent-soft); }
 .fs-none { display: grid; gap: 4px; font-size: 13px; padding: 4px 0; }
 .fs-detail { display: inline-flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; font-size: 12.5px; }
 
-/* Overview layout with the stat strip on top, main column + rail below */
-.ov { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); grid-template-rows: auto 1fr; gap: 16px; min-height: 100%; }
-.ov.has-summary { grid-template-rows: auto auto 1fr; }
-.ov > .ov-summary { grid-column: 1 / -1; }
-.ov-main > .sbom-card { height: 100%; }
-.sbom-card .shares { flex: 1; align-content: center; }
-.ov-rail { display: flex; flex-direction: column; }
-.ov-rail .pie-wrap { flex: 1; justify-content: center; align-content: center; flex-wrap: nowrap; gap: 24px; }
-.ov-rail .pie-legend { flex: 1 1 auto; min-width: 220px; max-width: 320px; }
-.ov-rail .pie-legend .pie-name { white-space: nowrap; }
-.ov .ov-rail .pie-legend li { padding-top: clamp(5px, 0.8vh, 9px); padding-bottom: clamp(5px, 0.8vh, 9px); }
-.ov .donut-svg { width: clamp(150px, 20vh, 220px); }
-.rail-sub { margin: 0 0 8px; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
-.rail-note { font-size: 12px; margin-top: 14px; text-align: center; }
+/* Overview layout. Summary and stats span the page. CVE and hardening cards sit below. */
+.ov { display: grid; gap: 16px; }
+.ov-row { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 16px; }
+.ov-card { display: flex; flex-direction: column; }
+.ov-card-h { display: flex; align-items: center; gap: 9px; margin-bottom: 24px; }
+.ov-card-h h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.ov-card-ic { display: inline-flex; color: var(--muted); }
+.ov-card-h .icon-btn { margin: -8px 0 -8px auto; }
+.ov-none { margin: 0; font-size: 13px; color: var(--muted); }
+/* SBOM disagreement note. Only its icon and lead text are amber. */
+.ov-dg { display: flex; align-items: center; gap: 12px; margin-top: 18px; padding: 9px 16px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--grid); font-size: 12.5px; white-space: nowrap; }
+.ov-dg-lead { display: inline-flex; align-items: center; gap: 8px; padding-right: 12px; border-right: 1px solid var(--axis); font-weight: 500; color: color-mix(in srgb, var(--warning) 85%, var(--ink)); }
+.ov-dg-lead svg { color: var(--warning); }
+.ov-dg-split { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+.ov-dg .share-link { margin: 0 0 0 auto; }
+/* Installed packages row. Uses the same columns as the donut and legend above. */
+.ov-pk { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 32px; align-items: center; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--grid); }
+.ov-pk-t { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; font-weight: 500; color: var(--ink-2); white-space: nowrap; }
+.ov-pk-t svg { color: var(--muted); flex: none; }
+.ov-pk-r { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-left: 32px; border-left: 1px solid var(--grid); min-width: 0; }
+.ov-pk-n { display: flex; align-items: baseline; gap: 6px; font-size: 13px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ov-pk-n b { font-size: 22px; font-weight: 700; line-height: 1; color: var(--warning); }
+.ov-pk-n b.ok { color: var(--good-ink); }
+.ov-pk-r .share-link { margin: 0; }
+
 .ov > .statbar { grid-column: 1 / -1; }
-.ov-main { display: grid; gap: 16px; min-width: 0; }
 .statbar { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); padding: 0; overflow: hidden; }
 .stat { display: grid; gap: 4px; text-align: left; background: none; border: 0; border-left: 1px solid var(--grid); padding: 16px 20px; font: inherit; color: inherit; cursor: pointer; }
 .stat:first-child { border-left: 0; }
@@ -457,38 +473,18 @@ tr.sel td { background: var(--accent-soft); }
 .ov-points code { font-size: 12.5px; color: var(--ink); }
 .ov-points li::before { content: ""; position: absolute; left: 2px; top: 0.62em; width: 6px; height: 6px; border-radius: 999px; background: var(--accent); opacity: 0.75; }
 .ov-summary-src { font-size: 11.5px; color: var(--muted); }
-.shares { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; margin-top: 12px; }
-.sbom-card .shares { align-items: start; }
-.share-t { font-size: 13px; color: var(--ink-2); font-weight: 500; }
-.share-n { margin: 4px 0 10px; }
-.share-n b { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
-.share-n span { font-size: 14px; color: var(--muted); }
-.share-bar { display: flex; gap: 2px; height: 8px; }
-.share-bar i { display: block; height: 100%; border-radius: 3px; min-width: 3px; }
-.share-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 12.5px; color: var(--ink-2); }
-.share-legend span { display: inline-flex; align-items: center; gap: 6px; }
-.share-note { margin: 10px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
-.share-note code { font-size: 11.5px; }
 .share-link { display: flex; align-items: center; gap: 2px; width: fit-content; margin-top: 6px; background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; }
 .share-link:hover { text-decoration: underline; }
-@media (max-width: 1100px) { .ov, .ov.has-summary { grid-template-columns: 1fr; grid-template-rows: none; } }
-@media (max-width: 760px) { .shares { grid-template-columns: 1fr; } .stat { border-left: 0; border-top: 1px solid var(--grid); } }
+@media (max-width: 1100px) { .ov-row { grid-template-columns: 1fr; } }
+@media (max-width: 760px) {
+  .stat { border-left: 0; border-top: 1px solid var(--grid); }
+  .dn, .ov-pk { grid-template-columns: 1fr; gap: 16px; }
+  .dn-svg { margin: 0 auto; }
+  .dn-side, .ov-pk-r { padding-left: 0; border-left: 0; }
+  .ov-pk-t { justify-content: flex-start; }
+  .ov-dg { flex-wrap: wrap; white-space: normal; }
+}
 .fchip .x-mark { margin-left: 2px; color: var(--muted); }
-/* On taller windows the Overview's bottom row has room to spare. Its charts use some of it. */
-.ov .share-n b { font-size: clamp(28px, 3.6vh, 40px); }
-.ov .share-bar { height: clamp(8px, 1.1vh, 12px); }
-.ov .shares { row-gap: clamp(20px, 3vh, 36px); }
-/* SBOM card with the two measures stacked, each with its explanation on the right */
-.sbom-card .shares { grid-template-columns: 1fr; grid-template-rows: none; align-content: center; gap: 0; }
-.sbom-card .share { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 24px; align-items: center; padding: 14px 0; }
-.sbom-card .share + .share { border-top: 1px solid var(--grid); }
-.sbom-card .share-top { padding-top: 0; }
-.sbom-card .share-note { margin: 0; padding: 0 0 0 20px; border-left: 1px solid var(--grid); }
-/* Without a Key summary the bottom row takes all the spare height. Share it out so the cards
-   fill it instead of centring their content between blank bands. */
-.ov:not(.has-summary) .sbom-card .shares { grid-auto-rows: 1fr; align-content: stretch; }
-.ov:not(.has-summary) .donut-svg { width: clamp(150px, min(28vh, 15vw), 300px); }
-.ov:not(.has-summary) .ov-rail .pie-legend li { padding-top: clamp(5px, 1.4vh, 14px); padding-bottom: clamp(5px, 1.4vh, 14px); }
 
 /* Kernel page */
 .kt { width: 100%; font-size: 12.8px; }
@@ -595,12 +591,6 @@ tr.sel td { background: var(--accent-soft); }
 .switch.on .switch-knob { transform: translateX(12px); }
 @media (prefers-reduced-motion: reduce) { .switch-track, .switch-knob { transition: none; } }
 
-/* SBOM vs Image on a scan without an SBOM */
-.share-none { margin: 0 0 14px; font-size: 13px; color: var(--muted); }
-.share-off .share-t, .share-off .share-n, .share-off .share-legend { color: var(--muted); }
-.share-off .share-n b, .share-off .share-legend b { color: var(--muted); }
-.share-off .share-bar i { background: var(--neutral); opacity: 0.35; }
-.share-off .swatch { background: var(--neutral); opacity: 0.35; }
 
 .cve-star { margin-left: 2px; color: var(--muted); }
 .cve-foot { margin: 8px 0 0; font-size: 12px; color: var(--muted); }

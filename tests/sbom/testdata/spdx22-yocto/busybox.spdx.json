@@ -1,0 +1,26 @@
+{
+  "spdxVersion": "SPDX-2.2",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "busybox",
+  "documentNamespace": "http://spdx.org/spdxdocs/busybox-2222",
+  "creationInfo": {"created": "2026-11-12T00:00:00Z", "creators": ["Tool: OpenEmbedded Core create-spdx.bbclass"]},
+  "externalDocumentRefs": [
+    {"externalDocumentId": "DocumentRef-recipe-busybox", "spdxDocument": "http://spdx.org/spdxdocs/recipe-busybox-4444", "checksum": {"algorithm": "SHA1", "checksumValue": "0"}}
+  ],
+  "packages": [
+    {"SPDXID": "SPDXRef-Package-busybox", "name": "busybox", "versionInfo": "1.36.1", "hasFiles": ["SPDXRef-PackagedFile-busybox-1"],
+     "downloadLocation": "NOASSERTION", "licenseConcluded": "NOASSERTION", "licenseDeclared": "GPL-2.0-only", "copyrightText": "NOASSERTION"}
+  ],
+  "files": [
+    {"SPDXID": "SPDXRef-PackagedFile-busybox-1", "fileName": "bin/busybox", "fileTypes": ["BINARY"],
+     "checksums": [{"algorithm": "SHA1", "checksumValue": "650a049c763cc35c51116dc3f02eba4a6a8b8699"},
+                   {"algorithm": "SHA256", "checksumValue": "e496cf8273de6daa3ffb85d7cc6cfeabf4f05ca90264ed6c1786f93e19b74667"}],
+     "licenseConcluded": "NOASSERTION", "copyrightText": "NOASSERTION"}
+  ],
+  "relationships": [
+    {"spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES", "relatedSpdxElement": "SPDXRef-Package-busybox"},
+    {"spdxElementId": "SPDXRef-Package-busybox", "relationshipType": "CONTAINS", "relatedSpdxElement": "SPDXRef-PackagedFile-busybox-1"},
+    {"spdxElementId": "SPDXRef-Package-busybox", "relationshipType": "GENERATED_FROM", "relatedSpdxElement": "DocumentRef-recipe-busybox:SPDXRef-Recipe-busybox"}
+  ]
+}

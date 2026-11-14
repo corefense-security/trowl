@@ -1,0 +1,22 @@
+{
+  "spdxVersion": "SPDX-2.2",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "core-image-minimal-qemux86-64.rootfs",
+  "documentNamespace": "http://spdx.org/spdxdocs/core-image-minimal-qemux86-64.rootfs-1111",
+  "creationInfo": {"created": "2026-11-12T00:00:00Z", "creators": ["Tool: OpenEmbedded Core create-spdx.bbclass"]},
+  "externalDocumentRefs": [
+    {"externalDocumentId": "DocumentRef-busybox", "spdxDocument": "http://spdx.org/spdxdocs/busybox-2222", "checksum": {"algorithm": "SHA1", "checksumValue": "0"}},
+    {"externalDocumentId": "DocumentRef-busybox-syslog", "spdxDocument": "http://spdx.org/spdxdocs/busybox-syslog-3333", "checksum": {"algorithm": "SHA1", "checksumValue": "0"}},
+    {"externalDocumentId": "DocumentRef-runtime-busybox-syslog", "spdxDocument": "http://spdx.org/spdxdocs/runtime-busybox-syslog-5555", "checksum": {"algorithm": "SHA1", "checksumValue": "0"}}
+  ],
+  "packages": [
+    {"SPDXID": "SPDXRef-Image-core-image-minimal-qemux86-64.rootfs", "name": "core-image-minimal", "versionInfo": "1.0",
+     "downloadLocation": "NOASSERTION", "licenseConcluded": "NOASSERTION", "licenseDeclared": "NOASSERTION", "copyrightText": "NOASSERTION"}
+  ],
+  "relationships": [
+    {"spdxElementId": "SPDXRef-Image-core-image-minimal-qemux86-64.rootfs", "relationshipType": "CONTAINS", "relatedSpdxElement": "DocumentRef-busybox:SPDXRef-Package-busybox"},
+    {"spdxElementId": "SPDXRef-Image-core-image-minimal-qemux86-64.rootfs", "relationshipType": "CONTAINS", "relatedSpdxElement": "DocumentRef-busybox-syslog:SPDXRef-Package-busybox-syslog"},
+    {"spdxElementId": "SPDXRef-Image-core-image-minimal-qemux86-64.rootfs", "relationshipType": "OTHER", "relatedSpdxElement": "DocumentRef-runtime-busybox-syslog:SPDXRef-DOCUMENT", "comment": "Runtime dependencies for busybox-syslog"}
+  ]
+}

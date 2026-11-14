@@ -197,6 +197,10 @@ export interface Report {
   sbom: null | {
     file: string;
     name: string;
+    /** Detected SBOM format, such as "SPDX 2.2" or "SPDX 3.0.1". Missing in older reports. */
+    format?: string;
+    /** Number of documents in an SPDX 2.2 set. 0 for a single document. */
+    documents?: number;
     components: Record<string, number>;
     status_counts: Record<string, number>;
     graph: { nodes: GraphNode[]; edges: GraphEdge[] };

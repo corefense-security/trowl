@@ -384,8 +384,10 @@ function CveSheet({ r, sources, onClose }: { r: CveRow; sources: CveSection["sou
 
 export default function Cves({ section, params }: { section: CveSection; params: URLSearchParams }) {
   const [q, setQ] = useState("");
-  const [status, setStatus] = useState<string>(params.get("status") ?? "unpatched");
-  // Set by the Overview's "CVEs not in image" tile. It shows as a removable chip that clears it.
+  // ?disagree=1 opens on the SBOM disagreements across all statuses. The Overview links here.
+  const [disagreeOnly, setDisagreeOnly] = useState(params.get("disagree") === "1");
+  const [status, setStatus] = useState<string>(params.get("status") ?? (disagreeOnly ? "all" : "unpatched"));
+  // Set by a link with ?shipped=no. Shows as a chip you can remove.
   const [offImage, setOffImage] = useState(params.get("shipped") === "no");
   const [vector, setVector] = useState<string>("all");
   const [kevOnly, setKevOnly] = useState(false);
@@ -393,8 +395,6 @@ export default function Cves({ section, params }: { section: CveSection; params:
   // Only the CVEs on build-time components (native tools, recipes that ship nothing). They are off
   // the device, so the default view and the counts leave them out. This lists them.
   const [buildTime, setBuildTime] = useState(false);
-  // Only the rows where trowl's VEX status differs from the SBOM's. Offered when there is one.
-  const [disagreeOnly, setDisagreeOnly] = useState(false);
   const [open, setOpen] = useState<CveRow | null>(null);
   const rows = section.rows;
   const defies = (r: CveRow) => !!assessmentOf(r)?.defies_sbom;
