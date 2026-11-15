@@ -1,0 +1,19 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:11111111-2222-3333-4444-555555555555",
+  "version": 1,
+  "metadata": {
+    "tools": {"components": [{"type": "application", "name": "meta-cyclonedx"}]},
+    "component": {"bom-ref": "image", "type": "operating-system", "name": "core-image-minimal", "version": "1.0"}
+  },
+  "components": [
+    {"bom-ref": "busybox", "type": "library", "name": "busybox", "version": "1.37.0",
+     "cpe": "cpe:2.3:a:busybox:busybox:1.37.0:*:*:*:*:*:*:*", "scope": "required"},
+    {"bom-ref": "openssl", "type": "library", "name": "openssl", "version": "3.5.4",
+     "cpe": "cpe:2.3:a:openssl:openssl:3.5.4:*:*:*:*:*:*:*", "scope": "required"},
+    {"bom-ref": "linux-yocto", "type": "library", "name": "linux-yocto", "version": "6.18.52",
+     "cpe": "cpe:2.3:o:linux:linux_kernel:6.18.52:*:*:*:*:*:*:*", "scope": "required"}
+  ],
+  "dependencies": [{"ref": "busybox", "dependsOn": ["openssl"]}]
+}
