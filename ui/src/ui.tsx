@@ -154,86 +154,98 @@ function useTip() {
   return { setTip, node };
 }
 
-/** `parts` split a flag into kinds (RELRO full and partial), listed under it as "X of Y". */
-export type CoverageRow = { label: string; ok: number; total: number; parts?: { label: string; n: number; of: number }[] };
+export type Slice = { label: string; value: number; color: string };
 
-/** One donut for all protections. Each arc is the binaries that have one flag, in its own blue
- *  shade. The centre shows how many binaries were analysed. The legend shows each flag's coverage. */
-export function CoverageDonut({ rows, center, centerLabel }: {
-  rows: CoverageRow[]; center: number; centerLabel: string;
+/** A donut of parts of one whole. The total sits in the centre and the legend beside it.
+ *  Hovering a slice or a legend row highlights that part. `children` go under the legend. */
+export function Donut({ slices, center, centerLabel, children }: {
+  slices: Slice[]; center: string; centerLabel: string; children?: ReactNode;
 }) {
   const { setTip, node } = useTip();
   const [hot, setHot] = useState<number | null>(null);
-  const size = 200, c = size / 2, ro = 96, ri = 72;
-  const gap = 0.022; // radians between arcs, so each flag reads as its own segment
-  const sum = rows.reduce((n, x) => n + x.ok, 0);
-  const color = (i: number) => `var(--pie-${(i % 6) + 1})`;
-  const live = rows.filter((x) => x.ok > 0).length;
+  const size = 150, c = size / 2, ro = 62, ri = 46;
+  const gap = 0.025; // gap between arcs in radians
+  const sum = slices.reduce((n, x) => n + x.value, 0);
+  const live = slices.filter((x) => x.value > 0).length;
 
   const pt = (rad: number, a: number) => `${(c + rad * Math.cos(a)).toFixed(2)} ${(c + rad * Math.sin(a)).toFixed(2)}`;
   let acc = -Math.PI / 2;
-  const arcs = rows.map((row, i) => {
-    const span = sum ? (row.ok / sum) * 2 * Math.PI : 0;
+  const arcs = slices.map((s, i) => {
+    const span = sum ? (s.value / sum) * 2 * Math.PI : 0;
     const a0 = acc + (live > 1 ? gap / 2 : 0), a1 = acc + span - (live > 1 ? gap / 2 : 0);
     acc += span;
-    if (row.ok <= 0 || a1 <= a0) return null;
+    if (s.value <= 0 || a1 <= a0) return null;
     if (live === 1) {
-      // a single full ring: two half arcs, since one SVG arc can't close on itself
+      // One full ring is two half arcs because an SVG arc can't close on itself
       const d = `M ${pt(ro, -Math.PI / 2)} A ${ro} ${ro} 0 1 1 ${pt(ro, Math.PI / 2)} A ${ro} ${ro} 0 1 1 ${pt(ro, -Math.PI / 2)}
         M ${pt(ri, -Math.PI / 2)} A ${ri} ${ri} 0 1 0 ${pt(ri, Math.PI / 2)} A ${ri} ${ri} 0 1 0 ${pt(ri, -Math.PI / 2)} Z`;
       return { i, d };
     }
     const large = a1 - a0 > Math.PI ? 1 : 0;
-    const d = `M ${pt(ro, a0)} A ${ro} ${ro} 0 ${large} 1 ${pt(ro, a1)} L ${pt(ri, a1)} A ${ri} ${ri} 0 ${large} 0 ${pt(ri, a0)} Z`;
-    return { i, d };
+    return { i, d: `M ${pt(ro, a0)} A ${ro} ${ro} 0 ${large} 1 ${pt(ro, a1)} L ${pt(ri, a1)} A ${ri} ${ri} 0 ${large} 0 ${pt(ri, a0)} Z` };
   });
 
   const enter = (e: PointerEvent, i: number) => {
-    const row = rows[i];
     setHot(i);
-    setTip({
-      x: e.clientX, y: e.clientY, color: color(i), title: row.label,
-      value: `${row.ok} of ${row.total} · ${row.total ? Math.round((100 * row.ok) / row.total) : 0}%`,
-    });
+    setTip({ x: e.clientX, y: e.clientY, color: slices[i].color, title: slices[i].label,
+      value: `${slices[i].value.toLocaleString()} · ${sum ? Math.round((100 * slices[i].value) / sum) : 0}%` });
   };
   const leave = () => { setHot(null); setTip(null); };
 
   return (
-    <div className="pie-wrap">
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" className="donut-svg"
-        aria-label={`${center} ${centerLabel} analysed. ${rows.map((x) => `${x.label} ${x.ok} of ${x.total}`).join(", ")}`}>
+    <div className="dn">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" className="dn-svg"
+        aria-label={`${center} ${centerLabel}: ${slices.map((x) => `${x.label} ${x.value}`).join(", ")}`}>
         <circle cx={c} cy={c} r={(ro + ri) / 2} fill="none" stroke="var(--surface-2)" strokeWidth={ro - ri} />
         {arcs.map((a) => a && (
-          <path key={a.i} d={a.d} fill={color(a.i)} fillRule="evenodd"
+          <path key={a.i} d={a.d} fill={slices[a.i].color} fillRule="evenodd"
             opacity={hot === null || hot === a.i ? 1 : 0.35} style={{ transition: "opacity 0.15s" }}
             onPointerMove={(e) => enter(e, a.i)} onPointerLeave={leave} />
         ))}
-        <text x={c} y={c - 6} textAnchor="middle" dominantBaseline="central" className="donut-n">{center}</text>
-        <text x={c} y={c + 22} textAnchor="middle" dominantBaseline="central" className="donut-l">{centerLabel}</text>
+        <text x={c} y={c - 5} textAnchor="middle" dominantBaseline="central" className="dn-n">{center}</text>
+        <text x={c} y={c + 16} textAnchor="middle" dominantBaseline="central" className="dn-l">{centerLabel}</text>
       </svg>
-      <ul className="pie-legend">
-        {rows.map((row, i) => {
-          const pct = row.total ? Math.round((100 * row.ok) / row.total) : 0;
-          const dim = hot !== null && hot !== i ? "dim" : "";
-          return [
-            <li key={row.label} className={dim}
+      <div className="dn-side">
+        <ul className="dn-legend">
+          {slices.map((s, i) => (
+            <li key={s.label} className={hot !== null && hot !== i ? "dim" : ""}
               onPointerEnter={() => setHot(i)} onPointerLeave={() => setHot(null)}>
-              <i className="swatch" style={{ background: color(i) }} />
-              <span className="pie-name">{row.label}</span>
-              <b className="num">{pct}%</b>
-              <span className="muted num">{row.ok}/{row.total}</span>
-            </li>,
-            ...(row.parts ?? []).map((p) => (
-              <li key={`${row.label}:${p.label}`} className={`pie-sub ${dim}`}>
-                <i />
-                <span className="pie-name">{p.label} <b className="num">{p.n}</b> <span className="muted">of {p.of}</span></span>
-              </li>
-            )),
-          ];
-        })}
-      </ul>
+              <i className="swatch" style={{ background: s.color }} />
+              <span>{s.label}</span>
+              <b className="num">{s.value.toLocaleString()}</b>
+            </li>
+          ))}
+        </ul>
+        {children}
+      </div>
       {node}
     </div>
+  );
+}
+
+/** Coverage of one protection. `parts` splits it into kinds for the tooltip (RELRO full and partial). */
+export type CoverageRow = { label: string; ok: number; total: number; about: string; parts?: { label: string; n: number }[] };
+
+/** One bar per protection with the weakest first.
+ *  Each is its own rate. Bars fade as coverage drops so weak ones stand out. */
+export function CoverageBars({ rows }: { rows: CoverageRow[] }) {
+  const pct = (r: CoverageRow) => (r.total ? Math.round((100 * r.ok) / r.total) : 0);
+  const sorted = [...rows].sort((a, b) => pct(a) - pct(b) || a.label.localeCompare(b.label));
+  return (
+    <ul className="cov">
+      {sorted.map((r) => {
+        const p = pct(r);
+        const tip = [r.about, ...(r.parts ?? []).map((x) => `${x.label}: ${x.n}`)].join("\n");
+        return (
+          <li key={r.label} title={tip}>
+            <span className="cov-l">{r.label}</span>
+            <span className="cov-track"><i style={{ width: `${p}%`, opacity: 0.25 + 0.75 * (p / 100) ** 3 }} /></span>
+            <b className="num">{p}%</b>
+            <span className="cov-f num">{r.ok}/{r.total}</span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

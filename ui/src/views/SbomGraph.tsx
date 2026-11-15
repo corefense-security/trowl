@@ -68,7 +68,9 @@ const BIG = 600;
 // Beyond this the package view would freeze the browser, so it isn't offered.
 const MAX_PACKAGE_VIEW = 1500;
 
-export default function SbomGraph({ graph, params }: { graph: { nodes: GraphNode[]; edges: GraphEdge[] }; params?: URLSearchParams }) {
+export default function SbomGraph({ graph, params, format, documents }: {
+  graph: { nodes: GraphNode[]; edges: GraphEdge[] }; params?: URLSearchParams; format?: string; documents?: number;
+}) {
   // A link can open the page filtered. ?status=present keeps one status, ?role=recipe|package one kind.
   const onlyStatus = params?.get("status") ?? null;
   const onlyRole = params?.get("role") ?? null;
@@ -417,6 +419,11 @@ export default function SbomGraph({ graph, params }: { graph: { nodes: GraphNode
             ]} onChange={(v) => setLayout(v as Layout)} />
           )}
           <span className="spacer" />
+          {format && (
+            <span className="gw-format" title="SBOM format detected when the file was read">
+              {format}{documents ? <span className="muted"> · {documents.toLocaleString()} documents</span> : null}
+            </span>
+          )}
           <MultiDropdown label="Status" align="right" summary={statusSummary} onToggle={toggleStatus}
             options={presentStatuses.map((s) => ({ value: s, label: STATUS[s].label, on: !hidden.has(s), n: statusCounts[s],
               color: STATUS[s].color, hint: STATUS[s].hint }))} />

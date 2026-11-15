@@ -93,6 +93,8 @@ type Sbom struct {
 	Name         string
 	VulnInfo     map[string]*VulnInfo
 	Inventory    string // the package database this came from, when it isn't a real SBOM
+	Format       string // detected format, such as "SPDX 2.2" or "SPDX 3.0.1"
+	Documents    int    // number of documents in an SPDX 2.2 set, 0 for a single document
 }
 
 // Vex returns the SBOM's VEX status for (CVE, component), or "".
@@ -222,15 +224,16 @@ func idString(v any) string {
 	return string(b)
 }
 
+// wantFormats lists the formats trowl reads, for the error when it gets another one.
+const wantFormats = "trowl reads SPDX 3.0 JSON-LD (Yocto's create-spdx-3.0) and SPDX 2.2 JSON " +
+	"(Yocto's create-spdx-2.2, as IMAGE.spdx.tar.zst or a directory of its documents)"
+
 // spdx3Elements returns the elements of an SPDX 3.0 JSON-LD document, from its @graph or from
 // the document itself when it is a bare list of elements. Any other format is refused by name, so
 // that an SBOM trowl can't read stops the scan rather than giving a report without its data.
-//
-// Yocto writes SPDX 3.0 since 5.0 (scarthgap). SPDX 2.x, which older Yocto releases and
-// Android write, describes packages in a different model (packages[], relationships[]), and
-// reading it as 3.0 would find no packages at all.
+// SPDX 2.2 never gets here because Load reads it first.
 func spdx3Elements(raw []byte) ([]json.RawMessage, error) {
-	const want = "trowl reads SPDX 3.0 JSON-LD SBOMs, such as Yocto 5.0 (scarthgap) and later write"
+	const want = wantFormats
 	var top struct {
 		Context     json.RawMessage   `json:"@context"`
 		Graph       []json.RawMessage `json:"@graph"`
@@ -266,7 +269,23 @@ func spdx3Elements(raw []byte) ([]json.RawMessage, error) {
 	return items, nil
 }
 
+// Load reads an SBOM. It takes SPDX 2.2 (one document, a directory of them, or Yocto's
+// IMAGE.spdx.tar.zst) or SPDX 3.0 JSON-LD.
 func Load(path string) (*Sbom, error) {
+	docs, isSpdx2, err := spdx2Docs(path)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", py.CleanPath(path), err)
+	}
+	if isSpdx2 {
+		if len(docs) == 0 {
+			return nil, fmt.Errorf("%s: no SPDX 2.2 documents in it: %s", py.CleanPath(path), wantFormats)
+		}
+		sb, err := loadSpdx2(docs)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", py.CleanPath(path), err)
+		}
+		return sb, nil
+	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -274,6 +293,10 @@ func Load(path string) (*Sbom, error) {
 	items, err := spdx3Elements(raw)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", py.CleanPath(path), err)
+	}
+	format := "SPDX 3.0" // a bare list of elements has no version
+	if m := spdx3ContextRe.FindSubmatch(raw); m != nil {
+		format = "SPDX " + string(m[1])
 	}
 	raw = nil
 	graph := make([]*element, 0, len(items))
@@ -489,8 +512,13 @@ func Load(path string) (*Sbom, error) {
 			break
 		}
 	}
+	sb.Format = format
 	return sb, nil
 }
+
+// spdx3ContextRe finds the version in the @context URL, as in
+// https://spdx.org/rdf/3.0.1/spdx-context.jsonld
+var spdx3ContextRe = regexp.MustCompile(`spdx\.org/rdf/(3(?:\.\d+)+)/`)
 
 func filter(ids []string, pkgs map[string]*Package) []string {
 	var out []string

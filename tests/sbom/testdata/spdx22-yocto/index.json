@@ -1,0 +1,7 @@
+{"documents": [
+  {"filename": "busybox-syslog.spdx.json", "documentNamespace": "http://spdx.org/spdxdocs/busybox-syslog-3333", "sha1": "0"},
+  {"filename": "busybox.spdx.json", "documentNamespace": "http://spdx.org/spdxdocs/busybox-2222", "sha1": "0"},
+  {"filename": "core-image-minimal-qemux86-64.rootfs.spdx.json", "documentNamespace": "http://spdx.org/spdxdocs/core-image-minimal-qemux86-64.rootfs-1111", "sha1": "0"},
+  {"filename": "recipe-busybox.spdx.json", "documentNamespace": "http://spdx.org/spdxdocs/recipe-busybox-4444", "sha1": "0"},
+  {"filename": "runtime-busybox-syslog.spdx.json", "documentNamespace": "http://spdx.org/spdxdocs/runtime-busybox-syslog-5555", "sha1": "0"}
+]}

@@ -65,7 +65,8 @@ func commands() []*command {
 			name: "scan", help: "analyse an image and write a static dashboard (index.html) plus report.json",
 			positionals: []string{"image"},
 			opts: []opt{
-				{names: []string{"--sbom"}, value: true, help: "SPDX 3.0 JSON-LD SBOM for the image"},
+				{names: []string{"--sbom"}, value: true, help: "SBOM for the image: SPDX 3.0 JSON-LD, or SPDX 2.2 " +
+					"(Yocto's IMAGE.spdx.tar.zst, or a directory of its documents)"},
 				{names: []string{"-o", "--output"}, value: true, def: "trowl-report", help: "output directory"},
 				{names: []string{"--kernel-config"}, value: true, help: "kernel .config to check when the image carries none " +
 					"(/boot/config-* or a config embedded in the kernel image)"},

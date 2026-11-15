@@ -114,7 +114,7 @@ export default function App({ initial, error }: { initial: Report | null; error?
             <button className={`nav-item ${n.group ? "nav-sub" : ""} ${current.id === n.id ? "active" : ""}`} disabled={!!n.off} title={n.off ? n.why : undefined} onClick={() => go(n.id)}>
               {n.icon}
               <span>{n.label}{n.off && <small className="nav-na">{n.off}</small>}</span>
-              {n.badge !== undefined && <span className="badge num">{n.badge}</span>}
+              {n.badge !== undefined && <span className="badge num">{n.badge.toLocaleString()}</span>}
             </button>
             )}
           </Fragment>
@@ -138,7 +138,7 @@ export default function App({ initial, error }: { initial: Report | null; error?
           {current.id === "modules" && <Modules r={report} />}
           {current.id === "binaries" && <Binaries key={hash} binaries={report.binaries} params={new URLSearchParams(hash.split("?")[1] ?? "")} />}
           {current.id === "sbom" && report.sbom && (
-            <SbomGraph key={hash} graph={report.sbom.graph} params={new URLSearchParams(hash.split("?")[1] ?? "")} />
+            <SbomGraph key={hash} graph={report.sbom.graph} format={report.sbom.format} documents={report.sbom.documents} params={new URLSearchParams(hash.split("?")[1] ?? "")} />
           )}
           {current.id === "cves" && cves && (
             <Cves key={hash} section={cves} params={new URLSearchParams(hash.split("?")[1] ?? "")} />

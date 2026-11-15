@@ -7,8 +7,9 @@ import (
 )
 
 func TestBullets(t *testing.T) {
-	reply := "Here is the assessment:\n\n- **Hardening:** 82% of binaries lack a protection.\n* Second point\n• Third point\n4. Fourth point\n5) Fifth point\n- Sixth point\n"
-	want := []string{"82% of binaries lack a protection.", "Second point", "Third point", "Fourth point", "Fifth point"}
+	reply := "Here is the assessment:\n\n- **Hardening:** 82% of binaries lack a protection.\n* Second point\n• Third point\n4. Fourth point\n5) Fifth point\n- Sixth point\n- Seventh point\n- Eighth point\n"
+	want := []string{"82% of binaries lack a protection.", "Second point", "Third point", "Fourth point", "Fifth point",
+		"Sixth point", "Seventh point"}
 	if got := bullets(reply); !reflect.DeepEqual(got, want) {
 		t.Fatalf("bullets() = %q, want %q", got, want)
 	}
