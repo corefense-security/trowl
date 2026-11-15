@@ -392,7 +392,7 @@ export default function Cves({ section, params }: { section: CveSection; params:
   const [vector, setVector] = useState<string>("all");
   const [kevOnly, setKevOnly] = useState(false);
   const [kernelOnly, setKernelOnly] = useState(false);
-  // Only the CVEs on build-time components (native tools, recipes that ship nothing). They are off
+  // Only the CVEs on build-time components such as host tools and anything that ships nothing. They are off
   // the device, so the default view and the counts leave them out. This lists them.
   const [buildTime, setBuildTime] = useState(false);
   const [open, setOpen] = useState<CveRow | null>(null);
@@ -457,7 +457,7 @@ export default function Cves({ section, params }: { section: CveSection; params:
           <Switch label="Kernel only" on={kernelOnly} onChange={setKernelOnly} title="Only CVEs in the Linux kernel" />
           {buildRows.length > 0 && (
             <Switch label="Build time" on={buildTime} onChange={(v) => { setBuildTime(v); if (v) setOffImage(false); }}
-              title={`Only the ${buildRows.length.toLocaleString()} CVEs on build-time components: tools that run on the build machine and recipes that ship nothing. They aren't on the device, so the default view and the counts leave them out; turn this off to see the device's CVEs again.`} />
+              title={`Only the ${buildRows.length.toLocaleString()} CVEs on build-time components. These are tools that run on the build machine and components that ship nothing. They aren't on the device so the default view and the counts leave them out. Turn this off to see the device's CVEs again.`} />
           )}
           <Switch label="KEV" on={kevOnly} onChange={setKevOnly} disabled={!section.sources.kev}
             title={section.sources.kev ? `CISA KEV catalogue ${section.sources.kev.version}` : "KEV not checked (no network)"} />

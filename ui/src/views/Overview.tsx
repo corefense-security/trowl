@@ -176,7 +176,13 @@ export default function Overview({ r, go }: { r: Report; go: (r: Route, p?: Reco
               <button className="share-link" onClick={() => go("cves", { disagree: "1" })}>Details <ChevronRight size={13} /></button>
             </div>
           )}
-          {sbom && (
+          {sbom && installed === 0 && (
+            <div className="ov-pk">
+              <div className="ov-pk-t"><Box size={15} /><span>Installed packages</span></div>
+              <div className="ov-pk-r"><div className="ov-pk-n">Skipping presence checks (SBOM lists no files)</div></div>
+            </div>
+          )}
+          {sbom && installed > 0 && (
             <div className="ov-pk" title={`Installed files checked against the SBOM by path and SHA-256.${changedFiles ? ` ${changedFiles} file${changedFiles === 1 ? "" : "s"} differ.` : ""}`}>
               <div className="ov-pk-t"><Box size={15} /><span>Installed packages</span></div>
               <div className="ov-pk-r">

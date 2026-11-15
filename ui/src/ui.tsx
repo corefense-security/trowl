@@ -6,8 +6,8 @@ export const STATUS: Record<string, { label: string; color: string; hint: string
   modified: { label: "Changed", color: "var(--warning)", hint: "In image, but some files differ from the SBOM hash" },
   partial: { label: "Partial", color: "var(--serious)", hint: "Some declared files are missing" },
   absent: { label: "Not in image", color: "var(--critical)", hint: "None of the declared files are in the image" },
-  "build-only": { label: "Build-time only", color: "var(--neutral)", hint: "Recipe produces nothing that ships" },
-  "no-files": { label: "No files declared", color: "var(--violet)", hint: "Meta package; presence can't be decided from files" },
+  "build-only": { label: "Build-time only", color: "var(--neutral)", hint: "Used only at build time. Nothing from it ships" },
+  "no-files": { label: "No files declared", color: "var(--violet)", hint: "No file list, so presence can't be checked" },
   unknown: { label: "Unknown", color: "var(--axis)", hint: "Only file-less packages; presence undecided" },
 };
 
