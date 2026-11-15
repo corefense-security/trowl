@@ -14,7 +14,7 @@ func TestLoadRefusesWhatIsNotAnSBOM(t *testing.T) {
 		"plain text":    "not json",
 		"truncated":     `{"@graph": [{"type": "software_Pack`,
 		"SPDX 2.3":      `{"spdxVersion": "SPDX-2.3", "packages": []}`,
-		"CycloneDX":     `{"bomFormat": "CycloneDX", "specVersion": "1.6", "components": []}`,
+		"CycloneDX XML": `<?xml version="1.0"?><bom xmlns="http://cyclonedx.org/schema/bom/1.6"></bom>`,
 		"SPDX 2 list":   `[{"spdxVersion": "SPDX-2.3"}]`,
 		"other JSON-LD": `{"@context": "https://schema.org", "@graph": []}`,
 	} {
@@ -28,7 +28,7 @@ func TestLoadRefusesWhatIsNotAnSBOM(t *testing.T) {
 
 func TestKernelOnABootPartitionIsNotAbsent(t *testing.T) {
 	sb := &Sbom{Packages: map[string]*Package{"k": {ID: "k", Role: "package", Files: []File{{Name: "/boot/bzImage"}}}},
-		PackageOrder: []string{"k"}, Generates: newIDList()}
+		PackageOrder: []string{"k"}, Generates: newIDList(), Vulns: newIDList()}
 	for other, want := range map[bool]string{false: "absent", true: "no-files"} {
 		if got := Compare(sb, t.TempDir(), other).Status.Of("k"); got != want {
 			t.Errorf("other partitions %v: %s, want %s", other, got, want)

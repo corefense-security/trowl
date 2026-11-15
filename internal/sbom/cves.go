@@ -2,7 +2,7 @@ package sbom
 
 // One row per CVE the SBOM attaches to a component, for the dashboard's CVE page.
 //
-// The status comes from the SBOM's own VEX assessments (Yocto's cve-check / sbom-cve-check):
+// The status comes from the SBOM's own VEX, whichever build system or scanner wrote it:
 // affected -> unpatched, not_affected -> ignored, fixed -> fixed. Whether the CVE matters for
 // this image is decided per CVE across every component that carries it. A CVE only stops
 // mattering when none of its carriers ship. That is package-level evidence only.
@@ -33,7 +33,7 @@ func MayShip(shipped string) bool { return shipped != "no" && shipped != "build"
 var vectors = map[string]string{"N": "network", "A": "adjacent", "L": "local", "P": "physical"}
 var avRe = regexp.MustCompile(`\bAV:([NALP])\b`)
 
-// Fixed CVEs are most of the list (≈20k on a Yocto image) and rarely opened. Their summaries
+// Fixed CVEs are most of the list (≈20k on a full Linux image) and rarely opened. Their summaries
 // are kept short so the self-contained dashboard stays small.
 const fixedSummaryChars = 240
 

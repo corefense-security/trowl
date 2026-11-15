@@ -2,10 +2,11 @@ package sbom
 
 // Compare what the SBOM declares with what the unpacked image actually contains.
 //
-// A binary package's presence is decided from the files the SBOM says it contains (path,
-// then SHA-256), so no package database is needed in the image. Components that never reach
-// the image (build-only recipes, packages whose files are all absent) have their associated
-// CVEs reported as candidates for VEX "not_affected / component_not_present".
+// A package's presence is decided from the files the SBOM says it contains, by path and then
+// SHA-256. No package database is needed in the image. An SBOM without file lists can't show
+// presence. Components that never reach the image have their CVEs reported as candidates for
+// VEX "not_affected / component_not_present". Those are build-only components and packages
+// whose files are all absent.
 //
 // This is package-level only. A package being absent says nothing about copies of its code
 // that were statically linked or vendored into something else.
@@ -124,7 +125,10 @@ func Compare(sb *Sbom, rootfs string, otherPartitions bool) *Comparison {
 		pkg := sb.Packages[pid]
 		if pkg.Role == "package" {
 			st, counts := packageStatus(rootfs, pkg.Files)
-			if st == "absent" && otherPartitions && onBoot(pkg.Files) {
+			switch {
+			case pkg.BuildOnly:
+				st = "build-only"
+			case st == "absent" && otherPartitions && onBoot(pkg.Files):
 				st = "no-files"
 			}
 			status.set(pid, pyjson.O("status", st, "files", counts))
@@ -167,6 +171,7 @@ func Compare(sb *Sbom, rootfs string, otherPartitions bool) *Comparison {
 
 	var findings []model.Finding
 	notPresent := []any{}
+	target := sb.targetRole()
 	for _, pid := range status.Keys {
 		info := status.M[pid]
 		pkg := sb.Packages[pid]
@@ -194,7 +199,7 @@ func Compare(sb *Sbom, rootfs string, otherPartitions bool) *Comparison {
 					Evidence: withID(pid, c)})
 			}
 		}
-		if pkg.Role == "recipe" && (st == "absent" || st == "build-only") {
+		if pkg.Role == target && (st == "absent" || st == "build-only") {
 			if cves := sb.Vulns.M[pid]; len(cves) > 0 {
 				list := []any{}
 				for _, c := range cves {

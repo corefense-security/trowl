@@ -45,6 +45,7 @@ type Package struct {
 	ID, Name, Version, Role, Purl string
 	Cpes                          []string
 	Files                         []File
+	BuildOnly                     bool // build-time only, from CycloneDX scope "excluded"
 }
 
 type CVSS struct {
@@ -93,7 +94,11 @@ type Sbom struct {
 	Name         string
 	VulnInfo     map[string]*VulnInfo
 	Inventory    string // the package database this came from, when it isn't a real SBOM
-	Format       string // detected format, such as "SPDX 2.2" or "SPDX 3.0.1"
+	Format       string // detected format, such as "SPDX 2.2", "SPDX 3.0.1" or "CycloneDX 1.6"
+	Producer     string // tool name from CycloneDX metadata.tools
+	Serial       string // CycloneDX serialNumber without urn:uuid:
+	BomVersion   int    // CycloneDX version or 1 when not given
+	VEXSkipped   int    // embedded affects refs to no listed component or another BOM
 	Documents    int    // number of documents in an SPDX 2.2 set, 0 for a single document
 }
 
@@ -225,8 +230,8 @@ func idString(v any) string {
 }
 
 // wantFormats lists the formats trowl reads, for the error when it gets another one.
-const wantFormats = "trowl reads SPDX 3.0 JSON-LD (Yocto's create-spdx-3.0) and SPDX 2.2 JSON " +
-	"(Yocto's create-spdx-2.2, as IMAGE.spdx.tar.zst or a directory of its documents)"
+const wantFormats = "trowl reads SPDX 3.0 JSON-LD (Yocto's create-spdx-3.0), SPDX 2.2 JSON " +
+	"(Yocto's create-spdx-2.2, as IMAGE.spdx.tar.zst or a directory of its documents) and CycloneDX JSON"
 
 // spdx3Elements returns the elements of an SPDX 3.0 JSON-LD document, from its @graph or from
 // the document itself when it is a bare list of elements. Any other format is refused by name, so
@@ -270,7 +275,7 @@ func spdx3Elements(raw []byte) ([]json.RawMessage, error) {
 }
 
 // Load reads an SBOM. It takes SPDX 2.2 (one document, a directory of them, or Yocto's
-// IMAGE.spdx.tar.zst) or SPDX 3.0 JSON-LD.
+// IMAGE.spdx.tar.zst), SPDX 3.0 JSON-LD or CycloneDX JSON.
 func Load(path string) (*Sbom, error) {
 	docs, isSpdx2, err := spdx2Docs(path)
 	if err != nil {
@@ -289,6 +294,16 @@ func Load(path string) (*Sbom, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
+	}
+	if isCycloneDX(raw) {
+		sb, err := loadCycloneDX(raw)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", py.CleanPath(path), err)
+		}
+		return sb, nil
+	}
+	if cycloneDXXML(raw) {
+		return nil, fmt.Errorf("%s: CycloneDX XML isn't read, pass the JSON form: %s", py.CleanPath(path), wantFormats)
 	}
 	items, err := spdx3Elements(raw)
 	if err != nil {

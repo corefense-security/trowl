@@ -65,8 +65,9 @@ func commands() []*command {
 			name: "scan", help: "analyse an image and write a static dashboard (index.html) plus report.json",
 			positionals: []string{"image"},
 			opts: []opt{
-				{names: []string{"--sbom"}, value: true, help: "SBOM for the image: SPDX 3.0 JSON-LD, or SPDX 2.2 " +
-					"(Yocto's IMAGE.spdx.tar.zst, or a directory of its documents)"},
+				{names: []string{"--sbom"}, value: true, help: "SBOM for the image: SPDX 3.0 JSON-LD, SPDX 2.2 " +
+					"(Yocto's IMAGE.spdx.tar.zst, or a directory of its documents) or CycloneDX JSON"},
+				{names: []string{"--vex"}, value: true, help: "CycloneDX VEX for the --sbom when it is a separate file (meta-cyclonedx)"},
 				{names: []string{"-o", "--output"}, value: true, def: "trowl-report", help: "output directory"},
 				{names: []string{"--kernel-config"}, value: true, help: "kernel .config to check when the image carries none " +
 					"(/boot/config-* or a config embedded in the kernel image)"},
@@ -261,8 +262,11 @@ func scanBanner(a args) {
 	rows := [][2]string{
 		{"target", py.CleanPath(a["image"])},
 		{"sbom", orNone(a["sbom"], "not supplied")},
-		{"kernel", kernel},
 	}
+	if a["vex"] != "" {
+		rows = append(rows, [2]string{"vex", py.CleanPath(a["vex"])})
+	}
+	rows = append(rows, [2]string{"kernel", kernel})
 	if a["kernel-tree"] != "" {
 		rows = append(rows, [2]string{"tree", py.CleanPath(a["kernel-tree"])})
 	}
@@ -274,6 +278,9 @@ func scanBanner(a args) {
 }
 
 func cmdScan(a args) int {
+	if a["vex"] != "" && a["sbom"] == "" {
+		return fail("scan", "argument --vex: needs --sbom")
+	}
 	scanBanner(a)
 	out := a["output"]
 	// Fail before the scan, not after it, when the report can't be saved (in a container this is
@@ -326,7 +333,7 @@ func cmdScan(a args) int {
 		}
 		st.Ok(u.SourceFormat)
 		res, err := scan.Run(u, a["image"], scan.Options{
-			SBOM: a["sbom"], Network: !a.flag("no-network"), CacheDir: cache, Links: a["links"],
+			SBOM: a["sbom"], VEX: a["vex"], Network: !a.flag("no-network"), CacheDir: cache, Links: a["links"],
 			Model: modelName, KernelConfig: a["kernel-config"], KernelSrc: a["kernel-src"], KernelTree: a["kernel-tree"], KernelPolicy: a["kernel-policy"],
 			Started: started,
 		})

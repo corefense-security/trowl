@@ -25,11 +25,11 @@ Given a source tree (`--kernel-tree`), it further assigns VEX statuses to kernel
 - SBOM VEX disagreements (e.g. code compiled but `.ko` module not shipped)
 
 ## Currently supported
-- **Distro:** Yocto
+- **Targets:** Yocto
 - **Filesystems:** ext2/3/4, squashfs, tar, or an unpacked directory.
 - **Disk images:** `.wic` and other MBR/GPT images (ext or squashfs partitions). Scans the detected rootfs only.
 - **Compression:** zstd, xz, gzip, bzip2.
-- **SBOMs:** SPDX 3.0 JSON-LD from Yocto, including `sbom-cve-check` output, and SPDX 2.2 from Yocto's `create-spdx-2.2` (the scarthgap default): pass `IMAGE.spdx.tar.zst` or a directory of its documents.
+- **SBOMs:** SPDX 2.2, SPDX 3.0 JSON-LD (including Yocto's `sbom-cve-check` output), and CycloneDX JSON (pass a separate CycloneDX VEX file with `--vex`).
 
 ### Local LLM (experimental)
 
