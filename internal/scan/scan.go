@@ -29,6 +29,7 @@ import (
 
 type Options struct {
 	SBOM         string
+	VEX          string // CycloneDX VEX kept apart from the SBOM
 	Network      bool
 	CacheDir     string
 	Links        string // open | all | none
@@ -129,7 +130,27 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 		if sb.Documents > 0 {
 			format += fmt.Sprintf(" (%d documents)", sb.Documents)
 		}
-		st.Ok(fmt.Sprintf("%s, %d components", format, len(sb.PackageOrder)))
+		if sb.Producer != "" {
+			format += " from " + sb.Producer
+		}
+		detail := fmt.Sprintf("%s, %d components", format, len(sb.PackageOrder))
+		if sb.VEXSkipped > 0 {
+			detail += fmt.Sprintf(", %d VEX refs skipped (unlisted component or another BOM)", sb.VEXSkipped)
+		}
+		st.Ok(detail)
+		if opt.VEX != "" {
+			st = status.Start("reading VEX")
+			res, err := sbom.LoadVEX(sb, opt.VEX)
+			if err != nil {
+				st.Fail("")
+				return nil, err
+			}
+			detail := fmt.Sprintf("%d statements, %d applied", res.Statements, res.Applied)
+			if res.Skipped > 0 {
+				detail += fmt.Sprintf(", %d skipped for another BOM or component", res.Skipped)
+			}
+			st.Ok(detail)
+		}
 		st = status.Start("matching SBOM to image")
 		if err := checkKernelVersion(sb, kconfig.ModulesVersion(rootfs)); err != nil {
 			st.Fail("")
@@ -164,7 +185,10 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 		// Counted the same way as the Overview. A package with no files can't be seen either way.
 		shipped := statusN[rs{"package", "present"}] + statusN[rs{"package", "modified"}] + statusN[rs{"package", "partial"}]
 		inImage := fmt.Sprintf("%d of %d packages in image", shipped, shipped+statusN[rs{"package", "absent"}])
-		if shipped == 0 {
+		if shipped+statusN[rs{"package", "absent"}] == 0 {
+			// CycloneDX SBOMs often list no files.
+			st.Ok("the SBOM lists no files, so presence isn't checked")
+		} else if shipped == 0 {
 			st.Fail(inImage)
 		} else {
 			st.Ok(inImage)
@@ -174,6 +198,7 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 			"name", sb.Name,
 			"format", sb.Format,
 			"documents", sb.Documents,
+			"producer", sb.Producer,
 			"components", roles,
 			"status_counts", statusCounts,
 			"not_present", cmp.NotPresent,

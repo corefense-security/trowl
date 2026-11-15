@@ -201,6 +201,8 @@ export interface Report {
     format?: string;
     /** Number of documents in an SPDX 2.2 set. 0 for a single document. */
     documents?: number;
+    /** Tool that wrote the SBOM, from CycloneDX metadata.tools. */
+    producer?: string;
     components: Record<string, number>;
     status_counts: Record<string, number>;
     graph: { nodes: GraphNode[]; edges: GraphEdge[] };

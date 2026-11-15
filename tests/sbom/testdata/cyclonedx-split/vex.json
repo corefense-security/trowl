@@ -1,0 +1,18 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:99999999-8888-7777-6666-555555555555",
+  "version": 1,
+  "metadata": {"tools": {"components": [{"type": "application", "name": "meta-cyclonedx"}]}},
+  "vulnerabilities": [
+    {"id": "CVE-2025-1001", "source": {"name": "NVD"},
+     "analysis": {"state": "resolved", "detail": "STATE: fixed-version\nJUSTIFICATION: Fixed from version 3.5.4"},
+     "affects": [{"ref": "urn:cdx:11111111-2222-3333-4444-555555555555/1#openssl"}]},
+    {"id": "CVE-2025-1002", "source": {"name": "NVD"},
+     "analysis": {"state": "not_affected", "justification": "code_not_present", "detail": "STATE: cpe-incorrect"},
+     "affects": [{"ref": "urn:cdx:11111111-2222-3333-4444-555555555555/1#busybox"}]},
+    {"id": "CVE-2025-1003", "source": {"name": "NVD"},
+     "analysis": {"state": "exploitable", "detail": "STATE: unpatched"},
+     "affects": [{"ref": "urn:cdx:11111111-2222-3333-4444-555555555555/1#linux-yocto"}]}
+  ]
+}

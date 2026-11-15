@@ -39,13 +39,7 @@ func FromInventory(source string, comps []Package) (*Sbom, *Status) {
 // MatchTargets lists the CPEs of the components CVEs are attached to: build components
 // (recipes) when the SBOM has them, otherwise the binary packages.
 func (s *Sbom) MatchTargets() []CPE {
-	role := "package"
-	for _, id := range s.PackageOrder {
-		if s.Packages[id].Role == "recipe" {
-			role = "recipe"
-			break
-		}
-	}
+	role := s.targetRole()
 	var out []CPE
 	for _, id := range s.PackageOrder {
 		p := s.Packages[id]
@@ -72,13 +66,18 @@ func (s *Sbom) MatchTargets() []CPE {
 	return out
 }
 
-// AddMatch records that a version match found cve in component comp. The SBOM's own
-// assessment of that pair, when it has one, is kept. Otherwise the CVE counts as affected.
-// info fills in what the SBOM doesn't know about the CVE.
-func (s *Sbom) AddMatch(comp, cve string, info *VulnInfo) {
-	if _, ok := s.Packages[comp]; !ok {
-		return
+// targetRole is the role CVEs attach to. That is recipe when the SBOM has recipes and package if not.
+func (s *Sbom) targetRole() string {
+	for _, id := range s.PackageOrder {
+		if s.Packages[id].Role == "recipe" {
+			return "recipe"
+		}
 	}
+	return "package"
+}
+
+// listCVE adds cve to the component's sorted CVE list.
+func (s *Sbom) listCVE(comp, cve string) {
 	ids := s.Vulns.M[comp]
 	i := sort.SearchStrings(ids, cve)
 	if i == len(ids) || ids[i] != cve {
@@ -90,6 +89,16 @@ func (s *Sbom) AddMatch(comp, cve string, info *VulnInfo) {
 		}
 		s.Vulns.M[comp] = ids
 	}
+}
+
+// AddMatch records that a version match found cve in component comp. The SBOM's own
+// assessment of that pair, when it has one, is kept. Otherwise the CVE counts as affected.
+// info fills in what the SBOM doesn't know about the CVE.
+func (s *Sbom) AddMatch(comp, cve string, info *VulnInfo) {
+	if _, ok := s.Packages[comp]; !ok {
+		return
+	}
+	s.listCVE(comp, cve)
 	if _, ok := s.vex[pair{cve, comp}]; !ok {
 		s.vex[pair{cve, comp}] = "affected"
 		s.matched[pair{cve, comp}] = true
@@ -184,7 +193,8 @@ func (s *Sbom) Assess(cve, comp string, a *Assessment) {
 // AssessmentOf is trowl's judgement of the pair, nil without one.
 func (s *Sbom) AssessmentOf(cve, comp string) *Assessment { return s.assessed[pair{cve, comp}] }
 
-// ConfigNote is the VEX note for code the kernel config leaves out, in Yocto's words.
+// ConfigNote is the VEX note for code the kernel config leaves out. The wording is Yocto's and
+// trowl uses it for every SBOM.
 const ConfigNote = "not-applicable-config"
 
 // KernelComponents lists the components that are the Linux kernel.
@@ -209,8 +219,9 @@ func (p *Package) IsKernel() bool {
 }
 
 // AssessesKernel reports whether the SBOM carries a CVE scanner's verdicts on the kernel. Only a
-// scanner states "affected". A plain Yocto SBOM lists the recipe's own CVE_STATUS lines, all fixed
-// or not affected, and says nothing about the thousands of CVEs nobody wrote a line for.
+// scanner states "affected". A build system lists just its own statements such as Yocto's
+// CVE_STATUS or Buildroot's ignored CVEs. Those are fixed or not affected and say nothing about
+// the thousands of CVEs nobody wrote a line for.
 func (s *Sbom) AssessesKernel() bool {
 	for _, comp := range s.KernelComponents() {
 		for _, cve := range s.Vulns.M[comp] {

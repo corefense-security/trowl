@@ -68,8 +68,8 @@ const BIG = 600;
 // Beyond this the package view would freeze the browser, so it isn't offered.
 const MAX_PACKAGE_VIEW = 1500;
 
-export default function SbomGraph({ graph, params, format, documents }: {
-  graph: { nodes: GraphNode[]; edges: GraphEdge[] }; params?: URLSearchParams; format?: string; documents?: number;
+export default function SbomGraph({ graph, params, format, documents, producer }: {
+  graph: { nodes: GraphNode[]; edges: GraphEdge[] }; params?: URLSearchParams; format?: string; documents?: number; producer?: string;
 }) {
   // A link can open the page filtered. ?status=present keeps one status, ?role=recipe|package one kind.
   const onlyStatus = params?.get("status") ?? null;
@@ -112,14 +112,16 @@ export default function SbomGraph({ graph, params, format, documents }: {
   const [zoomPct, setZoomPct] = useState(100);
 
   const byId = useMemo(() => new Map(graph.nodes.map((n) => [n.id, n])), [graph]);
+  // No recipes, as in CycloneDX. Every node is a plain component.
+  const flat = useMemo(() => !graph.nodes.some((n) => n.role === "recipe"), [graph]);
   // Only the kinds the Show filter keeps. Otherwise a package-only status (Changed, Partial)
   // would be offered while only components are shown, where ticking it does nothing.
-  const inRole = (n: GraphNode) => (n.role === "recipe" ? showRecipes || !showPackages : showPackages);
+  const inRole = (n: GraphNode) => flat || (n.role === "recipe" ? showRecipes || !showPackages : showPackages);
   const statusCounts = useMemo(() => {
     const m: Record<string, number> = {};
     graph.nodes.filter(inRole).forEach((n) => { m[n.status] = (m[n.status] ?? 0) + 1; });
     return m;
-  }, [graph, showPackages, showRecipes]);
+  }, [graph, showPackages, showRecipes, flat]);
 
   const rel = useMemo(() => {
     const out = new Map<string, GraphEdge[]>(), inc = new Map<string, GraphEdge[]>();
@@ -131,7 +133,7 @@ export default function SbomGraph({ graph, params, format, documents }: {
   }, [graph]);
 
   const visible = useMemo(() => graph.nodes.filter((n) => !hidden.has(n.status) && inRole(n)),
-    [graph, hidden, showRecipes, showPackages]);
+    [graph, hidden, showRecipes, showPackages, flat]);
   const big = visible.length > BIG;
   // Too many nodes to draw without freezing the page, so the paged table is the only view.
   const tooBig = visible.length > MAX_PACKAGE_VIEW;
@@ -391,7 +393,7 @@ export default function SbomGraph({ graph, params, format, documents }: {
       <div className="gw-canvas">
         <div className="gw-panel gw-top">
           <div style={{ position: "relative" }}>
-            <SearchBox value={query} placeholder="Find a package or recipe"
+            <SearchBox value={query} placeholder={flat ? "Find a component" : "Find a package or recipe"}
               onChange={(v) => { setQuery(v); setSuggestOpen(true); }} />
             {suggestOpen && suggestions.length > 0 && (
               <div className="gw-suggest" onMouseLeave={() => setSuggestOpen(false)}>
@@ -399,7 +401,7 @@ export default function SbomGraph({ graph, params, format, documents }: {
                   <button key={n.id} onClick={() => { select(n.id); setView("graph"); setSuggestOpen(false); }}>
                     <span className="swatch" style={{ background: STATUS[n.status]?.color, borderRadius: n.role === "recipe" ? 3 : 999 }} />
                     <span>{n.name}</span>
-                    <span className="muted" style={{ marginLeft: "auto", fontSize: 12 }}>{n.role}</span>
+                    <span className="muted" style={{ marginLeft: "auto", fontSize: 12 }}>{flat ? "component" : n.role}</span>
                   </button>
                 ))}
               </div>
@@ -422,12 +424,13 @@ export default function SbomGraph({ graph, params, format, documents }: {
           {format && (
             <span className="gw-format" title="SBOM format detected when the file was read">
               {format}{documents ? <span className="muted"> · {documents.toLocaleString()} documents</span> : null}
+              {producer ? <span className="muted"> · {producer}</span> : null}
             </span>
           )}
           <MultiDropdown label="Status" align="right" summary={statusSummary} onToggle={toggleStatus}
             options={presentStatuses.map((s) => ({ value: s, label: STATUS[s].label, on: !hidden.has(s), n: statusCounts[s],
               color: STATUS[s].color, hint: STATUS[s].hint }))} />
-          <MultiDropdown label="Show" align="right" summary={showSummary}
+          {!flat && <MultiDropdown label="Show" align="right" summary={showSummary}
             onToggle={(v) => v === "packages" ? setShowPackages(!showPackages) : setShowRecipes(!showRecipes)}
             options={[
               { value: "packages", label: "Packages", on: showPackages,
@@ -437,7 +440,7 @@ export default function SbomGraph({ graph, params, format, documents }: {
                   : "Show the binary packages each component builds" },
               { value: "recipes", label: "Components", on: showRecipes || !showPackages, disabled: !showPackages,
                 hint: showPackages ? "Show the build components (recipes) next to their packages" : "Always shown when packages are off" },
-            ]} />
+            ]} />}
         </div>
 
         {view === "graph" ? (
@@ -446,19 +449,21 @@ export default function SbomGraph({ graph, params, format, documents }: {
             {hov && hover && (
               <div className="gw-panel gw-hover" style={{ left: hover.x + 18, top: hover.y + 18 }}>
                 <strong>{hov.name}</strong>
-                <span className="muted">{hov.role} · {hov.version || "no version"}</span>
+                <span className="muted">{flat ? "component" : hov.role} · {hov.version || "no version"}</span>
                 <StatusChip s={hov.status} />
-                {hov.files && <span className="ink2">{hov.files.present}/{hov.files.declared} files present</span>}
+                {hov.files?.declared ? <span className="ink2">{hov.files.present}/{hov.files.declared} files present</span> : null}
                 {hov.cves.length > 0 && <span className="ink2">{hov.cves.length} CVEs · <b className={openCves(hov) ? "no" : ""}>{openCves(hov)} open</b></span>}
               </div>
             )}
             <div className="gw-panel gw-legend">
-              <div className="row"><span className="shape-r" /> Recipe (source)</div>
-              <div className="row"><span className="shape-c" /> Binary package, sized by file count</div>
+              {flat ? <div className="row"><span className="shape-c" /> Component</div> : <>
+                <div className="row"><span className="shape-r" /> Recipe (source)</div>
+                <div className="row"><span className="shape-c" /> Binary package, sized by file count</div>
+              </>}
               <div className="row"><span className="ring" /> Has open CVEs</div>
               <div className="row"><span className="line" style={{ borderColor: "var(--upstream)" }} /> Depends on (selection)</div>
               <div className="row"><span className="line" style={{ borderColor: "var(--downstream)" }} /> Required by (selection)</div>
-              <div className="row"><span className="line" style={{ borderColor: "var(--axis)", borderTopStyle: "dashed" }} /> Recipe builds package</div>
+              {!flat && <div className="row"><span className="line" style={{ borderColor: "var(--axis)", borderTopStyle: "dashed" }} /> Recipe builds package</div>}
             </div>
             <div className="gw-panel gw-stats num">
               {visible.length} nodes · {elements.length - visible.length} edges · {zoomPct}%
@@ -472,20 +477,20 @@ export default function SbomGraph({ graph, params, format, documents }: {
             </div>
           </>
         ) : (
-          <NodeTable nodes={visible} selected={selected} onSelect={select} />
+          <NodeTable nodes={visible} selected={selected} onSelect={select} flat={flat} />
         )}
       </div>
-      {sel && <NodeDrawer n={sel} rel={rel} byId={byId} onSelect={select} onClose={() => select(null)}
+      {sel && <NodeDrawer n={sel} flat={flat} rel={rel} byId={byId} onSelect={select} onClose={() => select(null)}
         backTo={trail.length ? byId.get(trail[trail.length - 1]) ?? null : null} onBack={back} />}
     </div>
   );
 }
 
-function NodeTable({ nodes, selected, onSelect }: { nodes: GraphNode[]; selected: string | null; onSelect: (id: string) => void }) {
+function NodeTable({ nodes, selected, onSelect, flat }: { nodes: GraphNode[]; selected: string | null; onSelect: (id: string) => void; flat: boolean }) {
   const rows = useMemo(() => [...nodes].sort((a, b) => openCves(b) - openCves(a) || b.cves.length - a.cves.length || a.name.localeCompare(b.name)), [nodes]);
   const page = usePage(rows, nodes);
   // Components have no file list, so the column is dropped when nothing shown can fill it.
-  const anyFiles = useMemo(() => nodes.some((n) => n.files), [nodes]);
+  const anyFiles = useMemo(() => nodes.some((n) => n.files?.declared), [nodes]);
   return (
     <div className="gw-panel gw-table">
       <table>
@@ -494,10 +499,10 @@ function NodeTable({ nodes, selected, onSelect }: { nodes: GraphNode[]; selected
           {page.rows.map((n) => (
             <tr key={n.id} className={`clickable ${selected === n.id ? "sel" : ""}`} onClick={() => onSelect(n.id)}>
               <td><b>{n.name}</b></td>
-              <td className="ink2">{n.role}</td>
+              <td className="ink2">{flat ? "component" : n.role}</td>
               <td className="ink2">{n.version}</td>
               <td><StatusChip s={n.status} /></td>
-              {anyFiles && <td className="c num">{n.files ? `${n.files.present}/${n.files.declared}` : "–"}</td>}
+              {anyFiles && <td className="c num">{n.files?.declared ? `${n.files.present}/${n.files.declared}` : "–"}</td>}
               <td className="c num">{n.cves.length || "–"}</td>
               <td className="c num">{openCves(n) ? <b className="no">{openCves(n)}</b> : "–"}</td>
             </tr>
@@ -509,8 +514,9 @@ function NodeTable({ nodes, selected, onSelect }: { nodes: GraphNode[]; selected
   );
 }
 
-function NodeDrawer({ n, rel, byId, onSelect, onClose, backTo, onBack }: {
+function NodeDrawer({ n, flat, rel, byId, onSelect, onClose, backTo, onBack }: {
   n: GraphNode;
+  flat: boolean;
   rel: { out: Map<string, GraphEdge[]>; inc: Map<string, GraphEdge[]> };
   byId: Map<string, GraphNode>;
   onSelect: (id: string) => void;
@@ -522,8 +528,9 @@ function NodeDrawer({ n, rel, byId, onSelect, onClose, backTo, onBack }: {
   const groups: [string, string[]][] = [
     ["Built by recipe", inc.filter((e) => e.kind === "generates").map((e) => e.source)],
     ["Produces packages", out.filter((e) => e.kind === "generates").map((e) => e.target)],
-    ["Depends on (runtime)", out.filter((e) => e.kind === "runtime").map((e) => e.target)],
-    ["Required by (runtime)", inc.filter((e) => e.kind === "runtime").map((e) => e.source)],
+    // CycloneDX doesn't say if a dependency is for runtime.
+    [flat ? "Depends on" : "Depends on (runtime)", out.filter((e) => e.kind === "runtime").map((e) => e.target)],
+    [flat ? "Required by" : "Required by (runtime)", inc.filter((e) => e.kind === "runtime").map((e) => e.source)],
     ["Needed to build", inc.filter((e) => e.kind === "build").map((e) => e.source)],
   ];
   const buildDeps = out.filter((e) => e.kind === "build").map((e) => e.target);
@@ -536,14 +543,14 @@ function NodeDrawer({ n, rel, byId, onSelect, onClose, backTo, onBack }: {
           <ArrowLeft size={14} />{backTo.name}
         </button>
       )}
-      <div className="muted" style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 0.5 }}>{n.role === "recipe" ? "Recipe" : "Binary package"}</div>
+      <div className="muted" style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 0.5 }}>{flat ? "Component" : n.role === "recipe" ? "Recipe" : "Binary package"}</div>
       <h3>{n.name}</h3>
       <div className="ink2" style={{ marginBottom: 10 }}>{n.version || "no version"}</div>
       <StatusChip s={n.status} />
       <p className="muted" style={{ fontSize: 12.5 }}>{STATUS[n.status]?.hint}</p>
 
       <div className="stat-row">
-        <div><b className="num">{n.files ? `${n.files.present}/${n.files.declared}` : "–"}</b><span>files present</span></div>
+        <div><b className="num">{n.files?.declared ? `${n.files.present}/${n.files.declared}` : "–"}</b><span>files present</span></div>
         <div><b className="num">{n.cves.length}</b><span>CVEs in SBOM</span></div>
         <div><b className={`num ${open ? "no" : ""}`}>{open}</b><span>not fixed / n.a.</span></div>
       </div>
