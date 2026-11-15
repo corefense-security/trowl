@@ -1,0 +1,64 @@
+name: Build and Release Trowl
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  scanner:
+    name: Scanner
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - name: Build Trowl
+        shell: bash
+        run: |
+          echo "Checking Go formatting"
+          test -z "$(gofmt -l .)"
+          echo "Running go vet"
+          go vet ./...
+          echo "Building the scanner"
+          go build ./...
+
+  dashboard:
+    name: Dashboard
+    runs-on: ubuntu-24.04
+    defaults: { run: { working-directory: ui } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22", cache: npm, cache-dependency-path: ui/package-lock.json }
+      - name: Build Dashboard
+        shell: bash
+        run: |
+          echo "Installing dashboard dependencies"
+          npm ci
+          echo "Building the dashboard"
+          npm run build
+
+  image:
+    name: Docker Image
+    runs-on: ubuntu-24.04
+    needs: [scanner, dashboard]
+    permissions: { contents: read, packages: write }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: docker/login-action@v3
+        with: { registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}" }
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          # PR refs look like 42/merge and the slash is not a valid tag character.
+          tags: ghcr.io/${{ github.repository }}:${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || github.ref_name }}
+          # On a v* tag this stamps the binary with that tag. Otherwise it stays the dev version.
+          build-args: |
+            TROWL_VERSION=${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
