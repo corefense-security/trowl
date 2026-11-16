@@ -23,6 +23,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/corefense-security/trowl/internal/model"
@@ -131,8 +132,16 @@ func fileSha256(path string) string {
 }
 
 // ensureModel returns the model file, downloading it on first use. It returns "" if the file
-// can't be had.
+// can't be had. TROWL_MODEL_FILE comes from meta-trowl/classes/trowl.bbclass,
+// as model downloading is handled within Yocto
 func ensureModel(name, cache string) string {
+	if p := os.Getenv("TROWL_MODEL_FILE"); p != "" {
+		if py.IsFile(p) {
+			return p
+		}
+		warn("TROWL_MODEL_FILE %s doesn't exist; model output skipped", p)
+		return ""
+	}
 	sp := Models[name]
 	path := filepath.Join(cache, "models", sp.File)
 	if py.IsFile(path) {
@@ -178,8 +187,37 @@ func ensureModel(name, cache string) string {
 type Runner struct {
 	name, cache string
 	cmd         *exec.Cmd
+	exited      chan struct{} // closed when the process ends
+	stderr      *tailBuffer
 	url         string
 	failed      bool
+}
+
+// tailBuffer keeps the last bytes written to it, to say why llama-server stopped.
+type tailBuffer struct {
+	mu  sync.Mutex
+	buf []byte
+}
+
+func (t *tailBuffer) Write(p []byte) (int, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.buf = append(t.buf, p...)
+	if len(t.buf) > 4096 {
+		t.buf = t.buf[len(t.buf)-4096:]
+	}
+	return len(p), nil
+}
+
+// last returns the last n lines.
+func (t *tailBuffer) last(n int) string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	lines := strings.Split(strings.TrimSpace(string(t.buf)), "\n")
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return strings.Join(lines, "\n")
 }
 
 func NewRunner(name, cache string) *Runner { return &Runner{name: name, cache: cache} }
@@ -187,7 +225,7 @@ func NewRunner(name, cache string) *Runner { return &Runner{name: name, cache: c
 func (r *Runner) Close() {
 	if r.cmd != nil && r.cmd.Process != nil {
 		r.cmd.Process.Kill()
-		r.cmd.Wait()
+		<-r.exited
 	}
 }
 
@@ -224,12 +262,23 @@ func (r *Runner) start() bool {
 	ln.Close()
 	r.cmd = exec.Command(bin, "-m", model, "--host", "127.0.0.1", "--port", strconv.Itoa(port),
 		"-c", "8192", "-t", strconv.Itoa(runtime.NumCPU()), "--seed", "0", "--jinja", "-np", "1")
+	r.stderr = &tailBuffer{}
+	r.cmd.Stderr = r.stderr
 	if err := r.cmd.Start(); err != nil {
 		warn("llama-server failed to start: %v", err)
 		return false
 	}
+	// Wait in the background so a server that dies is noticed at once.
+	r.exited = make(chan struct{})
+	go func() { r.cmd.Wait(); close(r.exited) }()
 	url := fmt.Sprintf("http://127.0.0.1:%d", port)
 	for deadline := time.Now().Add(5 * time.Minute); time.Now().Before(deadline); time.Sleep(500 * time.Millisecond) {
+		select {
+		case <-r.exited:
+			warn("llama-server stopped before it was ready; model output skipped\n%s", r.stderr.last(5))
+			return false
+		default:
+		}
 		resp, err := http.Get(url + "/health")
 		if err == nil {
 			resp.Body.Close()
@@ -237,9 +286,6 @@ func (r *Runner) start() bool {
 				r.url, r.failed = url, false
 				return true
 			}
-		}
-		if r.cmd.ProcessState != nil {
-			break
 		}
 	}
 	warn("llama-server did not become ready; model output skipped")
