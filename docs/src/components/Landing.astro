@@ -1,0 +1,347 @@
+---
+// The landing page sections under the hero: capabilities, build diffing and get started.
+const icons: Record<string, string> = {
+	shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>',
+	box: '<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
+	layers: '<path d="m12 2 10 5-10 5L2 7z"/><path d="m2 12 10 5 10-5"/><path d="m2 17 10 5 10-5"/>',
+	output: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M8 17v-4M12 17v-6M16 17v-2"/>',
+	diff: '<path d="M6 3v12"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>',
+};
+
+const capabilities = [
+	{
+		icon: 'shield',
+		title: 'Hardening checks',
+		text: 'Finds the weak spots: unhardened binaries, leaked secrets, loose mounts and a soft kernel config.',
+		tags: [['Compiler flags', 'Secrets', 'Mount options', 'Kernel config']],
+		href: '/features/hardening/',
+	},
+	{
+		icon: 'box',
+		title: 'SBOM and CVE analysis',
+		text: 'Checks your SBOM against what is really in the image, so you only triage CVEs that ship.',
+		tags: [['Package CVEs', 'Kernel CVEs', 'SPDX', 'CycloneDX']],
+		href: '/features/sbom/',
+	},
+	{
+		icon: 'layers',
+		title: 'Multi-image support',
+		text: 'Reads the image your build wrote, compressed or not. Nothing to repack or mount.',
+		tags: [
+			['ext2/3/4', 'squashfs'],
+			['wic', 'tar', 'cpio'],
+		],
+		href: '/reference/supported-targets/',
+	},
+	{
+		icon: 'output',
+		title: 'Output',
+		text: 'A dashboard to read and share, and files your own tools can use.',
+		tags: [['Dashboard', 'VEX', 'JSON']],
+		href: '/reference/report/',
+	},
+];
+
+// An example diff. Diffing isn't released yet, so this only shows what it will look like.
+const diff = [
+	{ kind: 'add', item: 'CVE-2026-93288', note: 'new in linux' },
+	{ kind: 'add', item: '/usr/sbin/dropbear', note: 'lost FORTIFY' },
+	{ kind: 'del', item: 'CVE-2026-98023', note: 'fixed' },
+	{ kind: 'del', item: 'CVE-2026-90359', note: 'module removed' },
+	{ kind: 'mod', item: 'busybox', note: '1.37.0 → 1.37.1' },
+];
+const mark = { add: '+', del: '−', mod: '~' } as const;
+
+const start = [
+	{ title: 'Docker', text: 'Nothing to install. The quickest way to try it.', href: '/getting-started/docker/' },
+	{ title: 'Install script', text: 'Native binary on Debian or Ubuntu.', href: '/getting-started/install-script/' },
+	{ title: 'Yocto layer', text: 'Scan every image BitBake builds.', href: '/integrations/yocto/' },
+];
+---
+
+<div class="landing not-content">
+	<section>
+		<span class="kicker">Capabilities</span>
+		<h2>Every layer of the image, checked in one pass</h2>
+		<p class="lede">Trowl reads the image and its SBOM together to find what needs fixing.</p>
+		<div class="grid">
+			{
+				capabilities.map((c) => (
+					<a class="tile" href={c.href}>
+						<span class="ico">
+							<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" set:html={icons[c.icon]} />
+						</span>
+						<h3>{c.title}</h3>
+						<p>{c.text}</p>
+						<div class="tags">
+							{c.tags.map((group, i) => (
+								<>
+									{i > 0 && <span class="divider" />}
+									{group.map((t) => <span class="tag">{t}</span>)}
+								</>
+							))}
+						</div>
+					</a>
+				))
+			}
+		</div>
+	</section>
+
+	<section>
+		<span class="kicker">Diffing <em>Soon</em></span>
+		<h2>Track how security evolves across builds</h2>
+		<p class="lede">Compare any two scans and catch regressions before they reach a release.</p>
+		<div class="tile wide">
+			<div class="wide-text">
+				<span class="ico">
+					<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" set:html={icons.diff} />
+				</span>
+				<h3>What changed since the last build</h3>
+				<p>New and fixed CVEs, package bumps, and any binary or kernel option that lost its hardening.</p>
+				<div class="tags">
+					{['New CVEs', 'Fixed CVEs', 'Hardening regressions', 'Package changes'].map((t) => <span class="tag">{t}</span>)}
+				</div>
+			</div>
+			<div class="diff" aria-label="Example diff between two builds">
+				<div class="diff-head"><span>v1.4.0</span><span class="arrow">→</span><span>v1.5.0</span><span class="example">Example</span></div>
+				{
+					diff.map((d) => (
+						<div class:list={['diff-line', d.kind]}>
+							<b>{mark[d.kind as keyof typeof mark]}</b>
+							<span>{d.item}</span>
+							<i>{d.note}</i>
+						</div>
+					))
+				}
+			</div>
+		</div>
+	</section>
+
+	<section>
+		<span class="kicker">Get started</span>
+		<div class="start">
+			{
+				start.map((s) => (
+					<a class="start-card" href={s.href}>
+						<strong>
+							{s.title} <span aria-hidden="true">→</span>
+						</strong>
+						<span>{s.text}</span>
+					</a>
+				))
+			}
+		</div>
+	</section>
+</div>
+
+<style>
+	.landing {
+		--line: color-mix(in srgb, var(--sl-color-white) 8%, transparent);
+		--fill: color-mix(in srgb, var(--sl-color-white) 3%, transparent);
+	}
+	section {
+		margin-top: 5.5rem;
+	}
+	.kicker {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		font-family: var(--sl-font-mono);
+		font-size: 0.75rem;
+		letter-spacing: 0.16em;
+		text-transform: uppercase;
+		color: var(--sl-color-gray-3);
+	}
+	.kicker em {
+		font-style: normal;
+		font-weight: 600;
+		font-size: 0.65rem;
+		letter-spacing: 0.12em;
+		color: #c9a227;
+	}
+	:global([data-theme='light']) .kicker em {
+		color: #9a7a10;
+	}
+	h2 {
+		margin: 0.5rem 0 0;
+		font-size: clamp(1.6rem, 1.1rem + 1.6vw, 2.1rem);
+		line-height: 1.2;
+		letter-spacing: -0.02em;
+		font-weight: 700;
+		color: var(--sl-color-white);
+	}
+	.lede {
+		margin: 0.5rem 0 1.75rem;
+		font-size: var(--sl-text-lg);
+		color: var(--sl-color-gray-2);
+	}
+	.grid {
+		display: grid;
+		grid-template-columns: 1fr;
+		gap: 0.9rem;
+	}
+	@media (min-width: 50rem) {
+		.grid {
+			grid-template-columns: 1fr 1fr;
+		}
+	}
+	.tile {
+		display: flex;
+		flex-direction: column;
+		padding: 1.75rem;
+		border-radius: 1rem;
+		background: linear-gradient(180deg, var(--fill), transparent);
+		box-shadow: inset 0 0 0 1px var(--line);
+		color: inherit;
+		text-decoration: none;
+		transition: box-shadow 0.15s;
+	}
+	a.tile:hover {
+		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sl-color-white) 18%, transparent);
+	}
+	.ico {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2.25rem;
+		height: 2.25rem;
+		margin-bottom: 1.25rem;
+		border-radius: 0.6rem;
+		color: var(--sl-color-gray-1);
+		background: var(--fill);
+		box-shadow: inset 0 0 0 1px var(--line);
+	}
+	h3 {
+		margin: 0 0 0.4rem;
+		font-size: var(--sl-text-lg);
+		font-weight: 600;
+		letter-spacing: -0.01em;
+		color: var(--sl-color-white);
+	}
+	.tile p {
+		margin: 0 0 1.4rem;
+		max-width: 44ch;
+		font-size: var(--sl-text-sm);
+		line-height: 1.6;
+		color: var(--sl-color-gray-2);
+	}
+	.tags {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.4rem;
+		margin-top: auto;
+	}
+	.tag {
+		padding: 0.3rem 0.65rem;
+		border-radius: 999rem;
+		font-family: var(--sl-font-mono);
+		font-size: 0.75rem;
+		line-height: 1.2;
+		color: var(--sl-color-gray-2);
+		background: var(--fill);
+		box-shadow: inset 0 0 0 1px var(--line);
+	}
+	.divider {
+		width: 1px;
+		height: 1rem;
+		margin: 0 0.35rem;
+		background: color-mix(in srgb, var(--sl-color-white) 15%, transparent);
+	}
+	.wide {
+		gap: 2.5rem;
+	}
+	@media (min-width: 50rem) {
+		.wide {
+			flex-direction: row;
+			align-items: stretch;
+		}
+		.wide > * {
+			flex: 1;
+		}
+	}
+	.wide-text {
+		display: flex;
+		flex-direction: column;
+	}
+	.diff {
+		padding: 0.9rem 1rem;
+		border-radius: 0.75rem;
+		font-family: var(--sl-font-mono);
+		font-size: 0.8rem;
+		line-height: 1.9;
+		color: var(--sl-color-gray-2);
+		background: color-mix(in srgb, var(--sl-color-black) 60%, transparent);
+		box-shadow: inset 0 0 0 1px var(--line);
+	}
+	.diff-head {
+		display: flex;
+		gap: 0.6rem;
+		margin-bottom: 0.35rem;
+		padding-bottom: 0.5rem;
+		border-bottom: 1px solid var(--line);
+		font-size: 0.75rem;
+		color: var(--sl-color-gray-3);
+	}
+	.diff-head .example {
+		margin-left: auto;
+		text-transform: uppercase;
+		letter-spacing: 0.12em;
+		font-size: 0.65rem;
+	}
+	.diff-line {
+		display: flex;
+		gap: 0.75rem;
+	}
+	.diff-line b {
+		width: 0.75rem;
+		font-weight: 600;
+	}
+	.diff-line i {
+		margin-left: auto;
+		font-style: normal;
+		color: var(--sl-color-gray-3);
+	}
+	.diff-line.add b {
+		color: #d9a54a;
+	}
+	.diff-line.del b {
+		color: #5fae6d;
+	}
+	.diff-line.mod b {
+		color: var(--sl-color-gray-3);
+	}
+	.start {
+		display: grid;
+		grid-template-columns: 1fr;
+		gap: 0.9rem;
+		margin-top: 1rem;
+	}
+	@media (min-width: 50rem) {
+		.start {
+			grid-template-columns: repeat(3, 1fr);
+		}
+	}
+	.start-card {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+		padding: 1.1rem 1.25rem;
+		border-radius: 0.8rem;
+		text-decoration: none;
+		background: var(--fill);
+		box-shadow: inset 0 0 0 1px var(--line);
+	}
+	.start-card:hover {
+		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sl-color-white) 18%, transparent);
+	}
+	.start-card strong {
+		display: flex;
+		justify-content: space-between;
+		color: var(--sl-color-white);
+	}
+	.start-card span {
+		font-size: var(--sl-text-sm);
+		color: var(--sl-color-gray-2);
+	}
+</style>

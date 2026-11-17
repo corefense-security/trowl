@@ -1,0 +1,48 @@
+---
+title: Supported targets
+description: Image formats, compression, SBOM formats and distros Trowl reads.
+sidebar:
+  order: 1
+---
+
+## Distros
+
+Trowl is built and tested against **Yocto** images. Buildroot and OpenWrt are on the roadmap.
+
+## Images
+
+| Type | Notes |
+| --- | --- |
+| ext2, ext3, ext4 | Read with `debugfs` |
+| squashfs | Read with `unsquashfs` |
+| tar | Plain ustar archives |
+| Unpacked directory | A rootfs already on disk |
+| Disk images (`.wic`, MBR, GPT) | Every partition is extracted. The first with `/etc` and `/usr` or `/bin` is scanned as the rootfs |
+
+Nothing is mounted and Trowl doesn't need root. Extended MBR partitions are not followed.
+
+## Compression
+
+Trowl handles zstd, xz, gzip and bzip2. It detects compression from the file contents and unwraps nested layers.
+
+## SBOMs
+
+| Format | What to pass |
+| --- | --- |
+| SPDX 3.0 JSON-LD from Yocto | `IMAGE.rootfs.spdx.json` |
+| SPDX 3.0 with `sbom-cve-check` results | The `sbom-cve-check` output `.spdx.json` |
+| SPDX 2.2 from Yocto `create-spdx-2.2` (scarthgap default) | `IMAGE.spdx.tar.zst` or a folder of its documents |
+
+Trowl detects the format and shows it on the SBOM Analysis page. CycloneDX, SPDX tag-value and RDF/XML are not supported yet.
+
+SPDX 2.2 SBOMs carry no VEX. The only status Trowl takes from them is the list of CVEs each recipe fixes.
+
+## Kernel
+
+| Input | How Trowl finds it |
+| --- | --- |
+| Kernel config | `/boot/config-*`, then a config embedded in the kernel image, then `--kernel-config`, then `--kernel-src` |
+| Kernel source tree | `--kernel-tree` pointing at the same release as the image's kernel |
+| Modules | `/lib/modules/<release>` in the image |
+
+Binary checks for CET and branch protection cover x86-64 and arm64.

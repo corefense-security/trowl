@@ -1,0 +1,46 @@
+---
+title: Command line
+description: trowl scan, view and unpack.
+sidebar:
+  order: 2
+---
+
+## `trowl scan`
+
+```sh
+trowl scan [options] IMAGE
+```
+
+Scans an image and writes `index.html` and `report.json` to the output folder.
+
+| Option | Description |
+| --- | --- |
+| `-o`, `--output DIR` | Output folder. Defaults to `trowl-report` |
+| `--sbom FILE` | SPDX 3.0 JSON-LD, or SPDX 2.2 as `IMAGE.spdx.tar.zst` or a folder of its documents |
+| `--kernel-config FILE` | Kernel `.config`, used when the image carries none |
+| `--kernel-src DIR` | Kernel build folder whose `.config` to use when the image carries none |
+| `--kernel-tree DIR` | Kernel source at the image's kernel release. Enables [kernel VEX](../../features/cves-vex/) |
+| `--kernel-policy FILE` | YAML that accepts known failures or adds options. See [Team policy](../../features/hardening/#team-policy) |
+| `--no-network` | Use cached data only. Skips KEV, EPSS and advisory link checks |
+| `--links MODE` | Which CVEs get checked advisory links: `open` (default, all but fixed), `all` or `none` |
+| `--model NAME` | Model for the Overview summary: `qwen3.5-4b` (default), `qwen3.5-9b` or `qwen3-4b` |
+| `--workdir DIR` | Unpack into this folder instead of a temporary one and keep it |
+| `--keep` | Keep the temporary unpack folder |
+
+The exit code is 2 for usage errors and unsupported images, and 1 for other failures.
+
+## `trowl view`
+
+```sh
+trowl view [--port 8765] [--host 127.0.0.1] [DIR]
+```
+
+Serves a report folder at `http://127.0.0.1:8765`. The page is rebuilt from `report.json` on every request, which means a rescan shows after a reload. In Docker it listens on all interfaces.
+
+## `trowl unpack`
+
+```sh
+trowl unpack IMAGE DEST
+```
+
+Extracts the image to `DEST` and prints the detected format and rootfs path. Use it to check what Trowl sees inside an image.

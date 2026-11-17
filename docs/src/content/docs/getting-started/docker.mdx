@@ -1,0 +1,81 @@
+---
+title: Run with Docker
+description: Scan an image using the Trowl container.
+sidebar:
+  order: 1
+---
+
+The container ships Trowl with the tools it uses to unpack filesystems and with `llama-server` for the Overview summary. You don't need to install anything else.
+
+:::note
+Until the first stable release, use a preview tag. Set `REF` once and the commands below pick it up.
+
+```sh
+REF=v0.1.0-preview.4
+```
+:::
+
+## Requirements
+
+Docker on Linux, macOS or Windows.
+
+## Install
+
+```sh
+docker pull ghcr.io/corefense-security/trowl:$REF
+```
+
+## Run a scan
+
+1. Put the scan inputs in one folder. Only the image is required. [Your first scan](../first-scan/) explains what each input adds.
+
+   ```
+   ~/trowl-in/
+   ├── core-image-minimal-qemux86-64.rootfs.ext4.zst
+   ├── core-image-minimal-qemux86-64.rootfs.spdx.json
+   └── kernel.config
+   ```
+
+2. Create the output and cache folders first so that you own them and not root.
+
+   ```sh
+   mkdir -p ~/trowl-out ~/.cache/trowl
+   ```
+
+3. Run the scan.
+
+   ```sh
+   docker run --rm -t \
+     --user "$(id -u):$(id -g)" \
+     -v ~/trowl-in:/in:ro \
+     -v ~/trowl-out:/out \
+     -v ~/.cache/trowl:/cache/trowl \
+     ghcr.io/corefense-security/trowl:$REF \
+     scan /in/core-image-minimal-qemux86-64.rootfs.ext4.zst \
+       --sbom /in/core-image-minimal-qemux86-64.rootfs.spdx.json \
+       --kernel-config /in/kernel.config \
+       -o /out/report
+   ```
+
+The paths after `scan` are paths inside the container. Every input has to be in a folder you mount. To pass the kernel source tree, mount it as well, for example `-v ~/src/linux-6.18.52:/tree:ro`, and add `--kernel-tree /tree`.
+
+The first run downloads the CVE feeds into `~/.cache/trowl`. Later runs reuse them.
+
+## Open the report
+
+```sh
+docker run --rm -it -p 8765:8765 \
+  -v ~/trowl-out:/out:ro \
+  ghcr.io/corefense-security/trowl:$REF \
+  view /out/report
+```
+
+Open `http://localhost:8765` in your browser and press Ctrl+C when you are done. You can also open `~/trowl-out/report/index.html` straight from disk.
+
+## The Overview summary
+
+The container already includes `llama-server`. The first scan downloads the model (about 2.7 GB) into `~/.cache/trowl` and every scan after that reuses it.
+
+## Next steps
+
+[Your first scan](../first-scan/) shows which inputs to pass and where a Yocto build puts them. The same flags work in `docker run`.

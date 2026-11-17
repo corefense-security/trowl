@@ -1,0 +1,55 @@
+---
+// One icon button that switches between dark and light. Replaces Starlight's Dark/Light/Auto select.
+import { Icon } from '@astrojs/starlight/components';
+---
+
+<button type="button" class="theme-toggle" aria-label="Switch to light theme" title="Switch to light theme">
+	<Icon name="moon" class="moon" size="1.25rem" />
+	<Icon name="sun" class="sun" size="1.25rem" />
+</button>
+
+<script>
+	const key = 'starlight-theme';
+	function apply(theme: 'dark' | 'light', store: boolean) {
+		document.documentElement.dataset.theme = theme;
+		if (store) {
+			try {
+				localStorage.setItem(key, theme);
+			} catch {}
+		}
+		const next = theme === 'dark' ? 'light' : 'dark';
+		document.querySelectorAll<HTMLButtonElement>('.theme-toggle').forEach((b) => {
+			b.setAttribute('aria-label', `Switch to ${next} theme`);
+			b.title = `Switch to ${next} theme`;
+		});
+	}
+	apply(document.documentElement.dataset.theme === 'light' ? 'light' : 'dark', false);
+	document.querySelectorAll<HTMLButtonElement>('.theme-toggle').forEach((b) =>
+		b.addEventListener('click', () =>
+			apply(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light', true)
+		)
+	);
+</script>
+
+<style>
+	.theme-toggle {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.4rem;
+		border: 0;
+		border-radius: 0.5rem;
+		background: transparent;
+		color: var(--sl-color-gray-2);
+		cursor: pointer;
+	}
+	.theme-toggle:hover {
+		color: var(--sl-color-white);
+		background: var(--sl-color-gray-6);
+	}
+	/* Show the icon of the current theme. */
+	:global([data-theme='dark']) .theme-toggle .sun,
+	:global([data-theme='light']) .theme-toggle .moon {
+		display: none;
+	}
+</style>

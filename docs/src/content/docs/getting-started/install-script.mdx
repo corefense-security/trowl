@@ -1,0 +1,76 @@
+---
+title: Install script
+description: Install Trowl natively on Debian or Ubuntu.
+sidebar:
+  order: 2
+---
+
+The script builds Trowl from source and installs it to `/usr/local/bin` together with the tools it uses to unpack filesystems.
+
+:::note
+Until the first stable release, build a preview tag. Set `REF` once and the commands below pick it up.
+
+```sh
+REF=v0.1.0-preview.4
+```
+:::
+
+## Requirements
+
+Debian or Ubuntu on x86-64 or arm64, and `sudo` to install system packages and the binary. On other systems use [Docker](../docker/).
+
+## Install
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/corefense-security/trowl/main/install.sh | bash -s -- --ref "$REF"
+```
+
+Go and Node are downloaded to a temporary folder for the build and deleted afterwards. Check that it worked:
+
+```sh
+trowl --version
+```
+
+### Options
+
+| Option | Effect |
+| --- | --- |
+| `--with-llm` | Also install `llama-server` for the Overview summary |
+| `--prefix DIR` | Install to `DIR/bin` instead of `/usr/local/bin` |
+| `--ref REF` | Build a branch or tag instead of `main` |
+| `--source DIR` | Build from a local checkout instead of cloning |
+
+## Run a scan
+
+Only the image is required. [Your first scan](../first-scan/) explains what each input adds.
+
+```sh
+trowl scan core-image-minimal-qemux86-64.rootfs.ext4.zst \
+  --sbom core-image-minimal-qemux86-64.rootfs.spdx.json \
+  --kernel-config kernel.config \
+  -o report
+```
+
+The first run downloads the CVE feeds into `~/.cache/trowl`. Later runs reuse them.
+
+## Open the report
+
+```sh
+trowl view report
+```
+
+Open `http://localhost:8765` in your browser and press Ctrl+C when you are done. You can also open `report/index.html` straight from disk.
+
+## The Overview summary
+
+The summary needs `llama-server` from llama.cpp. Install with `--with-llm` to build it. The build takes a few minutes.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/corefense-security/trowl/main/install.sh | bash -s -- --ref "$REF" --with-llm
+```
+
+The first scan downloads the model (about 2.7 GB) into `~/.cache/trowl` and every scan after that reuses it. Without `llama-server` the scan still runs and leaves the summary out.
+
+## Next steps
+
+[Your first scan](../first-scan/) shows which inputs to pass and where a Yocto build puts them.

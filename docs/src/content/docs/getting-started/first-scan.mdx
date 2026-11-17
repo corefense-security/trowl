@@ -1,0 +1,59 @@
+---
+title: Your first scan
+description: What to pass to trowl scan and where to find it in a Yocto build.
+sidebar:
+  order: 3
+---
+
+The commands below use a native install. Docker users can pass the same flags to the `docker run` command from [Run with Docker](../docker/).
+
+## Image only
+
+```sh
+trowl scan core-image-minimal-qemux86-64.rootfs.ext4.zst -o report
+trowl view report
+```
+
+This runs every hardening check. Trowl matches CVEs against the package database or the version strings it finds in the binaries.
+
+## Image and SBOM
+
+```sh
+trowl scan core-image-minimal-qemux86-64.rootfs.ext4.zst \
+  --sbom core-image-minimal-qemux86-64.rootfs.spdx.json \
+  -o report
+```
+
+The SBOM gives Trowl exact package versions and the CVE status Yocto already worked out. Trowl then checks every package against the image. See [SBOM analysis](../../features/sbom/).
+
+## Image, SBOM and kernel source
+
+```sh
+trowl scan core-image-minimal-qemux86-64.rootfs.ext4.zst \
+  --sbom core-image-minimal-qemux86-64.rootfs.spdx.json \
+  --kernel-config kernel.config \
+  --kernel-tree ~/src/linux-6.18.52 \
+  -o report
+```
+
+This is the full scan. Trowl checks each kernel CVE against your kernel config and the modules in the image. See [CVEs and VEX](../../features/cves-vex/).
+
+## Where Yocto puts the inputs
+
+With the [meta-trowl layer](../../integrations/yocto/), BitBake finds these and scans the image for you. To pass them by hand, the paths are relative to your build directory.
+
+| Input | Location |
+| --- | --- |
+| Image | `tmp/deploy/images/<machine>/<image>-<machine>.rootfs.ext4` (or `.wic`, `.tar.zst`, `.squashfs`) |
+| SBOM, SPDX 3.0 | `tmp/deploy/images/<machine>/<image>-<machine>.rootfs.spdx.json` |
+| SBOM, SPDX 2.2 | `tmp/deploy/images/<machine>/<image>-<machine>.spdx.tar.zst` |
+| Kernel `.config` | `.config` in the kernel build folder under `tmp/work/` |
+| Kernel source | `tmp/work-shared/<machine>/kernel-source`, or a kernel.org checkout at the same release |
+
+If the image has `/boot/config-*` or a kernel built with `CONFIG_IKCONFIG`, Trowl reads the config from there and you can leave out `--kernel-config`.
+
+## Reading the report
+
+`trowl view report` serves the dashboard at `http://127.0.0.1:8765`. You can also open `report/index.html` straight from disk or copy the folder to any static host.
+
+The sidebar has one page per area: Overview, Filesystems, Kernel, Binary, SBOM Analysis and CVEs. Pages with nothing to show are greyed out. SBOM Analysis needs `--sbom` to appear.

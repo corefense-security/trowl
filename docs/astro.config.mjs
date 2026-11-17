@@ -1,0 +1,64 @@
+// @ts-check
+import { defineConfig } from 'astro/config';
+import starlight from '@astrojs/starlight';
+
+// Served from GitHub Pages on the custom domain set in the repo's Pages settings.
+export default defineConfig({
+	site: 'https://trowl.dev',
+	integrations: [
+		starlight({
+			title: 'Trowl',
+			description: 'Static security scanner for embedded Linux images.',
+			logo: {
+				light: './src/assets/trowl-logo.svg',
+				dark: './src/assets/trowl-logo-dark.svg',
+				replacesTitle: true,
+			},
+			favicon: '/favicon.svg',
+			social: [
+				{ icon: 'github', label: 'GitHub', href: 'https://github.com/corefense-security/trowl' },
+			],
+			editLink: {
+				baseUrl: 'https://github.com/corefense-security/trowl/edit/main/docs/',
+			},
+			customCss: ['./src/styles/custom.css'],
+			components: {
+				Header: './src/components/Header.astro',
+				Hero: './src/components/Hero.astro',
+				SocialIcons: './src/components/SocialIcons.astro',
+				ThemeSelect: './src/components/ThemeSelect.astro',
+			},
+			sidebar: [
+				{
+					label: 'Getting started',
+					items: [
+						{ slug: 'getting-started/docker' },
+						{ slug: 'getting-started/install-script' },
+						{ slug: 'getting-started/first-scan' },
+					],
+				},
+				{
+					label: 'Integrations',
+					items: [{ slug: 'integrations/yocto' }],
+				},
+				{
+					label: 'Capabilities',
+					items: [
+						{ slug: 'features/hardening' },
+						{ slug: 'features/sbom' },
+						{ slug: 'features/cves-vex' },
+					],
+				},
+				{
+					label: 'Reference',
+					items: [
+						{ slug: 'reference/supported-targets' },
+						{ slug: 'reference/cli' },
+						{ slug: 'reference/report' },
+						{ slug: 'reference/network-cache' },
+					],
+				},
+			],
+		}),
+	],
+});

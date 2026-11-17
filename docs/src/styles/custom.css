@@ -1,0 +1,23 @@
+/* Trowl brand accent (from assets/trowl-mark.svg gradient). */
+:root {
+	--sl-color-accent-low: #12233f;
+	--sl-color-accent: #2a78d6;
+	--sl-color-accent-high: #c5dbf6;
+}
+:root[data-theme='light'] {
+	--sl-color-accent-low: #d7e6f8;
+	--sl-color-accent: #1f63b8;
+	--sl-color-accent-high: #12233f;
+}
+
+/* Dashboard screenshots: a thin frame so they read as captures, not page content. */
+.sl-markdown-content img.screen,
+.sl-markdown-content figure img {
+	border: 1px solid var(--sl-color-gray-5);
+	border-radius: 0.5rem;
+}
+.sl-markdown-content figcaption {
+	font-size: var(--sl-text-sm);
+	color: var(--sl-color-gray-3);
+	margin-top: 0.4rem;
+}

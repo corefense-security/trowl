@@ -1,0 +1,40 @@
+---
+title: Report output
+description: The files a scan writes and how to share them.
+sidebar:
+  order: 3
+---
+
+Each scan writes two files to the output folder.
+
+| File | Contents |
+| --- | --- |
+| `index.html` | The dashboard. One self-contained page with the report data inside |
+| `report.json` | Everything the dashboard shows, for scripts and CI |
+
+## Sharing the dashboard
+
+`index.html` has no external dependencies. You can:
+
+- open it straight from disk
+- serve it with `trowl view`
+- copy the folder to GitHub Pages, Cloudflare Pages, S3 or a CI artifact
+
+## `report.json`
+
+The top-level keys are:
+
+| Key | Contents |
+| --- | --- |
+| `tool` | Trowl name and version |
+| `image` | Path, detected format, file count and unpack notes |
+| `summary` | Finding counts per check, ELF counts, scan time |
+| `findings` | One entry per issue with `check`, `path`, `title`, `detail` and `evidence` |
+| `binaries` | Hardening properties of every ELF file |
+| `fstab` | Mount entries and missing flags |
+| `kernel` | Config source, version, arch, baseline results, policy and modules |
+| `sbom` | Components, presence status and the dependency graph. `null` without `--sbom` |
+| `cves` | CVE rows with status, CVSS, KEV, EPSS, links and kernel assessment |
+| `overview` | The AI summary if a model ran |
+
+Every finding has a stable `check` id such as `elf.canary`, `kernel.hardening` or `sbom.package-modified`. Filter on it in CI.
