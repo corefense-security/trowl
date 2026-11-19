@@ -1,0 +1,148 @@
+name: Test Trowl's Yocto Integration
+
+on:
+  # Remove before merging. Only here to verify the workflow on this branch.
+  push:
+    branches: [meta-trowl]
+  schedule:
+    - cron: "0 2 * * *" # nightly at 02:00 UTC
+  workflow_dispatch:
+
+jobs:
+  yocto:
+    name: Build and scan Yocto ${{ matrix.release }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - release: scarthgap
+            runner: ubuntu-22.04
+            llm: "0"
+            # The Yocto docs' Ubuntu host packages for this release.
+            packages: >-
+              build-essential chrpath cpio debianutils diffstat file gawk gcc git iputils-ping libacl1
+              liblz4-tool locales python3 python3-git python3-jinja2 python3-pexpect python3-pip
+              python3-subunit socat texinfo unzip wget xz-utils zstd
+          # The summary needs llama-server and a 2.7 GB model, so only one release tests it.
+          - release: wrynose
+            runner: ubuntu-24.04
+            llm: "1"
+            # The Yocto docs' Ubuntu host packages for this release, plus python3-websockets,
+            # which the docs add for the sstate mirror.
+            packages: >-
+              build-essential chrpath cpio debianutils diffstat file gawk gcc git iputils-ping libacl1
+              libcrypt-dev locales python3 python3-git python3-jinja2 python3-pexpect python3-pip
+              python3-subunit socat texinfo unzip wget xz-utils zstd python3-websockets
+    env:
+      BUILDS: /home/runner/bitbake-builds
+      DOWNLOADS: /home/runner/bitbake-builds/.bitbake-setup-downloads
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare the runner
+        shell: bash
+        run: |
+          echo "Freeing disk space"
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          echo "Installing Yocto host tools"
+          sudo apt-get update -qq
+          # jq reads the report.
+          sudo apt-get install -y -qq ${{ matrix.packages }} jq
+          sudo locale-gen en_US.UTF-8
+          # Ubuntu 24.04 blocks the user namespaces BitBake needs.
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+
+      - name: Restore downloads and Trowl cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.DOWNLOADS }}
+            !${{ env.DOWNLOADS }}/*.gguf*
+            ~/.cache/trowl
+          key: yocto-${{ matrix.release }}-${{ github.run_id }}
+          restore-keys: yocto-${{ matrix.release }}-
+
+      - name: Restore the model
+        if: matrix.llm == '1'
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DOWNLOADS }}/*.gguf*
+          key: model-${{ hashFiles('integrations/meta-trowl/conf/layer.conf') }}
+
+      # Each release is set up the way its Yocto Quick Build guide says.
+      - name: Set up Poky (scarthgap)
+        if: matrix.release == 'scarthgap'
+        shell: bash
+        run: |
+          git clone -q --depth 1 -b scarthgap https://git.yoctoproject.org/poky "$BUILDS/poky-scarthgap"
+          echo "source $BUILDS/poky-scarthgap/oe-init-build-env $BUILDS/poky-scarthgap/build" > "$BUILDS/env"
+          source "$BUILDS/env" > /dev/null
+          cat >> conf/local.conf <<EOF
+          DL_DIR = "$DOWNLOADS"
+          SSTATE_MIRRORS ?= "file://.* http://sstate.yoctoproject.org/all/PATH;downloadfilename=PATH"
+          BB_SIGNATURE_HANDLER = "OEEquivHash"
+          BB_HASHSERVE = "auto"
+          BB_HASHSERVE_UPSTREAM = "wss://hashserv.yoctoproject.org/ws"
+          EOF
+
+      - name: Set up Poky (wrynose)
+        if: matrix.release == 'wrynose'
+        shell: bash
+        run: |
+          git clone -q --depth 1 -b 2.18 https://git.openembedded.org/bitbake /tmp/bitbake-setup
+          /tmp/bitbake-setup/bin/bitbake-setup --setting default top-dir-prefix /home/runner \
+            init --non-interactive --no-init-vscode poky-wrynose poky-with-sstate distro/poky machine/qemux86-64
+          echo "source $BUILDS/poky-wrynose/build/init-build-env" > "$BUILDS/env"
+
+      - name: Add meta-trowl
+        shell: bash
+        run: |
+          source "$BUILDS/env" > /dev/null
+          bitbake-layers add-layer "$GITHUB_WORKSPACE/integrations/meta-trowl"
+          cat >> conf/local.conf <<EOF
+          INHERIT += "trowl"
+          TROWL_LLM = "${{ matrix.llm }}"
+          # The runner has little disk.
+          INHERIT += "rm_work"
+          EOF
+          bitbake-layers show-layers
+
+      - name: Build core-image-minimal and scan it
+        shell: bash
+        run: |
+          source "$BUILDS/env" > /dev/null
+          bitbake core-image-minimal
+
+      - name: Check the scan report
+        shell: bash
+        run: |
+          report=$(find "$BUILDS" -path '*/tmp' -prune -o -name report.json -path '*/trowl/*' -print | head -1)
+          if [ -z "$report" ]; then
+            echo "No Trowl report found under $BUILDS"
+            exit 1
+          fi
+          dir=$(dirname "$report")
+          echo "REPORT_DIR=$dir" >> "$GITHUB_ENV"
+          test -s "$dir/index.html"
+          echo "Image format: $(jq -r .image.format "$report")"
+          echo "SBOM: $(jq -r '.sbom.format // "none"' "$report")"
+          echo "Findings: $(jq -c .summary.by_check "$report")"
+          echo "CVEs: $(jq -c '.cves.summary.status // {}' "$report")"
+          if [ "${{ matrix.llm }}" = 1 ]; then
+            echo "Checking the Overview summary"
+            jq -e '.overview.points | length > 0' "$report" > /dev/null
+          else
+            echo "Checking that no summary was written"
+            jq -e '.overview == null' "$report" > /dev/null
+          fi
+
+      - name: Upload the scan report
+        if: always() && env.REPORT_DIR != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: trowl-report-${{ matrix.release }}
+          path: ${{ env.REPORT_DIR }}
