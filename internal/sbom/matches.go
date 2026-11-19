@@ -197,6 +197,13 @@ func (s *Sbom) AssessmentOf(cve, comp string) *Assessment { return s.assessed[pa
 // trowl uses it for every SBOM.
 const ConfigNote = "not-applicable-config"
 
+// ConfigExcluded reports whether the SBOM says not_affected because the kernel config leaves the
+// code out. That is Yocto's not-applicable-config note or a CycloneDX code_not_present
+// justification. The kernel tree check can confirm or overturn both.
+func (s *Sbom) ConfigExcluded(cve, comp string) bool {
+	return s.vexNotes[pair{cve, comp}] == ConfigNote || s.codeAbsent[pair{cve, comp}]
+}
+
 // KernelComponents lists the components that are the Linux kernel.
 func (s *Sbom) KernelComponents() []string {
 	var out []string
