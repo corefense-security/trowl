@@ -123,7 +123,8 @@ if [ "$with_llm" = 1 ]; then
 	say "Building llama-server $LLAMA_CPP_TAG (this takes a while)"
 	git clone -q --depth 1 --branch "$LLAMA_CPP_TAG" https://github.com/ggml-org/llama.cpp.git "$work/llama"
 	cmake -S "$work/llama" -B "$work/llama/build" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
-		-DGGML_NATIVE=OFF -DLLAMA_CURL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF >/dev/null
+		-DGGML_NATIVE=OFF -DLLAMA_CURL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF \
+		-DLLAMA_USE_PREBUILT_UI=OFF >/dev/null
 	cmake --build "$work/llama/build" --target llama-server -j"$(nproc)" >/dev/null
 	$sudo install -m 0755 "$work/llama/build/bin/llama-server" "$bindir/llama-server"
 fi

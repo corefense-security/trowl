@@ -1,9 +1,12 @@
 package llm
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestBullets(t *testing.T) {
@@ -31,4 +34,41 @@ func TestLabelsAreModelNames(t *testing.T) {
 			t.Errorf("%s: label %q, want %q", id, m.Label, want)
 		}
 	}
+}
+
+// TROWL_MODEL_FILE is used as is, so nothing is downloaded.
+func TestModelFileFromEnv(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "model.gguf")
+	os.WriteFile(file, []byte("gguf"), 0o644)
+	t.Setenv("TROWL_MODEL_FILE", file)
+	if got := ensureModel(DefaultModel, t.TempDir()); got != file {
+		t.Errorf("got %q, want %q", got, file)
+	}
+	t.Setenv("TROWL_MODEL_FILE", filepath.Join(t.TempDir(), "missing.gguf"))
+	if got := ensureModel(DefaultModel, t.TempDir()); got != "" {
+		t.Errorf("missing file: got %q", got)
+	}
+}
+
+// A server that dies is noticed at once rather than after the 5 minute wait.
+func TestServerThatExitsIsNoticed(t *testing.T) {
+	dir := t.TempDir()
+	server := filepath.Join(dir, "llama-server")
+	os.WriteFile(server, []byte("#!/bin/sh\necho 'libssl.so.3: version not found' >&2\nexit 1\n"), 0o755)
+	model := filepath.Join(dir, "model.gguf")
+	os.WriteFile(model, []byte("gguf"), 0o644)
+	t.Setenv("TROWL_LLAMA_SERVER", server)
+	t.Setenv("TROWL_MODEL_FILE", model)
+	r := NewRunner(DefaultModel, dir)
+	start := time.Now()
+	if r.start() {
+		t.Fatal("started")
+	}
+	if d := time.Since(start); d > 10*time.Second {
+		t.Errorf("took %v", d)
+	}
+	if !strings.Contains(r.stderr.last(5), "libssl") {
+		t.Errorf("stderr %q", r.stderr.last(5))
+	}
+	r.Close()
 }
