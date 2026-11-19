@@ -339,7 +339,8 @@ type Counts struct {
 // CVE's record, and inRange the {component, CVE} pairs whose version the CVE record covers.
 //
 // A fixed CVE stays fixed, as being compiled says nothing about a fix. So does a not_affected the
-// SBOM gives for any reason but the config. A disputed CVE doesn't become real by being compiled.
+// SBOM gives for any reason but the config (see sbom.ConfigExcluded). A disputed CVE doesn't
+// become real by being compiled.
 func Apply(sb *sbom.Sbom, ev Evaluator, files map[string][]string, inRange map[[2]string]bool) Counts {
 	var n Counts
 	scanned := sb.AssessesKernel()
@@ -394,7 +395,7 @@ func judged(sb *sbom.Sbom, cve, comp, stated string, inRange map[[2]string]bool)
 	case "fixed":
 		return false
 	case "not_affected":
-		return sb.VexNotes(cve, comp) == sbom.ConfigNote && inRange[[2]string{comp, cve}]
+		return sb.ConfigExcluded(cve, comp) && inRange[[2]string{comp, cve}]
 	}
 	return true
 }

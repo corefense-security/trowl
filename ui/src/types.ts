@@ -63,7 +63,8 @@ export interface GraphEdge {
 }
 
 /** trowl sets "review" when the version is in range but the kernel tree couldn't trace the CVE's files. */
-export type CveStatus = "unpatched" | "review" | "ignored" | "fixed" | "unknown";
+/** "investigating" is the SBOM's under_investigation. "unknown" is a CVE the SBOM lists without a status. */
+export type CveStatus = "unpatched" | "review" | "investigating" | "ignored" | "fixed" | "unknown";
 export type Shipped = "yes" | "build" | "no" | "unknown";
 
 export interface CveCarrier {
@@ -75,6 +76,8 @@ export interface CveCarrier {
   kernel: boolean;
   /** Where the status comes from (the SBOM's own VEX or trowl's version match). */
   source?: "sbom" | "version-match";
+  /** The SBOM lists the CVE without a status and trowl's version match set one. */
+  sbom_unstated?: boolean;
   /** Matched by package name alone. The SBOM gives no vendor, so it may be another product. */
   name_only?: boolean;
   /** First upstream version with the fix, from the CVE record. "" if the record gives none. */

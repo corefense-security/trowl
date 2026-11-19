@@ -13,7 +13,8 @@ const STATUS: Record<CveStatus, { label: string; color: string }> = {
   // "ignored" in report.json is VEX not_affected (Yocto's cve-check calls it Ignored).
   ignored: { label: "Not affected", color: "var(--neutral)" },
   fixed: { label: "Fixed", color: "var(--good)" },
-  unknown: { label: "No status", color: "var(--axis)" },
+  investigating: { label: "Under investigation", color: "var(--axis)" },
+  unknown: { label: "Unknown", color: "var(--axis)" },
 };
 const VECTOR: Record<string, string> = {
   network: "Network", adjacent: "Adjacent network", local: "Local", physical: "Physical", "": "Not specified",
@@ -52,7 +53,7 @@ const onDevice = (r: CveRow) => r.shipped !== "build" && r.shipped !== "no";
  *  or found only by matching package versions against NVD and the kernel CNA, as Trivy and Grype do. */
 function cveSources(rows: CveRow[]) {
   const installed = rows.filter(onDevice);
-  const sbom = installed.filter((r) => r.carriers.some((c) => c.source !== "version-match")).length;
+  const sbom = installed.filter((r) => r.carriers.some((c) => c.source !== "version-match" || c.sbom_unstated)).length;
   return { total: installed.length, sbom, matched: installed.length - sbom };
 }
 
@@ -166,6 +167,12 @@ function ByComponent({ s }: { s: CveSection["summary"] }) {
 }
 
 const DEFIES_NOTE = "Trowl's check of the kernel tree and image disagrees with the SBOM's status.";
+const UNSTATED_NOTE = "The SBOM lists this CVE without a status. Trowl's version match puts it in range.";
+
+/** The carrier that decides the row's status. */
+const decider = (r: CveRow) => r.carriers.find((c) => c.status === r.status) ?? r.carriers[0];
+/** The SBOM lists the CVE without a status and trowl's version match set one. */
+const unstated = (r: CveRow) => !!decider(r)?.sbom_unstated;
 
 /** trowl's verdict on a kernel CVE (the kernel carrier's), when --kernel-tree ran. */
 const assessmentOf = (r: CveRow) => r.carriers.find((c) => c.kernel && c.assessment)?.assessment;
@@ -210,7 +217,7 @@ function StatusCell({ r, a, inventory }: { r: CveRow; a?: CveAssessment; invento
   const line = (s: CveStatus, source: string, reason?: string) => (
     <span><StatusLabel s={s} /><span className="muted"> ({source}){reason && ` · ${reason}`}</span></span>
   );
-  const carrier = r.carriers.find((c) => c.status === r.status) ?? r.carriers[0];
+  const carrier = decider(r);
   const trowl = line(r.status, "Trowl", a?.reason || (carrier?.source === "version-match" || inventory ? "version in range" : ""));
   if (a?.defies_sbom) {
     const said = a.sbom_status && a.sbom_status !== "unknown";
@@ -218,6 +225,14 @@ function StatusCell({ r, a, inventory }: { r: CveRow; a?: CveAssessment; invento
       <span className="st-stack" title={DEFIES_NOTE}>
         {trowl}
         {said ? line(a.sbom_status as CveStatus, "SBOM", a.sbom_notes) : <span className="muted">no SBOM status</span>}
+      </span>
+    );
+  }
+  if (!a?.defies_sbom && unstated(r)) {
+    return (
+      <span className="st-stack" title={UNSTATED_NOTE}>
+        {trowl}
+        {line("unknown", "SBOM", "no status given")}
       </span>
     );
   }
@@ -401,7 +416,7 @@ export default function Cves({ section, params }: { section: CveSection; params:
   const disagreements = useMemo(() => rows.filter(defies).length, [rows]);
   const unmapped = section.unmapped ?? [];
   // Without an SBOM every row is a version match, so the mark would say nothing.
-  const outsideSbom = (r: CveRow) => !section.sources.inventory && r.carriers.every((c) => c.source === "version-match");
+  const outsideSbom = (r: CveRow) => !section.sources.inventory && r.carriers.every((c) => c.source === "version-match" && !c.sbom_unstated);
 
   const buildRow = (r: CveRow) => r.shipped === "build";
   const buildRows = useMemo(() => rows.filter(buildRow), [rows]);
@@ -434,7 +449,8 @@ export default function Cves({ section, params }: { section: CveSection; params:
       { value: "fixed", label: "Fixed", n: count("fixed") },
     ]),
     ...(count("review") ? [{ value: "review", label: "Needs review", n: count("review") }] : []),
-    ...(count("unknown") ? [{ value: "unknown", label: "No status", n: count("unknown") }] : []),
+    ...(count("investigating") ? [{ value: "investigating", label: "Under investigation", n: count("investigating") }] : []),
+    ...(count("unknown") ? [{ value: "unknown", label: "Unknown", n: count("unknown") }] : []),
     ...(unmapped.length ? [{ value: "unmapped", label: "Needs mapping", n: unmapped.length }] : []),
     { value: "all", label: "All", n: scoped.length + unmapped.length },
   ];
@@ -501,7 +517,7 @@ export default function Cves({ section, params }: { section: CveSection; params:
                     {r.carriers.length > 1 && <span className="muted"> +{r.carriers.length - 1}</span>}
                   </td>
                   <td><FixCell c={r.carriers[0]} /></td>
-                  <td><StatusLabel s={r.status} />{assessmentOf(r)?.defies_sbom && <sup className="cve-d" title={DEFIES_NOTE}>≠</sup>}</td>
+                  <td><StatusLabel s={r.status} />{defies(r) && <sup className="cve-d" title={DEFIES_NOTE}>≠</sup>}</td>
                   <td><Score r={r} /></td>
                   <td>{r.vector ? VECTOR[r.vector] : <span className="muted">–</span>}</td>
                   <td className="c"><ShippedCell r={r} /></td>

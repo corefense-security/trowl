@@ -16,13 +16,15 @@ import (
 	"github.com/corefense-security/trowl/internal/pyjson"
 )
 
+// "investigating" is the SBOM's under_investigation. "unknown" is a CVE the SBOM lists without a
+// status.
 var statusOfVex = map[string]string{"affected": "unpatched", "not_affected": "ignored", "fixed": "fixed",
-	"under_investigation": "unknown", "": "unknown"}
+	"under_investigation": "investigating", "": "unknown"}
 
 // Worst first. The row shows the worst status among the carriers that decide it.
 // "review" is trowl's own status for a CVE in range whose files the kernel tree couldn't trace
 // (see reviewed).
-var statusOrder = []string{"unpatched", "review", "unknown", "ignored", "fixed"}
+var statusOrder = []string{"unpatched", "review", "investigating", "unknown", "ignored", "fixed"}
 
 var shippedOfRecipe = map[string]string{"present": "yes", "modified": "yes", "partial": "yes", "build-only": "build",
 	"absent": "no", "unknown": "unknown"}
@@ -160,7 +162,7 @@ func BuildCVEs(sb *Sbom, status *Status) []*pyjson.Obj {
 			c := &carrier{name: pkg.Name, shipped: shipped, status: st, kernel: kernel,
 				obj: pyjson.O("name", pkg.Name, "version", pkg.Version, "shipped", shipped, "status", st,
 					"notes", sb.VexNotes(cve, comp), "kernel", kernel, "source", source(sb, cve, comp),
-					"name_only", sb.NameOnly(cve, comp) && !kernel,
+					"name_only", sb.NameOnly(cve, comp) && !kernel, "sbom_unstated", sb.Unstated(cve, comp),
 					"fixed_in", fix.Version, "fix_commit", fix.Commit, "backport", fix.Backport,
 					"mainline", fix.Mainline, "mainline_commit", fix.MainlineCommit,
 					"stable", fix.Stable, "stable_commit", fix.StableCommit)}

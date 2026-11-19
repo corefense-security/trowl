@@ -71,7 +71,6 @@ func commands() []*command {
 				{names: []string{"-o", "--output"}, value: true, def: "trowl-report", help: "output directory"},
 				{names: []string{"--kernel-config"}, value: true, help: "kernel .config to check when the image carries none " +
 					"(/boot/config-* or a config embedded in the kernel image)"},
-				{names: []string{"--kernel-src"}, value: true, help: "kernel build tree whose .config to use when the image carries none"},
 				{names: []string{"--kernel-tree"}, value: true, help: "source tree of the image's kernel, checked out at its version. " +
 					"Kernel CVEs get a VEX status from the config gates of the files their CNA record names"},
 				{names: []string{"--kernel-policy"}, value: true, help: "YAML with team overrides: accept (with a reason) or add options"},
@@ -251,10 +250,8 @@ func scanBanner(a args) {
 		return py.CleanPath(v)
 	}
 	kernel := "from the image"
-	for _, fallback := range []string{a["kernel-config"], a["kernel-src"]} {
-		if fallback != "" {
-			kernel += ", else " + py.CleanPath(fallback)
-		}
+	if a["kernel-config"] != "" {
+		kernel += ", else " + py.CleanPath(a["kernel-config"])
 	}
 	network := "on"
 	if a.flag("no-network") {
@@ -342,7 +339,7 @@ func cmdScan(a args) int {
 		st.Ok(u.SourceFormat)
 		res, err := scan.Run(u, a["image"], scan.Options{
 			SBOM: a["sbom"], VEX: a["vex"], Network: !a.flag("no-network"), CacheDir: cache, Links: a["links"],
-			Model: modelName, KernelConfig: a["kernel-config"], KernelSrc: a["kernel-src"], KernelTree: a["kernel-tree"], KernelPolicy: a["kernel-policy"],
+			Model: modelName, KernelConfig: a["kernel-config"], KernelTree: a["kernel-tree"], KernelPolicy: a["kernel-policy"],
 			Started: started,
 		})
 		if err != nil {

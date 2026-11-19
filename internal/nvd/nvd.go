@@ -7,6 +7,10 @@
 // version ranges first, since NVD has not analysed most recent ones. NVD's configurations are
 // the fallback.
 //
+// We use this feed over CVE List V5 because its records hold both NVD's CPE configurations and
+// the CNA's affected data. CVE List V5 has no CPE configurations and ships as ~300k JSON files.
+// The catch is that kernel CNA records only arrive here after NVD ingests them.
+//
 // A version match can't see fixes backported without a version change, so it may report CVEs
 // that the build has already patched.
 package nvd

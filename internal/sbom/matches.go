@@ -1,6 +1,7 @@
 package sbom
 
 import (
+	"slices"
 	"sort"
 	"strings"
 
@@ -98,10 +99,18 @@ func (s *Sbom) AddMatch(comp, cve string, info *VulnInfo) {
 	if _, ok := s.Packages[comp]; !ok {
 		return
 	}
+	listed := slices.Contains(s.Vulns.M[comp], cve)
 	s.listCVE(comp, cve)
 	if _, ok := s.vex[pair{cve, comp}]; !ok {
 		s.vex[pair{cve, comp}] = "affected"
 		s.matched[pair{cve, comp}] = true
+		if listed {
+			// The SBOM lists the CVE without a status. It didn't miss it.
+			if s.unstated == nil {
+				s.unstated = map[pair]bool{}
+			}
+			s.unstated[pair{cve, comp}] = true
+		}
 	}
 	if info == nil {
 		return
@@ -150,6 +159,9 @@ func (s *Sbom) FixOf(cve, comp string) Fix { return s.fixes[pair{cve, comp}] }
 // Matched reports whether the pair's status came from a version match rather than the SBOM.
 func (s *Sbom) Matched(cve, comp string) bool { return s.matched[pair{cve, comp}] }
 
+// Unstated reports whether the SBOM lists the CVE without a status and a version match set one.
+func (s *Sbom) Unstated(cve, comp string) bool { return s.unstated[pair{cve, comp}] }
+
 // MarkNameOnly records that a version match rests on the package name alone. The SBOM gives no
 // vendor, so the CVE may be for another product of the same name. A CVE the SBOM lists itself is
 // left unmarked.
@@ -196,6 +208,13 @@ func (s *Sbom) AssessmentOf(cve, comp string) *Assessment { return s.assessed[pa
 // ConfigNote is the VEX note for code the kernel config leaves out. The wording is Yocto's and
 // trowl uses it for every SBOM.
 const ConfigNote = "not-applicable-config"
+
+// ConfigExcluded reports whether the SBOM says not_affected because the kernel config leaves the
+// code out. That is Yocto's not-applicable-config note or a CycloneDX code_not_present
+// justification. The kernel tree check can confirm or overturn both.
+func (s *Sbom) ConfigExcluded(cve, comp string) bool {
+	return s.vexNotes[pair{cve, comp}] == ConfigNote || s.codeAbsent[pair{cve, comp}]
+}
 
 // KernelComponents lists the components that are the Linux kernel.
 func (s *Sbom) KernelComponents() []string {
