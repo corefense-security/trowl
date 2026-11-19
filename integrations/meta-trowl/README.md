@@ -43,14 +43,15 @@ variables. The handler reads it for each image on the `bitbake` command line.
 |---|---|---|
 | image | `IMAGE_LINK_NAME` and the first of `TROWL_FSTYPES` in `IMAGE_FSTYPES` | Warning, and the image isn't scanned |
 | `--sbom` | `.sbom-cve-check.spdx.json`, then `.spdx.json` (SPDX 3.0), then `.spdx.tar.zst` (SPDX 2.2) | Warning, and only the image is scanned |
-| `--kernel-config` | `STAGING_KERNEL_BUILDDIR/.config` | Warning, and Trowl uses a config the image carries if any |
-| `--kernel-tree` | `STAGING_KERNEL_DIR` | Warning, and kernel CVEs stay version matches |
+| `--kernel-config` | `TROWL_KERNEL_CONFIG`, else `STAGING_KERNEL_BUILDDIR/.config` | Warning, and Trowl uses a config the image carries if any |
+| `--kernel-tree` | `TROWL_KERNEL_TREE`, else `STAGING_KERNEL_DIR` | Warning, and kernel CVEs stay version matches |
 
 Scarthgap writes SPDX 2.2 by default and Wrynose writes SPDX 3.0. With the `core/yocto/sbom-cve-check`
 fragment, Wrynose also writes the `sbom-cve-check` SPDX, which the class prefers.
 
 The kernel config and source exist when the kernel was built in this `TMPDIR`. A kernel that came
-from sstate has neither, so the scan runs without them.
+from sstate has neither. Set `TROWL_KERNEL_TREE`, `TROWL_KERNEL_CONFIG` or both to a tree and
+config that match the image's kernel. Each is optional and replaces only its own input.
 
 ## Variables
 
@@ -61,7 +62,8 @@ from sstate has neither, so the scan runs without them.
 | `TROWL_ALWAYS` | `0` | `1` scans every build, not only when the image changed |
 | `TROWL_FSTYPES` | ext4, squashfs, tar, cpio and wic variants | Rootfs types the class looks for, in order |
 | `TROWL_SBOM_NAMES` | see above | SBOM names the class looks for, in order |
-| `TROWL_EXTRA_ARGS` | empty | More `trowl scan` flags |
+| `TROWL_KERNEL_TREE` | empty | Kernel source tree to use instead of `STAGING_KERNEL_DIR` |
+| `TROWL_KERNEL_CONFIG` | empty | Kernel `.config` to use instead of the one in `STAGING_KERNEL_BUILDDIR` |
 | `TROWL_LLM` | `0` | `1` builds `llama-server`, fetches the model and adds the Overview summary |
 | `TROWL_LLM_MODEL` | `qwen3.5-4b` | `qwen3-4b`, `qwen3.5-4b` or `qwen3.5-9b` |
 

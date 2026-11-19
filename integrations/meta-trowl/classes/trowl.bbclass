@@ -22,7 +22,11 @@ TROWL_FSTYPES ??= "ext4 ext4.zst ext4.xz ext4.gz ext4.bz2 ext3 ext2 squashfs squ
     wic wic.zst wic.xz wic.gz wic.bz2"
 # SBOMs in the order the class prefers them.
 TROWL_SBOM_NAMES ??= ".sbom-cve-check.spdx.json .spdx.json .spdx.tar.zst"
-TROWL_EXTRA_ARGS ??= ""
+# A kernel source tree and .config to scan with, for builds that restore the kernel from sstate
+# and so have no work-shared copy. They replace STAGING_KERNEL_DIR and STAGING_KERNEL_BUILDDIR.
+# Relative paths are from TOPDIR. The tree must match the image's kernel.
+TROWL_KERNEL_TREE ??= ""
+TROWL_KERNEL_CONFIG ??= ""
 # "1" builds llama-server, fetches the model and lets Trowl write its Overview summary. The
 # model is a 2.7 GB download, so this is off by default. TROWL_LLM_MODEL picks the model.
 TROWL_LLM ??= "0"
@@ -75,17 +79,35 @@ def trowl_inputs(e, vars):
     else:
         bb.warn("Trowl: no SBOM for %s, so only the image is scanned" % link)
 
-    # The kernel source and config are there when the kernel was built in this TMPDIR.
-    config = os.path.join(at(vars.get("STAGING_KERNEL_BUILDDIR") or ""), ".config")
-    tree = at(vars.get("STAGING_KERNEL_DIR") or "")
-    if os.path.isfile(config):
+    # TROWL_KERNEL_CONFIG and TROWL_KERNEL_TREE win. Otherwise the work-shared copies are used,
+    # which are there only when the kernel was built in this TMPDIR.
+    config = at(e.data.getVar("TROWL_KERNEL_CONFIG"))
+    if config:
+        if not os.path.isfile(config):
+            bb.warn("Trowl: TROWL_KERNEL_CONFIG %s isn't a file, so it isn't used" % config)
+            config = ""
+    else:
+        config = os.path.join(at(vars.get("STAGING_KERNEL_BUILDDIR") or ""), ".config")
+        if not os.path.isfile(config):
+            config = ""
+    if config:
         args += ["--kernel-config", config]
-        if os.path.isfile(os.path.join(tree, "Makefile")):
-            args += ["--kernel-tree", tree]
-        else:
-            bb.warn("Trowl: no kernel source for %s, so kernel CVEs stay version matches" % link)
     else:
         bb.warn("Trowl: no kernel config for %s, so Trowl uses one the image carries if any" % link)
+
+    tree = at(e.data.getVar("TROWL_KERNEL_TREE"))
+    if tree:
+        if not os.path.isfile(os.path.join(tree, "Makefile")):
+            bb.warn("Trowl: TROWL_KERNEL_TREE %s isn't a kernel tree, so it isn't used" % tree)
+            tree = ""
+    else:
+        tree = at(vars.get("STAGING_KERNEL_DIR") or "")
+        if not os.path.isfile(os.path.join(tree, "Makefile")):
+            tree = ""
+    if tree:
+        args += ["--kernel-tree", tree]
+    else:
+        bb.warn("Trowl: no kernel source for %s, so kernel CVEs stay version matches" % link)
     return args, ""
 
 def trowl_run(e, link, args):
@@ -113,7 +135,6 @@ def trowl_run(e, link, args):
     paths = [os.path.join(components, r, "usr", b) for r in data.getVar("TROWL_NATIVE_DEPS").split() for b in ("bin", "sbin")]
     env = dict(os.environ, PATH=os.pathsep.join([p for p in paths if os.path.isdir(p)] + [os.environ.get("PATH", "")]))
     cmd += trowl_llm(data, components, env)
-    cmd += (data.getVar("TROWL_EXTRA_ARGS") or "").split()
 
     bb.plain("Trowl: scanning %s" % link)
     os.makedirs(report, exist_ok=True)
