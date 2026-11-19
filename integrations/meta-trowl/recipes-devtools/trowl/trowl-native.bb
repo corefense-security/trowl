@@ -5,7 +5,7 @@ LIC_FILES_CHKSUM = "file://LICENSE;md5=86d3f3a95c324c9479bd8986968f4327"
 
 inherit native
 
-PV = "0.1.0+local"
+PV = "0.1.0+git"
 
 # Where the fetcher unpacks. Scarthgap has no UNPACKDIR and uses WORKDIR. Wrynose refuses
 # an UNPACKDIR set to WORKDIR, so the recipe can't just default it.
@@ -13,22 +13,11 @@ TROWL_UNPACKDIR = "${@d.getVar('UNPACKDIR') or d.getVar('WORKDIR')}"
 S = "${TROWL_UNPACKDIR}/trowl"
 B = "${WORKDIR}/build"
 
-# The source comes from the checkout the layer sits in (TROWL_REPO in layer.conf).
-FILESEXTRAPATHS:prepend := "${TROWL_REPO}:"
-SRC_URI = " \
-    file://LICENSE;subdir=trowl \
-    file://NOTICE;subdir=trowl \
-    file://go.mod;subdir=trowl \
-    file://go.sum;subdir=trowl \
-    file://cmd;subdir=trowl \
-    file://internal;subdir=trowl \
-    file://ui/src;subdir=trowl \
-    file://ui/index.html;subdir=trowl \
-    file://ui/package.json;subdir=trowl \
-    file://ui/tsconfig.json;subdir=trowl \
-    file://ui/vite.config.ts;subdir=trowl \
-    file://ui/package-lock.json;subdir=trowl \
-"
+# A pinned Trowl commit. files/package-lock.json and TROWL_GOMODS come from the same commit,
+# so a bump updates all three.
+SRC_URI = "git://github.com/corefense-security/trowl.git;protocol=https;branch=main;destsuffix=trowl"
+SRCREV = "8572172e4f157b4308f096829064fabf98a0e02a"
+TROWL_VERSION = "0.1.0-dev+${@d.getVar('SRCREV')[:7]}"
 
 # Trowl needs Go 1.26 and Scarthgap ships 1.22, while neither release ships Node.
 # Both come pinned here like install.sh pins them, so one recipe builds on every release.
@@ -55,14 +44,15 @@ TROWL_GOMODS = " \
     gopkg.in/check.v1@v0.0.0-20161208181325-20d25e280405::5c306e0d633cd66a11b40e2e5fbbc6da42110db7d72ea3c1524ceb45ee40c33f \
 "
 
-# The dashboard's npm packages come from ui/package-lock.json, each checked against its
-# sha512. Wrynose disables the npmsw fetcher, so the tarballs are fetched one by one.
-# Packages for another OS or CPU are left out.
+# The dashboard's npm packages come from the commit's ui/package-lock.json, each checked
+# against its sha512. The layer keeps a copy in files/ because the recipe reads it at parse
+# time, before the source is fetched. Wrynose disables the npmsw fetcher, so the tarballs
+# are fetched one by one. Packages for another OS or CPU are left out.
 TROWL_NPM_CPU = "${@{'x86_64': 'x64', 'aarch64': 'arm64'}.get(d.getVar('BUILD_ARCH'), 'unsupported')}"
 
 python () {
     import base64, json, os, re
-    lock = os.path.join(d.getVar("TROWL_REPO"), "ui", "package-lock.json")
+    lock = os.path.join(d.getVar("THISDIR"), "files", "package-lock.json")
     bb.parse.mark_dependency(d, lock)
     with open(lock) as f:
         packages = json.load(f).get("packages", {})
@@ -130,9 +120,13 @@ do_compile() {
 
     cd ${S}
     mkdir -p ${B}
+    # The version is stamped from SRCREV. -buildvcs=false stops Go reading it from git, which
+    # also fails when a git repo sits above TMPDIR, such as a build directory in a checkout.
     PATH="${TROWL_GODIR}/bin:$PATH" GOWORK=off GOTOOLCHAIN=local GOPROXY=file://${WORKDIR}/goproxy \
         GOSUMDB=off GOFLAGS=-modcacherw GOCACHE=${B}/gocache GOPATH=${B}/gopath CGO_ENABLED=0 \
-        go build -trimpath -o ${B}/trowl ./cmd/trowl
+        go build -trimpath -buildvcs=false \
+        -ldflags "-X github.com/corefense-security/trowl/internal/model.version=${TROWL_VERSION}" \
+        -o ${B}/trowl ./cmd/trowl
 }
 
 do_install() {

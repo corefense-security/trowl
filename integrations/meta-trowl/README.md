@@ -81,15 +81,18 @@ runtime. A build for one CPU couldn't be shared through sstate.
 
 ## How trowl-native builds
 
-`trowl-native` builds from the Trowl checkout the layer sits in, so the layer always builds the
-Trowl it came with. One recipe serves both releases.
+`trowl-native` builds the Trowl commit pinned in its `SRCREV`, whichever branch of the layer is
+checked out. One recipe serves both releases.
 
 - Go 1.26 and Node 22 come pinned in the recipe, like `install.sh` pins them. Scarthgap ships
   Go 1.22 and neither release ships Node.
 - Go modules come from the Go proxy as plain downloads, checked against `go.sum`. Scarthgap has
   no gomod fetcher.
-- The dashboard's npm packages come from `ui/package-lock.json`, each checked against its sha512.
-  Wrynose disables the npmsw fetcher, so the tarballs are fetched one by one.
+- The dashboard's npm packages come from `files/package-lock.json`, a copy of the pinned commit's
+  `ui/package-lock.json`, each checked against its sha512. Wrynose disables the npmsw fetcher, so
+  the tarballs are fetched one by one.
+- A bump sets `SRCREV`, copies that commit's `ui/package-lock.json` to `files/`, and updates
+  `TROWL_GOMODS` when its `go.sum` changed.
 
 ## Known issues
 
