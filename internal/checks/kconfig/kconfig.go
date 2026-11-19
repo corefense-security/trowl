@@ -194,7 +194,7 @@ func globSorted(dir, pattern string) []string {
 	return m
 }
 
-func FindConfig(rootfs, kernelConfig, kernelSrc string) (string, *pyjson.Obj) {
+func FindConfig(rootfs, kernelConfig string) (string, *pyjson.Obj) {
 	boot := py.InRoot(rootfs, "boot")
 	if py.IsDir(boot) {
 		configs := globSorted(boot, "config-*")
@@ -218,14 +218,6 @@ func FindConfig(rootfs, kernelConfig, kernelSrc string) (string, *pyjson.Obj) {
 	if kernelConfig != "" && py.IsFile(kernelConfig) {
 		raw, _ := os.ReadFile(kernelConfig)
 		return py.DecodeReplace(raw), pyjson.O("kind", "--kernel-config", "path", py.CleanPath(kernelConfig))
-	}
-	if kernelSrc != "" {
-		for _, c := range []string{filepath.Join(kernelSrc, ".config"), filepath.Join(kernelSrc, "build", ".config")} {
-			if py.IsFile(c) {
-				raw, _ := os.ReadFile(c)
-				return py.DecodeReplace(raw), pyjson.O("kind", "--kernel-src", "path", py.CleanPath(c))
-			}
-		}
 	}
 	return "", nil
 }
@@ -498,8 +490,8 @@ func archList(v any) []string {
 }
 
 // Check runs the config check and the module inventory.
-func Check(rootfs, kernelConfig, kernelSrc, policyPath string) (*pyjson.Obj, []model.Finding, error) {
-	text, source := FindConfig(rootfs, kernelConfig, kernelSrc)
+func Check(rootfs, kernelConfig, policyPath string) (*pyjson.Obj, []model.Finding, error) {
+	text, source := FindConfig(rootfs, kernelConfig)
 	if source == nil {
 		version := ModulesVersion(rootfs)
 		return pyjson.O("source", nil, "version", version, "arch", "", "entries", []any{},

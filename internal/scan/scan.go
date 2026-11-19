@@ -35,7 +35,6 @@ type Options struct {
 	Links        string // open | all | none
 	Model        string // "" disables the model
 	KernelConfig string
-	KernelSrc    string
 	KernelTree   string // source tree of the image's kernel, for the VEX of kernel CVEs
 	KernelPolicy string
 	Started      time.Time // when the scan began, including unpacking (zero means when Run was called)
@@ -101,7 +100,7 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 	}
 
 	st = status.Start("digging up kernel config")
-	kernelSection, kernelFindings, err := kconfig.Check(rootfs, opt.KernelConfig, opt.KernelSrc, opt.KernelPolicy)
+	kernelSection, kernelFindings, err := kconfig.Check(rootfs, opt.KernelConfig, opt.KernelPolicy)
 	if err != nil {
 		st.Fail("")
 		return nil, err
@@ -894,7 +893,7 @@ func assessKernel(sb *sbom.Sbom, feed *nvd.Result, rootfs string, opt Options) (
 		return nil, nil
 	}
 	st := status.Start("checking kernel config gates")
-	text, source := kconfig.FindConfig(rootfs, opt.KernelConfig, opt.KernelSrc)
+	text, source := kconfig.FindConfig(rootfs, opt.KernelConfig)
 	if source == nil {
 		st.Fail("")
 		return nil, fmt.Errorf("--kernel-tree needs the kernel's config, and the image has none: pass --kernel-config")
