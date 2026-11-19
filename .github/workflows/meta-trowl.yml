@@ -1,9 +1,6 @@
 name: Test Trowl's Yocto Integration
 
 on:
-  # Remove before merging. Only here to verify the workflow on this branch.
-  push:
-    branches: [meta-trowl]
   schedule:
     - cron: "0 2 * * *" # nightly at 02:00 UTC
   workflow_dispatch:
