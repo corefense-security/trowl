@@ -91,7 +91,7 @@ export default function Overview({ r, go }: { r: Report; go: (r: Route, p?: Reco
       const a = x.kernel ? kernelAssessment(x) : undefined;
       if (x.status === "fixed") n.fixed++;
       else if (x.status === "unpatched") n.affected++;
-      else if (x.status === "review" || x.status === "unknown") n.review++;
+      else if (x.status === "review" || x.status === "investigating" || x.status === "unknown") n.review++;
       else if (a?.status === "not_affected" && a.justification === "vulnerable_code_not_present") n.notCompiled++;
       else if (a?.status === "not_affected" && a.justification === "component_not_present") n.moduleOff++;
       else n.sbomNA++;

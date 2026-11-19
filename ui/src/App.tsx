@@ -73,7 +73,7 @@ export default function App({ initial, error }: { initial: Report | null; error?
       off: report.fstab.length || hasSecrets ? undefined : "Not found", why: "No /etc/fstab and no secrets found in the image" },
     { id: "kernel", label: "Config", group: "Kernel", icon: null, badge: report.kernel?.entries.filter((e) => e.status === "fail" || e.status === "missing").length || undefined,
       off: report.kernel?.source ? undefined : "Not found",
-      why: "No kernel config in the image: no /boot/config-*, and no embedded config (CONFIG_IKCONFIG). Pass one with --kernel-config or --kernel-src." },
+      why: "No kernel config in the image: no /boot/config-*, and no embedded config (CONFIG_IKCONFIG). Pass one with --kernel-config." },
     { id: "modules", label: "Modules", group: "Kernel", icon: null, badge: report.kernel?.modules?.items.length,
       off: report.kernel?.modules?.items.length ? undefined : "Not found", why: "No kernel modules found in the image" },
     { id: "binaries", label: "Binary", icon: <BinaryIcon size={17} />, badge: binaries,

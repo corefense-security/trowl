@@ -432,6 +432,15 @@ func (sb *Sbom) applyVulns(vulns []cdxVuln, resolve resolver, needAnalysis bool)
 			if notes != "" {
 				sb.vexNotes[k] = notes
 			}
+			// A --vex file that restates the CVE replaces the justification too.
+			if sb.vex[k] == "not_affected" && a.Justification == "code_not_present" {
+				if sb.codeAbsent == nil {
+					sb.codeAbsent = map[pair]bool{}
+				}
+				sb.codeAbsent[k] = true
+			} else {
+				delete(sb.codeAbsent, k)
+			}
 			if fix := statedFixRe.FindStringSubmatch(a.Detail); fix != nil {
 				sb.stated[k] = fix[1]
 			}

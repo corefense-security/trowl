@@ -59,6 +59,21 @@ func TestNameOnlyIsForVersionMatches(t *testing.T) {
 	}
 }
 
+// A listed CVE with no status is unstated once a version match sets it. An unlisted one is a
+// plain version match.
+func TestUnstatedIsForListedCVEs(t *testing.T) {
+	sb, _ := FromInventory("opkg", []Package{{Name: "phone", Version: "1.0"}})
+	sb.listCVE("inventory/phone", "CVE-1") // listed with no VEX
+	sb.AddMatch("inventory/phone", "CVE-1", nil)
+	sb.AddMatch("inventory/phone", "CVE-2", nil)
+	if !sb.Unstated("CVE-1", "inventory/phone") || sb.Unstated("CVE-2", "inventory/phone") {
+		t.Errorf("listed %v, unlisted %v", sb.Unstated("CVE-1", "inventory/phone"), sb.Unstated("CVE-2", "inventory/phone"))
+	}
+	if sb.Vex("CVE-1", "inventory/phone") != "affected" || !sb.Matched("CVE-1", "inventory/phone") {
+		t.Error("an unstated CVE is still a version match that sets affected")
+	}
+}
+
 // The error names the format it was given, so the user knows what to pass instead.
 func TestLoadNamesTheFormat(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "sbom.json")

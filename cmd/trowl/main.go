@@ -71,13 +71,13 @@ func commands() []*command {
 				{names: []string{"-o", "--output"}, value: true, def: "trowl-report", help: "output directory"},
 				{names: []string{"--kernel-config"}, value: true, help: "kernel .config to check when the image carries none " +
 					"(/boot/config-* or a config embedded in the kernel image)"},
-				{names: []string{"--kernel-src"}, value: true, help: "kernel build tree whose .config to use when the image carries none"},
 				{names: []string{"--kernel-tree"}, value: true, help: "source tree of the image's kernel, checked out at its version. " +
 					"Kernel CVEs get a VEX status from the config gates of the files their CNA record names"},
 				{names: []string{"--kernel-policy"}, value: true, help: "YAML with team overrides: accept (with a reason) or add options"},
 				{names: []string{"--no-network"}, help: "don't fetch CISA KEV / EPSS or check advisory links"},
 				{names: []string{"--links"}, value: true, def: "open", choices: []string{"open", "all", "none"},
 					help: "which CVEs get checked advisory links: not-fixed ones (default), all, or none"},
+				{names: []string{"--no-llm"}, help: "skip the Overview summary, so no model is downloaded or run"},
 				{names: []string{"--model"}, value: true, def: llm.DefaultModel, choices: llm.ModelNames(),
 					help: "local LLM that writes the Overview summary; downloaded into the cache on first use (default: " + llm.DefaultModel + ")"},
 				{names: []string{"--cache-dir"}, value: true, def: defaultCache(),
@@ -250,10 +250,8 @@ func scanBanner(a args) {
 		return py.CleanPath(v)
 	}
 	kernel := "from the image"
-	for _, fallback := range []string{a["kernel-config"], a["kernel-src"]} {
-		if fallback != "" {
-			kernel += ", else " + py.CleanPath(fallback)
-		}
+	if a["kernel-config"] != "" {
+		kernel += ", else " + py.CleanPath(a["kernel-config"])
 	}
 	network := "on"
 	if a.flag("no-network") {
@@ -273,7 +271,11 @@ func scanBanner(a args) {
 	if a["kernel-policy"] != "" {
 		rows = append(rows, [2]string{"policy", py.CleanPath(a["kernel-policy"])})
 	}
-	rows = append(rows, [2]string{"network", network}, [2]string{"model", llm.Models[a["model"]].Label}, [2]string{"output", py.CleanPath(a["output"])})
+	modelLabel := llm.Models[a["model"]].Label
+	if a.flag("no-llm") {
+		modelLabel = "off"
+	}
+	rows = append(rows, [2]string{"network", network}, [2]string{"model", modelLabel}, [2]string{"output", py.CleanPath(a["output"])})
 	status.Banner("trowl "+model.Version, rows...)
 }
 
@@ -312,6 +314,9 @@ func cmdScan(a args) int {
 		}
 	}
 	modelName := a["model"]
+	if a.flag("no-llm") {
+		modelName = ""
+	}
 	started := time.Now()
 	res, code := func() (*scan.Result, int) {
 		defer func() {
@@ -334,7 +339,7 @@ func cmdScan(a args) int {
 		st.Ok(u.SourceFormat)
 		res, err := scan.Run(u, a["image"], scan.Options{
 			SBOM: a["sbom"], VEX: a["vex"], Network: !a.flag("no-network"), CacheDir: cache, Links: a["links"],
-			Model: modelName, KernelConfig: a["kernel-config"], KernelSrc: a["kernel-src"], KernelTree: a["kernel-tree"], KernelPolicy: a["kernel-policy"],
+			Model: modelName, KernelConfig: a["kernel-config"], KernelTree: a["kernel-tree"], KernelPolicy: a["kernel-policy"],
 			Started: started,
 		})
 		if err != nil {
