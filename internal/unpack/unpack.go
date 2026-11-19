@@ -1,9 +1,9 @@
-// Package unpack turns an image (directory, tarball, ext2/3/4, squashfs, or partitioned disk)
-// into a directory tree.
+// Package unpack turns an image into a directory tree. It reads directories, tarballs, cpio
+// archives, ext2/3/4, squashfs and partitioned disks.
 //
 // Nothing is mounted and nothing needs root. Filesystems are extracted with debugfs/unsquashfs,
 // and partitioned images are split by reading the MBR/GPT ourselves. Compressed wrappers
-// (.zst/.xz/.gz/.bz2) are detected by their magic bytes. The file extension is ignored.
+// (.zst/.xz/.gz/.bz2/.lz4) are detected by their magic bytes. The file extension is ignored.
 package unpack
 
 import (
@@ -73,6 +73,13 @@ func decompress(src, work string, p Progress) (string, string, error) {
 			return "", "", errorf("zstd is required to read .zst images")
 		}
 		return dst, "zstd", withTool("zstd", []string{"-dcq"}, src, dst, p)
+	}
+	// lz4 frames and the legacy format that "lz4 -l" writes for Yocto's cpio.lz4.
+	if bytes.HasPrefix(head, []byte{0x04, 0x22, 0x4d, 0x18}) || bytes.HasPrefix(head, []byte{0x02, 0x21, 0x4c, 0x18}) {
+		if _, err := exec.LookPath("lz4"); err != nil {
+			return "", "", errorf("lz4 is required to read .lz4 images")
+		}
+		return dst, "lz4", withTool("lz4", []string{"-dcq"}, src, dst, p)
 	}
 	if bytes.HasPrefix(head, []byte("\xfd7zXZ\x00")) {
 		if _, err := exec.LookPath("xz"); err == nil {
@@ -566,6 +573,18 @@ func Unpack(image, workdir string, p Progress) (*Unpacked, error) {
 		formats = append(formats, "tar")
 		if skipped > 0 {
 			notes = append(notes, fmt.Sprintf("%d tar members skipped (device nodes, links outside root)", skipped))
+		}
+		return &Unpacked{Rootfs: dest, SourceFormat: strings.Join(formats, "+"), Notes: notes, Perms: perms}, nil
+	}
+
+	if isCpio(current) {
+		skipped, perms, err := extractCpio(current, dest, p)
+		if err != nil {
+			return nil, err
+		}
+		formats = append(formats, "cpio")
+		if skipped > 0 {
+			notes = append(notes, fmt.Sprintf("%d cpio members skipped (device nodes, links outside root)", skipped))
 		}
 		return &Unpacked{Rootfs: dest, SourceFormat: strings.Join(formats, "+"), Notes: notes, Perms: perms}, nil
 	}

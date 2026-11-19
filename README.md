@@ -26,9 +26,9 @@ Given a source tree (`--kernel-tree`), it further assigns VEX statuses to kernel
 
 ## Currently supported
 - **Targets:** Yocto
-- **Filesystems:** ext2/3/4, squashfs, tar, or an unpacked directory.
+- **Filesystems:** ext2/3/4, squashfs, tar, cpio (newc), or an unpacked directory.
 - **Disk images:** `.wic` and other MBR/GPT images (ext or squashfs partitions). Scans the detected rootfs only.
-- **Compression:** zstd, xz, gzip, bzip2.
+- **Compression:** zstd, xz, gzip, bzip2, lz4.
 - **SBOMs:** SPDX 2.2, SPDX 3.0 JSON-LD (including Yocto's `sbom-cve-check` output), and CycloneDX JSON (pass a separate CycloneDX VEX file with `--vex`).
 
 ### Local LLM (experimental)

@@ -39,7 +39,7 @@ RUN git clone --depth 1 --branch "${LLAMA_CPP_TAG}" https://github.com/ggml-org/
 # --- Runtime -----------------------------------------------------------------
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update \
- && apt-get install -y --no-install-recommends e2fsprogs squashfs-tools sqlite3 zstd xz-utils ca-certificates libgomp1 \
+ && apt-get install -y --no-install-recommends e2fsprogs squashfs-tools sqlite3 zstd lz4 xz-utils ca-certificates libgomp1 \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/trowl /usr/local/bin/trowl
 # trowl's license and notice, and the licenses of the third-party code the binary includes,

@@ -66,7 +66,7 @@ if [ "$(id -u)" -ne 0 ]; then
 	sudo=sudo
 fi
 
-packages=(ca-certificates curl git xz-utils e2fsprogs squashfs-tools zstd sqlite3)
+packages=(ca-certificates curl git xz-utils e2fsprogs squashfs-tools zstd lz4 sqlite3)
 [ "$with_llm" = 1 ] && packages+=(build-essential cmake libgomp1)
 say "Installing system packages"
 $sudo apt-get update -qq
