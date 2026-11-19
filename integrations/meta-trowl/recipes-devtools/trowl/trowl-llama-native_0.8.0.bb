@@ -21,7 +21,7 @@ S = "${@d.getVar('UNPACKDIR') or d.getVar('WORKDIR')}/llama.cpp"
 # llama.cpp's own releases.
 EXTRA_OECMAKE = "-DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DGGML_NATIVE=OFF \
     -DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON \
-    -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_OPENSSL=OFF"
+    -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_OPENSSL=OFF -DLLAMA_USE_PREBUILT_UI=OFF"
 
 # llama-server loads the CPU backends from its own directory. The other libraries go in libdir.
 do_install() {

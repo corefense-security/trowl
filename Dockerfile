@@ -23,6 +23,8 @@ RUN CGO_ENABLED=0 go build -trimpath \
       -o /out/trowl ./cmd/trowl
 
 # --- llama.cpp server for the local model (CPU), pinned to a release tag -------
+# The web UI is left out. Trowl only calls the API, and the prebuilt UI is fetched from a moving
+# "latest" that no longer matches this tag.
 FROM debian:bookworm-slim AS llama
 ARG LLAMA_CPP_TAG=v0.8.0
 RUN apt-get update \
@@ -31,6 +33,7 @@ RUN apt-get update \
 RUN git clone --depth 1 --branch "${LLAMA_CPP_TAG}" https://github.com/ggml-org/llama.cpp.git /llama \
  && cmake -S /llama -B /llama/build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
       -DGGML_NATIVE=OFF -DLLAMA_CURL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF \
+      -DLLAMA_USE_PREBUILT_UI=OFF \
  && cmake --build /llama/build --target llama-server -j"$(nproc)"
 
 # --- Runtime -----------------------------------------------------------------
