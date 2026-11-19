@@ -1,0 +1,83 @@
+---
+title: Architecture
+description: Local analysis, external resources, caching and report outputs.
+sidebar:
+  order: 5
+tableOfContents: false
+---
+
+import ArchitectureDiagram from '../../../components/ArchitectureDiagram.astro';
+import ResourceDiagram from '../../../assets/diagrams/resources.svg';
+
+Trowl unpacks and analyses the image locally. It fetches and caches external data before each stage that needs it.
+
+<ArchitectureDiagram />
+
+## Analysis
+
+Trowl checks ELF hardening, kernel config, mounts and secrets. Components come from the SBOM or a package database. Without either, it uses supported binary fingerprints.
+
+SBOM presence checks compare declared files with the image. For kernel VEX, the [kcond fork](https://github.com/corefense-security/kcond) reads build rules from the matching source. Trowl checks those rules against the config and shipped modules.
+
+## Network and cache<span id="cache"></span>
+
+<figure>
+  <div style={{ overflowX: 'auto' }} tabIndex={0} role="region" aria-label="External resources and cache diagram">
+    <ResourceDiagram style={{ width: '100%', maxWidth: '38rem', minWidth: '30rem', height: 'auto', display: 'block' }} />
+  </div>
+  <figcaption>Fetch missing or stale data before use</figcaption>
+</figure>
+
+### External resources
+
+<div style={{ overflowX: 'auto' }}>
+
+| Data | Source | Refreshed |
+| --- | --- | --- |
+| NVD and kernel CNA records | NVD JSON feed mirror on GitHub | Every 24 hours |
+| CISA KEV | GitHub mirror, then cisa.gov | Daily |
+| EPSS | empiricalsecurity.com | Daily |
+| Advisory link results | NVD, OSV, cve.org and the kernel CNA | Every 7 days |
+| Summary model | Pinned Hugging Face revision with SHA-256 verification | On cache miss |
+
+</div>
+
+If a refresh fails, Trowl uses the cached copy when available.
+
+### Cache location
+
+Trowl uses `$XDG_CACHE_HOME/trowl` when `XDG_CACHE_HOME` is set and `~/.cache/trowl` otherwise. Override it with `--cache-dir DIR`. In Docker, mount it at `/cache/trowl`:
+
+```sh
+-v ~/.cache/trowl:/cache/trowl
+```
+
+Without the mount, each new container downloads the feeds and model again.
+
+### Offline scans
+
+```sh
+trowl scan image.ext4 --no-network -o report
+```
+
+:::note
+`--no-network` uses cached NVD data and skips KEV, EPSS and advisory links even when cached. Run an online scan first to fill the cache.
+
+Cache the selected model before running the summary offline. Model downloads do not follow `--no-network`.
+:::
+
+## Local summary
+
+The Overview summary runs locally through `llama-server` using only computed scan facts. Scan data is not uploaded. Scans continue without a summary if `llama-server` is unavailable.
+
+| Model | Notes |
+| --- | --- |
+| `qwen3.5-4b` | Default (about 2.7 GB download) |
+| `qwen3.5-9b` | Larger and slower |
+| `qwen3-4b` | Older |
+
+The listed model weights use the Apache 2.0 licence.
+
+## Outputs
+
+Scans write `report.json` and a self-contained `index.html` with the results and optional local summary. OpenVEX export is coming soon. See [Report output](../report/).

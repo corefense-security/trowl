@@ -1,0 +1,34 @@
+{
+  "theme": "base",
+  "layout": "elk",
+  "fontFamily": "system-ui, sans-serif",
+  "themeVariables": {
+    "fontSize": "18px",
+    "primaryColor": "#f5f6f8",
+    "primaryTextColor": "#243044",
+    "primaryBorderColor": "#9aa4b2",
+    "lineColor": "#79869a",
+    "clusterBkg": "#ffffff",
+    "clusterBorder": "#d9dfe7",
+    "edgeLabelBackground": "#ffffff"
+  },
+  "flowchart": {
+    "htmlLabels": false,
+    "curve": "linear",
+    "nodeSpacing": 24,
+    "rankSpacing": 28,
+    "padding": 14,
+    "useMaxWidth": true
+  },
+  "elk": {
+    "mergeEdges": false,
+    "preset": "modelOrder",
+    "layeringStrategy": "LONGEST_PATH_SOURCE",
+    "nodePlacementStrategy": "NETWORK_SIMPLEX",
+    "considerModelOrder": "NODES_AND_EDGES",
+    "forceNodeModelOrder": true,
+    "straightenEdges": true,
+    "lineHops": "gap"
+  },
+  "themeCSS": ".node rect,.node polygon,.node path,.node circle{fill:var(--sl-color-bg,#f5f6f8)!important;stroke:var(--sl-color-gray-4,#9aa4b2)!important}.node.external rect{fill:var(--sl-color-gray-6,#eef4fd)!important;stroke:var(--sl-color-gray-4,#7194c1)!important}.node.cached path{fill:var(--sl-color-accent-low,#e8f1fc)!important;stroke:var(--sl-color-accent,#5487c5)!important}.node.output rect{fill:var(--sl-color-accent-low,#edf6f0)!important;stroke:var(--sl-color-accent,#789a84)!important}.node rect{rx:8;ry:8}.cluster rect{fill:transparent!important;stroke:var(--sl-color-gray-5,#d9dfe7)!important;rx:10;ry:10}.nodeLabel,.cluster-label,.edgeLabel{color:var(--sl-color-gray-1,#243044)!important;fill:var(--sl-color-gray-1,#243044)!important}.label text,text{fill:var(--sl-color-gray-1,#243044)!important}.flowchart-link{stroke:var(--sl-color-gray-3,#79869a)!important}.marker{fill:var(--sl-color-gray-3,#79869a)!important;stroke:var(--sl-color-gray-3,#79869a)!important}.labelBkg{fill:var(--sl-color-bg,#ffffff)!important}.edgeLabel rect{fill:var(--sl-color-bg,#ffffff)!important}.node,.cluster{filter:none!important}"
+}

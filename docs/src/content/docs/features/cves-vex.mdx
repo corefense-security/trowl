@@ -1,67 +1,290 @@
 ---
 title: CVEs and VEX
-description: How Trowl matches CVEs and clears kernel CVEs that don't apply to your build.
+description: How Trowl matches userland and kernel CVEs, and clears kernel CVEs that don't apply to your build.
 sidebar:
   order: 3
 ---
 
-## Where CVEs come from
+import KernelVexFlow from '../../../components/KernelVexFlow.astro';
 
-Trowl matches components against CVE data by CPE name and version.
+Trowl matches userland components and the kernel against CVE version ranges. For kernel CVEs, `--kernel-tree` also checks whether your build includes the affected code.
 
-- **NVD** for CVE records, CVSS and CPE ranges
-- **Kernel CNA** records for kernel version ranges and the source files each fix touches
-- **CISA KEV** for known exploited CVEs
-- **EPSS** for exploit probability
+## Data sources
 
-Components come from the SBOM when you pass one. If the SBOM already gives a CVE a status, Trowl keeps it. Without an SBOM Trowl reads the opkg, dpkg or rpm database in the image. If there is none, it falls back to version strings in common binaries such as busybox, glibc and openssl.
+<div style={{ overflowX: 'auto' }}>
 
-![CVEs page with status counts and the unpatched CVEs by component](../../../assets/screens/cves-disagreements.png)
-
-The table shows each CVE with its status, CVSS, attack vector, whether the component ships and whether it is in KEV. The Fixed in column shows the stable backport when one exists and marks it with **B**.
-
-## Kernel CVEs with `--kernel-tree`
-
-A version match says the kernel release is in a CVE's affected range. It doesn't say whether your build contains the vulnerable code. Most kernel CVEs sit in drivers and protocols that a given config never compiles.
-
-The `--kernel-tree` option makes Trowl look at the source files named in the kernel CNA record. It reads the tree's Makefiles to find the config options that build each file. Then it checks those options against your `.config` and the modules in the image.
-
-| File result | CVE status | VEX justification |
+| Source | Used for | Fetched from |
 | --- | --- | --- |
-| Any file compiled into the kernel or a shipped module | Unpatched | |
-| Files only compiled into modules the image doesn't ship | Not affected | `component_not_present` |
-| No file compiled by this config | Not affected | `vulnerable_code_not_present` |
-| Trowl can't decide | Needs review | |
+| `NVD` | CVE records, CVSS and CPE ranges | [NVD JSON feed mirror](https://github.com/fkie-cad/nvd-json-data-feeds) with one file per year |
+| `Kernel CNA` | Kernel version ranges, stable backports and affected source files | Kernel CNA records in the [NVD feed mirror](https://github.com/fkie-cad/nvd-json-data-feeds) |
+| `CISA KEV` | Known exploited CVEs | [cisagov/kev-data](https://github.com/cisagov/kev-data) with [cisa.gov](https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json) as a fallback |
+| `EPSS` | Exploit probability | [Daily EPSS score file](https://epss.empiricalsecurity.com/epss_scores-current.csv.gz) |
 
-Trowl never clears a CVE on a guess. Anything it can't decide becomes Needs review. CVEs the SBOM marks as fixed are left alone.
+</div>
 
-### Example: module not shipped
+### Links
 
-CVE-2026-98548 is an SCTP bug with a CVSS score of 9.8. The SBOM marks it Unpatched because 6.18.52 falls in its affected range. The config builds SCTP as a module (`CONFIG_IP_SCTP=m`) but the image doesn't ship `sctp.ko`. Trowl clears it and shows the path to check on a device.
+The detail panel links to NVD, [OSV](https://osv.dev/) and [cve.org](https://www.cve.org/). Kernel CVEs also link to [vulns.git](https://git.kernel.org/pub/scm/linux/security/vulns.git/). These references do not supply matching data.
 
-![CVE detail where Trowl says Not affected because sctp.ko is not in the image, and the SBOM says Unpatched](../../../assets/screens/cve-module-not-shipped.png)
+### Caching
 
-### Example: code not compiled
+Trowl caches downloaded data and link-check results, usually in `~/.cache/trowl`. Online scans refresh stale data and use an existing cached copy if a download fails. 
 
-CVE-2026-98023 is in the VXLAN driver. The config has `CONFIG_VXLAN=n`, so the vulnerable file is never built.
+See [Network and cache](../../reference/architecture/#network-and-cache) for details.
 
-![CVE detail where Trowl says Not affected because CONFIG_VXLAN is off](../../../assets/screens/cve-not-compiled.png)
+## Userland CVEs
 
-## SBOM disagreements
+With `--sbom`, Trowl reads components and their CPEs from the SBOM to perform version matching. See [SBOM analysis](../sbom/#sbom-for-cve-analysis).
 
-Tools like `sbom-cve-check` write kernel CVE statuses into the SBOM. When Trowl's result differs, the row gets a **≠** mark and the CVE appears under the **SBOM disagreements** filter. The detail panel shows both statuses one above the other.
+Without an SBOM, Trowl tries package databases first and falls back to fingerprints.
 
-A disagreement is counted when:
+#### Package database
 
-- the SBOM says Unpatched and Trowl says Not affected, or
-- the SBOM says Not affected and Trowl finds the code compiled or can't tell.
+Trowl uses source package names where available and removes epochs and packaging revisions to match upstream releases. For example, `1:2.36-r0` becomes `2.36`.
 
-In the scan above 160 kernel CVE statuses in the SBOM disagree with what the image and config show. Trowl clears 146 of them.
+Databases are checked in this order:
 
-## Requirements
+<div style={{ overflowX: 'auto' }}>
 
-- A full kernel `.config` from the image or `--kernel-config` (a defconfig is not enough)
-- The kernel source at the same release as the image's kernel
-- The image's `/lib/modules/<release>` folder to see which modules ship
+| Database | Location |
+| --- | --- |
+| `opkg` | `/var/lib/opkg/status` or `/usr/lib/opkg/status` |
+| `dpkg` | `/var/lib/dpkg/status` |
+| `rpm` | `rpmdb.sqlite` under `/var/lib/rpm` or `/usr/lib/sysimage/rpm`. Requires `sqlite3` on the host. |
 
-If you leave out `--kernel-tree`, kernel CVEs stay plain version matches and the detail panel says so.
+</div>
+
+#### Fingerprinting
+
+Minimal images often leave out the package database. Yocto's `core-image-minimal`, for example, can be built without the `package-management` image feature.
+
+A fingerprint is a YAML rule that recognises one upstream package from its binaries and reads the version from them.
+
+- Only ELF files up to 64 MiB are read. Symbolic links are skipped, since the file they point to is read under its own name.
+- A source-control suffix such as `+git` is dropped from the version, because CVE records don't use it.
+- Two versions of the same package, such as two copies of a library, become two components.
+
+:::caution
+A fingerprint only records the upstream version, and cannot detect backported fixes without a version change. Pass `--sbom` when you have one.
+:::
+
+Coverage is currently limited to the packages below. [Contributions](https://github.com/corefense-security/trowl/tree/main/internal/inventory/fingerprints) are welcome.
+
+<div style={{ overflowX: 'auto' }}>
+
+| Component | What Trowl reads |
+| --- | --- |
+| `busybox` | The `BusyBox vX.Y.Z` banner |
+| `glibc` | The `GNU C Library ... release version` string in libc |
+| `openssl` | The `OpenSSL X.Y.Z` version and build date in libcrypto |
+| `openssh` | The `OpenSSH_X.YpZ` banner |
+| `zlib` | The `deflate` and `inflate` copyright strings |
+| `util-linux` | The `util-linux X.Y` string, the libblkid release date or a debug path |
+| `kmod` | The `kmod version` string or a debug path |
+| `sysvinit` | The `INIT_VERSION=sysvinit-` string |
+| `acl` `attr` `xz` | The version in the shared library's file name |
+| `eudev` `libxcrypt` `shadow` `tar` | The `/usr/src/debug/<package>/<version>/` path left by the build |
+
+</div>
+
+##### Adding a fingerprint
+
+Each package has one YAML file in [Fingerprints](https://github.com/corefense-security/trowl/tree/main/internal/inventory/fingerprints). For example:
+
+```yaml
+package: openssh
+cpes: [cpe:2.3:a:openbsd:openssh]
+evidence:
+  - files: [sshd, ssh.*]
+    pattern: '\x00OpenSSH_(?P<version>\d+\.\d+p\d+)\x00'
+examples:
+  - file: sshd
+    contains: "command-line\0OpenSSH_10.3p1\0%s, %s"
+    version: 10.3p1
+rejects:
+  - file: sshd
+    contains: "\0OpenSSH_3.*\0"
+```
+
+###### Scan fields
+
+<div>
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `package` | Yes | The name shown in the report |
+| `cpes` | Yes | The CPEs to look up CVEs with, written as `cpe:2.3:<part>:<vendor>:<product>` without a version. Add one for each vendor name CVEs use, or use `*` for any vendor |
+| `evidence` | Yes | A list of entries, each with the `files` to read and a `pattern` or `name_pattern`. Entries are tried in order, and the first match wins |
+| `evidence[].files` | Yes | Which files to read, as name globs in `path.Match` syntax. They match in any directory |
+| `evidence[].pattern` | Yes, unless `name_pattern` is set | A regex that finds the version in the file's contents. Capture it in a `version` group, or in `major`, `minor` and `patch` groups when the digits are packed together |
+| `evidence[].name_pattern` | Instead of `pattern` | Use this when the version is in the file name. For example, acl's `libacl.so.1.1.2302` gives 2.3.2. The file still has to be an ELF binary |
+
+</div>
+
+###### Test fields
+
+`go test ./internal/inventory/` uses these inputs to test fingerprints. They do not take part in scan detection.
+
+<div>
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `examples` | Yes | Inputs that must give a version. Add one for each evidence entry |
+| `examples[].file` | Yes | File name the input stands for |
+| `examples[].contains` | Yes | Bytes copied from a real binary |
+| `examples[].version` | Yes | Version the fingerprint must return |
+| `rejects` | No | Inputs that must give no version, with the same fields minus `version` |
+
+</div>
+
+Keep regexes in single quotes so YAML leaves their escapes alone. Put sample bytes in double quotes, where `\0` and `\x0a` become real bytes.
+
+###### Adding a package
+
+1. Find the version string in a real binary with `strings` or `grep -a -o`.
+2. Write `<package>.yaml` and copy the bytes around the version into `examples`.
+3. Run `go test ./internal/inventory/`.
+4. Rebuild Trowl, which embeds the fingerprints at build time.
+
+All fingerprints are validated when loaded. Missing required fields, malformed CPEs or missing version captures stop fingerprinting for the whole scan.
+
+### Matching
+
+Trowl matches CPE product and version against CVE records and skips rejected CVEs. Vendor checks depend on the component source.
+
+<div style={{ overflowX: 'auto' }}>
+
+| Component source | Matching |
+| --- | --- |
+| **SBOM with CPE** | Vendor checked unless it is `*`. Wildcard matches use only the product name and show the CVE ID in yellow |
+| **SBOM without CPE** | Not matched |
+| **Package database** | Package name only since the database records no upstream vendor |
+| **Fingerprint** | Vendor checked unless the fingerprint's CPE gives `*` |
+
+</div>
+
+:::caution
+Name-only matches can pick up CVEs for other projects with the same name, such as Ruby's `zlib` gem. Future releases will map package names to vendors to reduce this.
+:::
+
+#### Vendor check
+
+- **CNA records.** Trowl drops suffixes such as "Inc." and "Project" and accepts names that contain one another. The OpenSSL CNA's "The OpenSSL Project" matches `openssl`.
+- **NVD configurations.** The CPE vendor must match exactly.
+
+#### Trowl always prefers a CNA match, except when:
+
+- **The vendor doesn't match.** The CNA entry may be for another project with the same name. Yocto's SBOM gives OpenSSL the CPE `openssl:openssl`. CVE-2023-53159 has a CNA entry for product `openssl` from vendor `sfackler`, which is the Rust `openssl` crate. The vendors don't match and NVD doesn't list `openssl:openssl` for it, so the CVE isn't reported.
+- **The versions are written as text.** CVE-2016-7837 says BlueZ "5.41 and earlier". Text can't be compared, so NVD's range up to 5.41 applies.
+- **There's no version to compare,** such as a git commit or "n/a".
+
+Version matches appear as `Unpatched` unless the SBOM supplies a status. See [How Trowl reads each format](../sbom/#how-trowl-reads-each-format).
+
+## Kernel CVEs
+
+### Version matching
+
+Kernel matches use the CNA's affected ranges for each stable series. NVD's CPE configurations are the fallback when no usable CNA ranges are available.
+
+With an SBOM, the version comes from its kernel component. Otherwise, Trowl uses the first available source:
+
+1. The kernel config header
+2. The `/lib/modules/<release>` directory name
+3. The installed kernel package version
+
+A version match identifies a potentially affected release. The source check below determines whether the affected code is compiled or shipped.
+
+Kernel VEX assessment works with or without an SBOM. Trowl can recheck VEX statuses supplied by the SBOM to rule out false positives.
+
+### Kernel tree analysis<span id="kernel-tree-analysis---kernel-tree"></span>
+
+The [kcond fork](https://github.com/corefense-security/kcond) reads the kernel's build rules (Kbuild) and option definitions (Kconfig). For each file (`.c`, `.h`) named in the kernel CNA record, Trowl finds the config gates that compile it and the module it builds into. For example, CVE-2026-74752 names these two files:
+
+<div class="wrap-code">
+
+| File | Build Conditions | Builds into |
+| --- | --- | --- |
+| `net/sctp/auth.c` | `CONFIG_IP_SCTP && CONFIG_NET` | `sctp.ko` when `CONFIG_IP_SCTP=m` |
+| `include/net/sctp/auth.h` | `CONFIG_DLM \|\| (CONFIG_IP_SCTP && CONFIG_NET) \|\| CONFIG_SECURITY_SELINUX` | Each file that includes it |
+
+</div>
+
+Trowl then checks whether the supplied kernel config, or the image's config, satisfies one of the gates. For a modular gate, it also checks whether the module is installed. In the Wrynose test image, `CONFIG_IP_SCTP=m` but `sctp.ko` isn't installed, so `auth.c` doesn't ship.
+
+No rebuild or SBOM list of compiled sources is required. This works with Yocto SBOMs that omit that list.
+
+#### Requirements
+
+<div style={{ overflowX: 'auto' }}>
+
+| Input | Requirement |
+| --- | --- |
+| `--kernel-tree DIR` | Match the image's kernel release. A top-level Makefile mismatch stops the scan. |
+| `--kernel-config FILE` | Full `.config` only if the image has neither `/boot/config-*` nor an embedded config. Defconfigs omit defaults and are rejected. |
+
+</div>
+
+<KernelVexFlow />
+
+:::note:::
+Without tree analysis, Trowl keeps the SBOM's VEX status or version-match result.
+:::
+
+#### File results<span id="file-results-and-cve-verdicts"></span>
+
+<div style={{ overflowX: 'auto' }}>
+
+| Result | Meaning |
+| --- | --- |
+| `Compiled` | Built into the kernel or a shipped module. A `.h` file counts when included by compiled source. |
+| `Module not shipped` | Built only into modules absent from `/lib/modules`. |
+| `Not compiled` | Disabled by config or excluded for another architecture. For an existing header, no compiled source includes it. |
+| `Unknown` | A build condition cannot be resolved or a source file has no build rule. Missing source files remain Unknown unless their directory is known to compile no code. |
+
+</div>
+
+When config enables a file, uncertain kernel or module linkage is kept as Compiled. Makefiles, Kconfig files, documentation and tools are skipped.
+
+## VEX assessment
+
+Trowl assigns VEX only to kernel CVEs. Userland CVEs keep their SBOM status or `Unpatched` from version matching.
+
+### CVE verdicts
+
+The first matching row applies. For `Not affected`, the second line gives the OpenVEX justification.
+
+<div style={{ overflowX: 'auto' }}>
+
+| First Match | Verdict |
+| --- | --- |
+| Any `Compiled` | `Unpatched` |
+| Any `Unknown` | `Needs review` unless the SBOM already says `Unpatched` |
+| Any `Module not shipped` | `Not affected`<br/>`component_not_present` |
+| All `Not compiled` | `Not affected`<br/>`vulnerable_code_not_present` |
+
+</div>
+
+CVEs with no listed files or only skipped paths keep their status without a new verdict.
+
+Yocto's `sbom-cve-check` may mark a CVE Ignored when its files are absent from the build. If the version is affected but exclusion cannot be confirmed, Trowl uses Needs review because the files may have moved or been renamed. These cases appear under [SBOM disagreements](#sbom-disagreements).
+
+### SBOM disagreements
+
+![CVE table filtered to SBOM disagreements](../../../assets/screens/cves-disagreements.png)
+
+Existing VEX statuses are handled as follows, with examples from a Yocto `sbom-cve-check` SPDX 3.0.1 SBOM. The same rules apply to CycloneDX.
+
+<div style={{ overflowX: 'auto' }}>
+
+| SBOM status | Trowl's Action | Example |
+| --- | --- | --- |
+| `Fixed` | Keeps it unchanged, compiled code may already contain the fix. | None. Fixed is never changed |
+| `Not affected` | Recheck only config exclusions for affected versions. These use the `not-applicable-config` status note in Yocto SPDX 3.0 from `sbom-cve-check` or the `code_not_present` justification in CycloneDX. Otherwise keep the status. | Becomes <span class="st bad">Affected</span> if the code is compiled, or <span class="st warn">Needs review</span> if the version is in range but the affected files aren't in the tree (e.g. because they were renamed) |
+| `Unpatched`<br/>`Under investigation`<br/>`Unknown` | Checks the code and applies the verdict above. | `Unpatched` becomes <span class="st ok">Not affected</span>, for example when a module isn't shipped |
+
+</div>
+
+
+### Where the verdicts go
+
+Verdicts appear in the dashboard and `report.json` with their status and justification in OpenVEX terms. A standalone VEX document is not written.

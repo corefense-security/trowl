@@ -1,26 +1,46 @@
 ---
 title: Report output
-description: The files a scan writes and how to share them.
+description: JSON reports, static HTML dashboards and upcoming OpenVEX export.
 sidebar:
   order: 3
 ---
 
-Each scan writes two files to the output folder.
+Each scan writes a JSON report and a static HTML dashboard to the output folder. OpenVEX export is coming soon. The output location depends on how you run Trowl:
 
-| File | Contents |
+<div style={{ overflowX: 'auto' }}>
+
+| Run | Output folder | Set with |
+| --- | --- | --- |
+| [Command line](../cli/#trowl-scan) | `./trowl-report/` by default | `-o DIR` or `--output DIR` |
+| [Docker](../../getting-started/docker/#run-a-scan) | `~/trowl-out/report/` on the host in the example | `-o /out/report` with `~/trowl-out` mounted at `/out` |
+| [Yocto](../../integrations/yocto/#additional-settings) | `${TOPDIR}/trowl/<image>/` by default | `TROWL_REPORT_DIR` sets the base folder in `local.conf` |
+
+</div>
+
+## Formats
+
+| Format | Output |
 | --- | --- |
-| `index.html` | The dashboard. One self-contained page with the report data inside |
-| `report.json` | Everything the dashboard shows, for scripts and CI |
+| JSON | `report.json` with scan results |
+| Static HTML | `index.html` with the dashboard in one file |
+| OpenVEX | Coming soon |
 
-## Sharing the dashboard
 
-`index.html` has no external dependencies. You can:
 
-- open it straight from disk
-- serve it with `trowl view`
-- copy the folder to GitHub Pages, Cloudflare Pages, S3 or a CI artifact
+## Static HTML dashboard
 
-## `report.json`
+Each scan produces `index.html` with the dashboard and report data embedded. No template setup or external dependencies are needed.
+
+Render it locally, or publish it as CI artifacts via GitHub Pages, Cloudflare Pages, S3:
+
+```sh
+trowl view ./trowl-report  # http://127.0.0.1:8765
+```
+
+
+## JSON report
+
+`report.json` contains the same results shown in the dashboard. Read it in a text editor or process it with JSON tools and scripts. 
 
 The top-level keys are:
 
@@ -37,4 +57,3 @@ The top-level keys are:
 | `cves` | CVE rows with status, CVSS, KEV, EPSS, links and kernel assessment |
 | `overview` | The AI summary if a model ran |
 
-Every finding has a stable `check` id such as `elf.canary`, `kernel.hardening` or `sbom.package-modified`. Filter on it in CI.

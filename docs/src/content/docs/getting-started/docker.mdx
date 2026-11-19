@@ -5,21 +5,17 @@ sidebar:
   order: 1
 ---
 
-The container ships Trowl with the tools it uses to unpack filesystems and with `llama-server` for the Overview summary. You don't need to install anything else.
+Trowl's Docker image includes filesystem extraction tools and `llama-server` for the LLM summary. It runs with Docker on Linux, macOS or Windows.
+
+## Installation
 
 :::note
-Until the first stable release, use a preview tag. Set `REF` once and the commands below pick it up.
+Use a preview tag until the first stable release.
 
 ```sh
 REF=v0.1.0-preview.4
 ```
 :::
-
-## Requirements
-
-Docker on Linux, macOS or Windows.
-
-## Install
 
 ```sh
 docker pull ghcr.io/corefense-security/trowl:$REF
@@ -27,7 +23,9 @@ docker pull ghcr.io/corefense-security/trowl:$REF
 
 ## Run a scan
 
-1. Put the scan inputs in one folder. Only the image is required. [Your first scan](../first-scan/) explains what each input adds.
+Only the image is required. [Your first scan](../first-scan/) covers optional inputs and their Yocto build paths.
+
+1. Put the inputs in one folder.
 
    ```
    ~/trowl-in/
@@ -36,7 +34,7 @@ docker pull ghcr.io/corefense-security/trowl:$REF
    └── kernel.config
    ```
 
-2. Create the output and cache folders first so that you own them and not root.
+2. Create the output and cache folders under your user account.
 
    ```sh
    mkdir -p ~/trowl-out ~/.cache/trowl
@@ -57,11 +55,15 @@ docker pull ghcr.io/corefense-security/trowl:$REF
        -o /out/report
    ```
 
-The paths after `scan` are paths inside the container. Every input has to be in a folder you mount. To pass the kernel source tree, mount it as well, for example `-v ~/src/linux-6.18.52:/tree:ro`, and add `--kernel-tree /tree`.
+Input paths refer to files inside the container and must be mounted. For kernel VEX assessment, also mount the source with `-v ~/src/linux-6.18.52:/tree:ro` and pass `--kernel-tree /tree`.
 
-The first run downloads the CVE feeds into `~/.cache/trowl`. Later runs reuse them.
+### Downloads and cache
+
+The mounted cache stores CVE feeds and the summary model in `~/.cache/trowl` on the host. The first scan downloads the model (about 2.7 GB). Later scans reuse cached files. See [Network and cache](../../reference/architecture/#network-and-cache).
 
 ## Open the report
+
+Open `~/trowl-out/report/index.html` directly or serve the report locally:
 
 ```sh
 docker run --rm -it -p 8765:8765 \
@@ -70,12 +72,6 @@ docker run --rm -it -p 8765:8765 \
   view /out/report
 ```
 
-Open `http://localhost:8765` in your browser and press Ctrl+C when you are done. You can also open `~/trowl-out/report/index.html` straight from disk.
+Open `http://localhost:8765` and press Ctrl+C to stop the viewer.
 
-## The Overview summary
-
-The container already includes `llama-server`. The first scan downloads the model (about 2.7 GB) into `~/.cache/trowl` and every scan after that reuses it.
-
-## Next steps
-
-[Your first scan](../first-scan/) shows which inputs to pass and where a Yocto build puts them. The same flags work in `docker run`.
+See [Report output](../../reference/report/) for JSON contents and static hosting.

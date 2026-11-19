@@ -1,6 +1,6 @@
 ---
 title: Command line
-description: trowl scan, view and unpack.
+description: Scan images, view reports and extract filesystems.
 sidebar:
   order: 2
 ---
@@ -16,18 +16,21 @@ Scans an image and writes `index.html` and `report.json` to the output folder.
 | Option | Description |
 | --- | --- |
 | `-o`, `--output DIR` | Output folder. Defaults to `trowl-report` |
-| `--sbom FILE` | SPDX 3.0 JSON-LD, or SPDX 2.2 as `IMAGE.spdx.tar.zst` or a folder of its documents |
-| `--kernel-config FILE` | Kernel `.config`, used when the image carries none |
-| `--kernel-src DIR` | Kernel build folder whose `.config` to use when the image carries none |
-| `--kernel-tree DIR` | Kernel source at the image's kernel release. Enables [kernel VEX](../../features/cves-vex/) |
-| `--kernel-policy FILE` | YAML that accepts known failures or adds options. See [Team policy](../../features/hardening/#team-policy) |
-| `--no-network` | Use cached data only. Skips KEV, EPSS and advisory link checks |
-| `--links MODE` | Which CVEs get checked advisory links: `open` (default, all but fixed), `all` or `none` |
-| `--model NAME` | Model for the Overview summary: `qwen3.5-4b` (default), `qwen3.5-9b` or `qwen3-4b` |
-| `--workdir DIR` | Unpack into this folder instead of a temporary one and keep it |
+| `--sbom FILE` | SPDX 3.0 JSON-LD or CycloneDX JSON. SPDX 2.2 accepts JSON, tar archives such as `IMAGE.spdx.tar.zst` or a document folder |
+| `--vex FILE` | Separate CycloneDX VEX JSON for `--sbom` |
+| `--kernel-config FILE` | Fallback kernel `.config` when the image has none |
+| `--kernel-tree DIR` | Source tree matching the image's kernel commit and patches. Enables [kernel VEX](../../features/cves-vex/) |
+| `--kernel-policy FILE` | YAML to accept known failures or add config checks. See [Team policy](../../features/hardening/#team-policy) |
+| `--no-network` | Use cached NVD data and skip KEV, EPSS and advisory link checks |
+| `--links MODE` | Advisory link checks for `open` (default, excludes fixed CVEs), `all` or `none` |
+| `--model NAME` | Overview summary model. `qwen3.5-4b` (default), `qwen3.5-9b` or `qwen3-4b` |
+| `--cache-dir DIR` | Cache folder for feeds, link results and models. Defaults to `$XDG_CACHE_HOME/trowl` or `~/.cache/trowl` |
+| `--workdir DIR` | Unpack into `DIR` and keep it after scanning |
 | `--keep` | Keep the temporary unpack folder |
 
-The exit code is 2 for usage errors and unsupported images, and 1 for other failures.
+Model downloads do not follow `--no-network`. Cache the selected model before an offline scan. See [Offline scans](../architecture/#offline-scans).
+
+Returns `0` on success, `2` for usage errors or unsupported images and `1` for other failures.
 
 ## `trowl view`
 
@@ -35,7 +38,7 @@ The exit code is 2 for usage errors and unsupported images, and 1 for other fail
 trowl view [--port 8765] [--host 127.0.0.1] [DIR]
 ```
 
-Serves a report folder at `http://127.0.0.1:8765`. The page is rebuilt from `report.json` on every request, which means a rescan shows after a reload. In Docker it listens on all interfaces.
+Serves `DIR` at `http://127.0.0.1:8765`. If omitted, `DIR` defaults to `trowl-report`. Each request renders `report.json` with the bundled UI so a reload shows updated results. In Docker, the default host is `0.0.0.0`.
 
 ## `trowl unpack`
 
@@ -43,4 +46,4 @@ Serves a report folder at `http://127.0.0.1:8765`. The page is rebuilt from `rep
 trowl unpack IMAGE DEST
 ```
 
-Extracts the image to `DEST` and prints the detected format and rootfs path. Use it to check what Trowl sees inside an image.
+Extracts the image to `DEST` and prints the detected format and rootfs path.

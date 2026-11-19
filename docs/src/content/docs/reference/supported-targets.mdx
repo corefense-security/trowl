@@ -1,48 +1,64 @@
 ---
 title: Supported targets
-description: Image formats, compression, SBOM formats and distros Trowl reads.
+description: Build targets, image and filesystem formats, and SBOM formats Trowl reads.
 sidebar:
   order: 1
 ---
 
-## Distros
+## Targets
 
-Trowl is built and tested against **Yocto** images. Buildroot and OpenWrt are on the roadmap.
+<div style={{ overflowX: 'auto' }}>
+
+| Target | Status |
+| --- | --- |
+| Yocto | Tested on `scarthgap` and `wrynose` |
+| Buildroot | Tested with its CycloneDX SBOM |
+| OpenWrt | Coming soon |
+| Android | Coming soon |
+
+</div>
 
 ## Images
 
+Trowl extracts all supported disk partitions. The first with `/etc` and either `/usr` or `/bin` is scanned as the rootfs. No mounts or root access are needed. Extended MBR partitions are skipped.
+
+<div style={{ overflowX: 'auto' }}>
+
 | Type | Notes |
 | --- | --- |
-| ext2, ext3, ext4 | Read with `debugfs` |
-| squashfs | Read with `unsquashfs` |
-| tar | Plain ustar archives |
-| Unpacked directory | A rootfs already on disk |
-| Disk images (`.wic`, MBR, GPT) | Every partition is extracted. The first with `/etc` and `/usr` or `/bin` is scanned as the rootfs |
+| Disk image (`.wic`) | MBR or GPT partition table |
+| tar | ustar archives |
+| Unpacked directory | Scanned in place |
 
-Nothing is mounted and Trowl doesn't need root. Extended MBR partitions are not followed.
+</div>
+
+## Filesystems
+
+<div style={{ overflowX: 'auto' }}>
+
+| Type | Reader |
+| --- | --- |
+| ext2, ext3, ext4 | `debugfs` |
+| squashfs | `unsquashfs` |
+
+</div>
 
 ## Compression
 
-Trowl handles zstd, xz, gzip and bzip2. It detects compression from the file contents and unwraps nested layers.
+Trowl supports various compressed images and filesystem archives such as `zstd`, `xz`, `gzip` and `bzip2`, and handles de-compression automatically.
 
 ## SBOMs
 
-| Format | What to pass |
-| --- | --- |
-| SPDX 3.0 JSON-LD from Yocto | `IMAGE.rootfs.spdx.json` |
-| SPDX 3.0 with `sbom-cve-check` results | The `sbom-cve-check` output `.spdx.json` |
-| SPDX 2.2 from Yocto `create-spdx-2.2` (scarthgap default) | `IMAGE.spdx.tar.zst` or a folder of its documents |
+<div style={{ overflowX: 'auto' }}>
 
-Trowl detects the format and shows it on the SBOM Analysis page. CycloneDX, SPDX tag-value and RDF/XML are not supported yet.
+| Format | Input | Tested with |
+| --- | --- | --- |
+| `SPDX 3.0` | One JSON-LD file such as `IMAGE.rootfs.spdx.json` | Yocto with or without `sbom-cve-check` |
+| `SPDX 2.2` | `IMAGE.spdx.tar.zst`, plain tar, document directory or one JSON file | Yocto `create-spdx-2.2` (default on `scarthgap`) |
+| `CycloneDX` | One JSON SBOM plus optional JSON VEX via `--vex` | Buildroot `make generate-cyclonedx` and Yocto `meta-cyclonedx` |
 
-SPDX 2.2 SBOMs carry no VEX. The only status Trowl takes from them is the list of CVEs each recipe fixes.
+</div>
 
-## Kernel
-
-| Input | How Trowl finds it |
-| --- | --- |
-| Kernel config | `/boot/config-*`, then a config embedded in the kernel image, then `--kernel-config`, then `--kernel-src` |
-| Kernel source tree | `--kernel-tree` pointing at the same release as the image's kernel |
-| Modules | `/lib/modules/<release>` in the image |
-
-Binary checks for CET and branch protection cover x86-64 and arm64.
+:::note
+SPDX 2.3, SPDX tag-value, RDF/XML and CycloneDX XML are not supported.
+:::

@@ -1,0 +1,61 @@
+---
+// Previous and next links at the foot of each page: small uppercase mono text, no page names
+// and no boxes, matching the landing page's labels. The page name stays in the title attribute.
+const { dir, pagination } = Astro.locals.starlightRoute;
+const { prev, next } = pagination;
+const isRtl = dir === 'rtl';
+const left = isRtl ? '→' : '←';
+const right = isRtl ? '←' : '→';
+---
+
+{
+	(prev || next) && (
+		<nav class="pager print:hidden" dir={dir} aria-label="Pages">
+			{prev ? (
+				<a href={prev.href} rel="prev" title={prev.label} aria-label={`Previous: ${prev.label}`}>
+					<span aria-hidden="true">{left}</span> Previous
+				</a>
+			) : (
+				<span />
+			)}
+			{next && (
+				<a href={next.href} rel="next" title={next.label} aria-label={`Next: ${next.label}`}>
+					Next <span aria-hidden="true">{right}</span>
+				</a>
+			)}
+		</nav>
+	)
+}
+
+<style>
+	.pager {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding-top: 1.25rem;
+		border-top: 1px solid color-mix(in srgb, var(--sl-color-white) 8%, transparent);
+	}
+	a {
+		display: inline-flex;
+		gap: 0.5rem;
+		font-family: var(--sl-font-mono);
+		font-size: 0.75rem;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		text-decoration: none;
+		color: var(--sl-color-gray-3);
+		transition: color 0.15s;
+	}
+	a:hover {
+		color: var(--sl-color-white);
+	}
+	a span {
+		transition: transform 0.15s;
+	}
+	a[rel='prev']:hover span {
+		transform: translateX(-3px);
+	}
+	a[rel='next']:hover span {
+		transform: translateX(3px);
+	}
+</style>

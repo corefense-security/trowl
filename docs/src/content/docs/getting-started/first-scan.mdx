@@ -1,22 +1,23 @@
 ---
 title: Your first scan
-description: What to pass to trowl scan and where to find it in a Yocto build.
+description: Scan inputs, Yocto build paths and report viewing.
 sidebar:
   order: 3
 ---
 
-The commands below use a native install. Docker users can pass the same flags to the `docker run` command from [Run with Docker](../docker/).
+Only the image is required. The examples use a native install. In Docker, pass the same flags after `scan` as shown in [Run with Docker](../docker/).
 
 ## Image only
 
+Runs hardening checks on the image. For userland CVEs, Trowl reads the package database or falls back to supported binary fingerprints.
+
 ```sh
 trowl scan core-image-minimal-qemux86-64.rootfs.ext4.zst -o report
-trowl view report
 ```
 
-This runs every hardening check. Trowl matches CVEs against the package database or the version strings it finds in the binaries.
-
 ## Image and SBOM
+
+Adds package versions and any CVE statuses recorded by Yocto. Trowl also checks declared files against the image. See [SBOM analysis](../../features/sbom/).
 
 ```sh
 trowl scan core-image-minimal-qemux86-64.rootfs.ext4.zst \
@@ -24,9 +25,9 @@ trowl scan core-image-minimal-qemux86-64.rootfs.ext4.zst \
   -o report
 ```
 
-The SBOM gives Trowl exact package versions and the CVE status Yocto already worked out. Trowl then checks every package against the image. See [SBOM analysis](../../features/sbom/).
+## Kernel VEX assessment
 
-## Image, SBOM and kernel source
+Uses the matching kernel source, config and shipped modules to assess whether vulnerable code is included. The SBOM remains optional. See [CVEs and VEX](../../features/cves-vex/).
 
 ```sh
 trowl scan core-image-minimal-qemux86-64.rootfs.ext4.zst \
@@ -36,11 +37,11 @@ trowl scan core-image-minimal-qemux86-64.rootfs.ext4.zst \
   -o report
 ```
 
-This is the full scan. Trowl checks each kernel CVE against your kernel config and the modules in the image. See [CVEs and VEX](../../features/cves-vex/).
+## Yocto input paths
 
-## Where Yocto puts the inputs
+The [meta-trowl layer](../../integrations/yocto/) locates inputs and scans images automatically. For manual scans, use these paths relative to the build directory.
 
-With the [meta-trowl layer](../../integrations/yocto/), BitBake finds these and scans the image for you. To pass them by hand, the paths are relative to your build directory.
+<div style={{ overflowX: 'auto' }}>
 
 | Input | Location |
 | --- | --- |
@@ -50,10 +51,18 @@ With the [meta-trowl layer](../../integrations/yocto/), BitBake finds these and 
 | Kernel `.config` | `.config` in the kernel build folder under `tmp/work/` |
 | Kernel source | `tmp/work-shared/<machine>/kernel-source`, or a kernel.org checkout at the same release |
 
-If the image has `/boot/config-*` or a kernel built with `CONFIG_IKCONFIG`, Trowl reads the config from there and you can leave out `--kernel-config`.
+</div>
 
-## Reading the report
+Omit `--kernel-config` when Trowl can read `/boot/config-*` or a config embedded with `CONFIG_IKCONFIG` from the image.
 
-`trowl view report` serves the dashboard at `http://127.0.0.1:8765`. You can also open `report/index.html` straight from disk or copy the folder to any static host.
+## Open the report
 
-The sidebar has one page per area: Overview, Filesystems, Kernel, Binary, SBOM Analysis and CVEs. Pages with nothing to show are greyed out. SBOM Analysis needs `--sbom` to appear.
+Open `report/index.html` directly or serve the report locally:
+
+```sh
+trowl view report  # http://127.0.0.1:8765
+```
+
+The sidebar groups results into Overview, Filesystems, Kernel, Binary, SBOM Analysis and CVEs. Kernel contains Config and Modules. Pages without data are disabled. SBOM Analysis requires `--sbom`.
+
+The dashboard also works on any static host. See [Report output](../../reference/report/) for formats and sharing.

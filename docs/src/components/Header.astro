@@ -11,7 +11,7 @@ const links = [
 	{ text: 'Features', href: '/features/hardening/', match: '/features/' },
 	{ text: 'Get Started', href: '/getting-started/docker/' },
 	{ text: 'How it Works', href: '/getting-started/first-scan/' },
-	{ text: 'Privacy', href: '/reference/network-cache/' },
+	{ text: 'Privacy', href: '/reference/architecture/#local-summary', match: '/reference/architecture/' },
 ];
 const path = Astro.url.pathname;
 const shouldRenderSearch = config.pagefind;
@@ -21,32 +21,29 @@ const shouldRenderSearch = config.pagefind;
 	<div class="title-wrapper sl-flex">
 		<SiteTitle />
 	</div>
-	<div class="sl-flex print:hidden">
-		{shouldRenderSearch && <Search />}
-	</div>
-	<div class="sl-hidden md:sl-flex print:hidden right-group">
-		<nav class="site-nav" aria-label="Site">
-			{
-				links.map(({ text, href, match }) => (
-					<a {href} aria-current={path.startsWith(match ?? href) ? 'page' : undefined}>
-						{text}
-					</a>
-				))
-			}
-		</nav>
-		<div class="sl-flex social-icons">
+	<nav class="site-nav sl-hidden md:sl-flex print:hidden" aria-label="Site">
+		{
+			links.map(({ text, href, match }) => (
+				<a {href} aria-current={path.startsWith(match ?? href) ? 'page' : undefined}>
+					{text}
+				</a>
+			))
+		}
+	</nav>
+	<div class="tools print:hidden">
+		<div class="search">{shouldRenderSearch && <Search />}</div>
+		<div class="sl-hidden md:sl-flex extras">
 			<SocialIcons />
+			<ThemeSelect />
 		</div>
-		<ThemeSelect />
 	</div>
 </div>
 
 <style>
 	.header {
 		display: flex;
-		gap: var(--sl-nav-gap);
-		justify-content: space-between;
 		align-items: center;
+		gap: 1.5rem;
 		height: 100%;
 	}
 	.title-wrapper {
@@ -55,59 +52,70 @@ const shouldRenderSearch = config.pagefind;
 		margin: -0.25rem;
 		min-width: 0;
 	}
-	.right-group {
-		gap: 1rem;
-		align-items: center;
-	}
-	.social-icons {
-		gap: 0.75rem;
-		align-items: center;
-	}
+	/* The links sit right of centre and lean towards it through their spacing. */
 	.site-nav {
-		display: flex;
-		gap: 1.25rem;
+		margin-inline-start: auto;
+		gap: 2.5rem;
 		align-items: center;
-		padding-inline-end: 0.25rem;
+		padding-inline-end: 1rem;
 	}
 	.site-nav a {
-		color: var(--sl-color-gray-2);
-		font-size: var(--sl-text-sm);
+		position: relative;
+		/* The same uppercase mono as the landing page's section labels. */
+		font-family: var(--sl-font-mono);
+		font-size: 0.8rem;
 		font-weight: 500;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		color: var(--sl-color-gray-2);
 		text-decoration: none;
 		white-space: nowrap;
+		transition: color 0.15s;
 	}
 	.site-nav a:hover,
 	.site-nav a[aria-current='page'] {
 		color: var(--sl-color-white);
 	}
+	.site-nav a[aria-current='page']::after {
+		content: '';
+		position: absolute;
+		inset-inline: 0;
+		bottom: -0.45rem;
+		height: 2px;
+		border-radius: 1px;
+		background: var(--sl-color-accent);
+	}
+	.tools {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		margin-inline-start: auto;
+	}
+	.site-nav + .tools {
+		margin-inline-start: 0;
+		padding-inline-start: 1.25rem;
+		border-inline-start: 1px solid var(--sl-color-gray-5);
+	}
+	.extras {
+		align-items: center;
+		gap: 0.75rem;
+	}
+	/* A compact search button next to the links instead of a wide box in the middle. */
 	@media (min-width: 50rem) {
-		:global(:root[data-has-sidebar]) {
-			--__sidebar-pad: calc(2 * var(--sl-nav-pad-x));
-		}
-		:global(:root:not([data-has-toc])) {
-			--__toc-width: 0rem;
-		}
-		.header {
-			--__sidebar-width: max(0rem, var(--sl-content-inline-start, 0rem) - var(--sl-nav-pad-x));
-			--__main-column-fr: calc(
-				(
-						100% + var(--__sidebar-pad, 0rem) - var(--__toc-width, var(--sl-sidebar-width)) -
-							(2 * var(--__toc-width, var(--sl-nav-pad-x))) - var(--sl-content-inline-start, 0rem) -
-							var(--sl-content-width)
-					) / 2
-			);
-			display: grid;
-			grid-template-columns:
-				minmax(calc(var(--__sidebar-width) + max(0rem, var(--__main-column-fr) - var(--sl-nav-gap))), auto)
-				1fr
-				auto;
-			align-content: center;
+		.search :global(button[data-open-modal]) {
+			width: 11rem;
+			max-width: 11rem;
 		}
 	}
-	/* The links need room. Below this width the sidebar menu has them. */
-	@media (max-width: 72rem) {
+	/* Below this width the links don't fit. The sidebar menu has them. */
+	@media (max-width: 68rem) {
 		.site-nav {
 			display: none;
+		}
+		.site-nav + .tools {
+			margin-inline-start: auto;
+			border: 0;
+			padding: 0;
 		}
 	}
 </style>

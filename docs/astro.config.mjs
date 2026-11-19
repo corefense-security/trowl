@@ -5,6 +5,9 @@ import starlight from '@astrojs/starlight';
 // Served from GitHub Pages on the custom domain set in the repo's Pages settings.
 export default defineConfig({
 	site: 'https://trowl.dev',
+	redirects: {
+		'/reference/network-cache/': '/reference/architecture/#network-and-cache',
+	},
 	integrations: [
 		starlight({
 			title: 'Trowl',
@@ -21,10 +24,11 @@ export default defineConfig({
 			editLink: {
 				baseUrl: 'https://github.com/corefense-security/trowl/edit/main/docs/',
 			},
-			customCss: ['./src/styles/custom.css'],
+			customCss: ['@fontsource/jetbrains-mono/400.css', '@fontsource/jetbrains-mono/500.css', './src/styles/custom.css'],
 			components: {
 				Header: './src/components/Header.astro',
 				Hero: './src/components/Hero.astro',
+				Pagination: './src/components/Pagination.astro',
 				SocialIcons: './src/components/SocialIcons.astro',
 				ThemeSelect: './src/components/ThemeSelect.astro',
 			},
@@ -55,7 +59,7 @@ export default defineConfig({
 						{ slug: 'reference/supported-targets' },
 						{ slug: 'reference/cli' },
 						{ slug: 'reference/report' },
-						{ slug: 'reference/network-cache' },
+						{ slug: 'reference/architecture' },
 					],
 				},
 			],

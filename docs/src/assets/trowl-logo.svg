@@ -6,5 +6,5 @@
     <g fill="#fff" mask="url(#m)"><path d="M12 3.2 21.5 7.8 12 12.4 2.5 7.8Z"/><path d="M12 13.6 21.5 9v2.2L12 15.8 2.5 11.2V9Z"/></g>
     <path d="M12 18.4 21.5 13.8v2.6L12 21 2.5 16.4v-2.6Z" fill="#fff"/>
   </g>
-  <text x="150" y="91" fill="#16181d" font-family="ui-sans-serif, -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif" font-size="76" font-weight="700" letter-spacing="-2">trowl</text>
+  <text x="150" y="91" fill="#16181d" font-family="ui-sans-serif, -apple-system, Segoe UI, Inter, Helvetica, Arial, sans-serif" font-size="76" font-weight="700" letter-spacing="-2">Trowl</text>
 </svg>
