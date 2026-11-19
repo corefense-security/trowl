@@ -89,6 +89,7 @@ type Sbom struct {
 	stated       map[pair]string // fix version named in the VEX text (sbom-cve-check)
 	matched      map[pair]bool   // statuses that came from a version match
 	nameOnly     map[pair]bool   // version matches with no vendor to back them up
+	unstated     map[pair]bool   // version matches on CVEs the SBOM lists without a status
 	codeAbsent   map[pair]bool   // CycloneDX not_affected pairs justified as code_not_present
 	fixes        map[pair]Fix    // upstream fix, from the CVE record
 	assessed     map[pair]*Assessment
