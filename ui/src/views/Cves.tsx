@@ -1,6 +1,6 @@
-import { Check, ExternalLink, X } from "lucide-react";
+import { Check, Download, ExternalLink, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { CveAssessment, CveCarrier, CveRow, CveSection, CveStatus, FileVerdict } from "../types";
+import type { CveAssessment, CveCarrier, CveRow, CveSection, CveStatus, CveVex, FileVerdict } from "../types";
 import { Card, Dropdown, SearchBox, Switch, usePage } from "../ui";
 
 const SEV_COLOR: Record<string, string> = {
@@ -8,12 +8,11 @@ const SEV_COLOR: Record<string, string> = {
 };
 const SEV_LABEL: Record<string, string> = { critical: "Critical", high: "High", medium: "Medium", low: "Low", none: "Unscored" };
 const STATUS: Record<CveStatus, { label: string; color: string }> = {
-  unpatched: { label: "Unpatched", color: "var(--serious)" },
+  affected: { label: "Affected", color: "var(--serious)" },
   review: { label: "Needs review", color: "var(--warning)" },
-  // "ignored" in report.json is VEX not_affected (Yocto's cve-check calls it Ignored).
-  ignored: { label: "Not affected", color: "var(--neutral)" },
+  not_affected: { label: "Not affected", color: "var(--neutral)" },
   fixed: { label: "Fixed", color: "var(--good)" },
-  investigating: { label: "Under investigation", color: "var(--axis)" },
+  under_investigation: { label: "Under investigation", color: "var(--axis)" },
   unknown: { label: "Unknown", color: "var(--axis)" },
 };
 const VECTOR: Record<string, string> = {
@@ -67,7 +66,7 @@ function SourceNote({ rows, sources }: { rows: CveRow[]; sources: CveSection["so
   const kernelNote = !sources.kernel_vex && rows.some((r) => r.kernel)
     ? <> · kernel CVEs: version match only, <Opt>--kernel-tree</Opt> for VEX</> : null;
   if (inventory) {
-    return <span title="No SBOM, so there are no Fixed or Not affected statuses from it: every match shows as Unpatched unless the kernel check clears it.">
+    return <span title="No SBOM, so there are no Fixed or Not affected statuses from it: every match shows as Affected unless the kernel check clears it.">
       No SBOM passed · {inventory === "kernel only" && "kernel CVEs only · "}
       {inventory === "binaries" && "versions read from binaries, no backports checked"}{kernelNote}</span>;
   }
@@ -78,34 +77,34 @@ function SourceNote({ rows, sources }: { rows: CveRow[]; sources: CveSection["so
   );
 }
 
-/** Fixed, Not affected and Unpatched on installed packages. Below, the Unpatched share is zoomed
+/** Fixed, Not affected and Affected on installed packages. Below, the Affected share is zoomed
  *  out to show CVSS 7+ and KEV inside it. */
 function Attention({ s, rows, sources }: { s: CveSection["summary"]; rows: CveRow[]; sources: CveSection["sources"] }) {
   const kevChecked = !!sources.kev;
   const installed = rows.filter(onDevice);
   const fixed = installed.filter((r) => r.status === "fixed").length;
-  const ignored = installed.filter((r) => r.status === "ignored").length;
-  const open = s.unpatched_shipped;
+  const notAffected = installed.filter((r) => r.status === "not_affected").length;
+  const open = s.affected_shipped;
   const pct = (n: number) => (open ? (100 * n) / open : 0);
-  const openShare = fixed + ignored + open ? (100 * open) / (fixed + ignored + open) : 0;
+  const openShare = fixed + notAffected + open ? (100 * open) / (fixed + notAffected + open) : 0;
   const lensX = 1000 - (openShare * 10);
   return (
     <Card title="CVEs in installed packages" hint={<SourceNote rows={rows} sources={sources} />} className="span-7">
       <div className="ig">
         <div className="ig-row"><span><span><b className="num">{sources.inventory ? "–" : fixed.toLocaleString()}</b>{sources.inventory ? "Fixed: needs an SBOM" : "Fixed"}</span>
-          {ignored > 0 && <span className="ig-ign"><b className="num">{ignored.toLocaleString()}</b>Not affected</span>}</span><span><b className="num">{open.toLocaleString()}</b>Unpatched</span></div>
-        <div className="ig-strip" role="img" aria-label={`${fixed} fixed, ${ignored} not affected, ${open} unpatched`}>
+          {notAffected > 0 && <span className="ig-ign"><b className="num">{notAffected.toLocaleString()}</b>Not affected</span>}</span><span><b className="num">{open.toLocaleString()}</b>Affected</span></div>
+        <div className="ig-strip" role="img" aria-label={`${fixed} fixed, ${notAffected} not affected, ${open} affected`}>
           <i style={{ flex: fixed, background: "var(--good-soft)" }} title={`${fixed.toLocaleString()} fixed`} />
-          <i style={{ flex: ignored, background: "var(--neutral)" }} title={`${ignored.toLocaleString()} not affected`} />
-          <i style={{ flex: open, background: "var(--serious-soft-2)", minWidth: open ? 4 : 0 }} title={`${open.toLocaleString()} unpatched`} />
+          <i style={{ flex: notAffected, background: "var(--neutral)" }} title={`${notAffected.toLocaleString()} not affected`} />
+          <i style={{ flex: open, background: "var(--serious-soft-2)", minWidth: open ? 4 : 0 }} title={`${open.toLocaleString()} affected`} />
         </div>
         <svg className="ig-lens" viewBox="0 0 1000 46" preserveAspectRatio="none" aria-hidden="true">
           <path d={`M${lensX} 0 L1000 0 L1000 46 L0 46 Z`} fill="var(--serious-soft)" />
           <path d={`M${lensX} 0 L0 46 M1000 0 L1000 46`} stroke="var(--serious-soft-2)" vectorEffect="non-scaling-stroke" fill="none" />
         </svg>
-        {/* The whole bar is the unpatched set. CVSS 7+ is a band inside it, and KEV is a band
+        {/* The whole bar is the affected set. CVSS 7+ is a band inside it, and KEV is a band
             inside that, so each figure reads as part of the one before. */}
-        <div className="ig-big" role="img" aria-label={`${open} unpatched, of which ${s.high} have CVSS 7 or more and ${s.kev} are known exploited`}>
+        <div className="ig-big" role="img" aria-label={`${open} affected, of which ${s.high} have CVSS 7 or more and ${s.kev} are known exploited`}>
           <div className="ig-inner">
             <div className="ig-hi" style={{ width: `${pct(s.high)}%` }} title={`${s.high} with CVSS 7.0 or higher`}>
               {pct(s.high) > 14 && <span>{s.high.toLocaleString()} CVSS 7+</span>}
@@ -114,16 +113,16 @@ function Attention({ s, rows, sources }: { s: CveSection["summary"]; rows: CveRo
           </div>
         </div>
         <div className="ig-stats">
-          <div><div className="l"><i className="swatch" style={{ background: "var(--serious-soft-2)" }} />Unpatched</div>
+          <div><div className="l"><i className="swatch" style={{ background: "var(--serious-soft-2)" }} />Affected</div>
             <div className="n num">{open.toLocaleString()}</div><div className="f">in packages that ship</div></div>
           <div><div className="l"><i className="swatch" style={{ background: "var(--serious)" }} />CVSS 7+</div>
             <div className="n num">{s.high.toLocaleString()}</div><div className="f">high or critical</div></div>
           <div><div className="l"><i className="swatch" style={{ background: "var(--critical)" }} />Known exploited</div>
             <div className="n num">{kevChecked ? s.kev : "–"}</div><div className="f">{kevChecked ? `in CISA KEV` : "KEV not checked (no network)"}</div></div>
         </div>
-        {s.unpatched_not_shipped > 0 && (
+        {s.affected_not_shipped > 0 && (
           <p className="muted" style={{ margin: "12px 0 0", fontSize: 12 }}>
-            {s.unpatched_not_shipped} more unpatched CVE(s) are only on packages that don't ship, so they're left out.
+            {s.affected_not_shipped} more affected CVE(s) are only on packages that don't ship, so they're left out.
           </p>
         )}
       </div>
@@ -138,8 +137,8 @@ function ByComponent({ s }: { s: CveSection["summary"] }) {
   const top = rows.slice(0, 8);
   const max = Math.max(1, ...top.map(total));
   return (
-    <Card title="Unpatched CVEs by component" className="span-5">
-      {top.length === 0 ? <div className="empty">No critical or high unpatched CVEs on shipped packages.</div> : (
+    <Card title="Affected CVEs by component" className="span-5">
+      {top.length === 0 ? <div className="empty">No critical or high affected CVEs on shipped packages.</div> : (
         <>
           <div className="sev-legend">
             {sevs.filter((k) => s.severity[k]).map((k) => (
@@ -167,6 +166,9 @@ function ByComponent({ s }: { s: CveSection["summary"] }) {
 }
 
 const DEFIES_NOTE = "Trowl's check of the kernel tree and image disagrees with the SBOM's status.";
+const DEFIES_VEX_NOTE = "Trowl's check of the kernel tree and image disagrees with the VEX file, whose status is shown.";
+const OVERRIDE_NOTE = "Trowl's check of the kernel tree and image overrides the VEX file (--override).";
+const DISAGREE_NOTE = "Trowl's check of the kernel tree and image disagrees with the SBOM or the VEX file.";
 const UNSTATED_NOTE = "The SBOM lists this CVE without a status. Trowl's version match puts it in range.";
 
 /** The carrier that decides the row's status. */
@@ -177,13 +179,23 @@ const unstated = (r: CveRow) => !!decider(r)?.sbom_unstated;
 /** trowl's verdict on a kernel CVE (the kernel carrier's), when --kernel-tree ran. */
 const assessmentOf = (r: CveRow) => r.carriers.find((c) => c.kernel && c.assessment)?.assessment;
 
+/** Trowl's verdict disagrees with whatever set the status. That is the VEX file when it has a
+ *  statement, else the SBOM. */
+function defies(r: CveRow) {
+  const c = r.carriers.find((x) => x.kernel && x.assessment);
+  return c?.vex ? !!c.assessment?.defies_vex : !!c?.assessment?.defies_sbom;
+}
 
-// Colours follow the CVE statuses. Code in the image gets Unpatched's colour, code absent from
+/** A VEX statement's reason in a few words. */
+const vexReason = (v: CveVex) => v.justification.replace(/_/g, " ") || v.impact || v.notes;
+
+
+// Colours follow the CVE statuses. Code in the image gets Affected's colour, code absent from
 // it gets Not affected's grey, and an undecided file gets Needs review's amber.
 const FILE_VERDICT: Record<FileVerdict, { label: string; color: string }> = {
-  compiled: { label: "Compiled", color: STATUS.unpatched.color },
-  "module not shipped": { label: "Module not shipped", color: STATUS.ignored.color },
-  "not compiled": { label: "Not compiled", color: STATUS.ignored.color },
+  compiled: { label: "Compiled", color: STATUS.affected.color },
+  "module not shipped": { label: "Module not shipped", color: STATUS.not_affected.color },
+  "not compiled": { label: "Not compiled", color: STATUS.not_affected.color },
   unknown: { label: "Needs review", color: STATUS.review.color },
 };
 
@@ -218,6 +230,26 @@ function StatusCell({ r, a, inventory }: { r: CveRow; a?: CveAssessment; invento
     <span><StatusLabel s={s} /><span className="muted"> ({source}){reason && ` · ${reason}`}</span></span>
   );
   const carrier = decider(r);
+  // With --override Trowl's verdict replaced the file's, so it leads and the file's follows.
+  if (carrier?.vex?.overridden && a) {
+    return (
+      <span className="st-stack" title={OVERRIDE_NOTE}>
+        {line(r.status, "Trowl", a.reason)}
+        {line(carrier.vex.status, "VEX", vexReason(carrier.vex))}
+      </span>
+    );
+  }
+  // A VEX file statement decides. Trowl's verdict only shows when it disagrees.
+  if (carrier?.vex) {
+    const vex = line(r.status, "VEX", vexReason(carrier.vex));
+    if (!a?.defies_vex) return vex;
+    return (
+      <span className="st-stack" title={DEFIES_VEX_NOTE}>
+        {vex}
+        {line(a.status as CveStatus, "Trowl", a.reason)}
+      </span>
+    );
+  }
   const trowl = line(r.status, "Trowl", a?.reason || (carrier?.source === "version-match" || inventory ? "version in range" : ""));
   if (a?.defies_sbom) {
     const said = a.sbom_status && a.sbom_status !== "unknown";
@@ -268,12 +300,26 @@ function KernelFiles({ a }: { a: CveAssessment }) {
 }
 
 function verdict(r: CveRow, treeGiven: boolean, notes?: string) {
-  // trowl only judges kernel CVEs the config can decide, never a fixed one, so its verdict leads.
   const a = assessmentOf(r);
+  // The VEX file's statement decides, so it leads. Trowl's verdict follows only to disagree.
+  const v = decider(r)?.vex;
+  if (v?.overridden && a) {
+    const why = vexReason(v);
+    return <>Trowl's kernel check overrides the VEX file, which marks this CVE {STATUS[v.status].label.toLowerCase()}{why && ` (${why})`}. {assessedVerdict(a)}</>;
+  }
+  if (v) {
+    const why = vexReason(v);
+    return <>
+      The VEX file marks this CVE {STATUS[r.status].label.toLowerCase()}{why && ` (${why})`}.
+      {v.action && <> {v.action}</>}
+      {a?.defies_vex && <> Trowl's kernel check disagrees. {assessedVerdict(a)}</>}
+    </>;
+  }
+  // trowl only judges kernel CVEs the config can decide, never a fixed one, so its verdict leads.
   if (a) return assessedVerdict(a);
   const why = notes ? ` (${notes})` : "";
   if (r.status === "fixed") return <>The SBOM marks this CVE fixed{why}.</>;
-  if (r.status === "ignored") return <>The SBOM marks this CVE not affected{why}.</>;
+  if (r.status === "not_affected") return <>The SBOM marks this CVE not affected{why}.</>;
   if (r.kernel) {
     return treeGiven
       ? <>Version match only. The CVE record names no source files, so the kernel tree couldn't be checked.</>
@@ -401,7 +447,7 @@ export default function Cves({ section, params }: { section: CveSection; params:
   const [q, setQ] = useState("");
   // ?disagree=1 opens on the SBOM disagreements across all statuses. The Overview links here.
   const [disagreeOnly, setDisagreeOnly] = useState(params.get("disagree") === "1");
-  const [status, setStatus] = useState<string>(params.get("status") ?? (disagreeOnly ? "all" : "unpatched"));
+  const [status, setStatus] = useState<string>(params.get("status") ?? (disagreeOnly ? "all" : "affected"));
   // Set by a link with ?shipped=no. Shows as a chip you can remove.
   const [offImage, setOffImage] = useState(params.get("shipped") === "no");
   const [vector, setVector] = useState<string>("all");
@@ -412,7 +458,6 @@ export default function Cves({ section, params }: { section: CveSection; params:
   const [buildTime, setBuildTime] = useState(false);
   const [open, setOpen] = useState<CveRow | null>(null);
   const rows = section.rows;
-  const defies = (r: CveRow) => !!assessmentOf(r)?.defies_sbom;
   const disagreements = useMemo(() => rows.filter(defies).length, [rows]);
   const unmapped = section.unmapped ?? [];
   // Without an SBOM every row is a version match, so the mark would say nothing.
@@ -424,9 +469,9 @@ export default function Cves({ section, params }: { section: CveSection; params:
   // the Overview's chip, and otherwise everything but build-time rows. The table never mixes
   // build-time rows with the device's, whatever the status filter.
   const inView = (r: CveRow) => (buildTime ? buildRow(r) : offImage ? !onDevice(r) : !buildRow(r));
-  // An unpatched CVE only counts on the device. The ones off it show under the Build time switch
+  // An affected CVE only counts on the device. The ones off it show under the Build time switch
   // or the Overview's "CVEs not in image".
-  const inScope = (r: CveRow) => inView(r) && (buildTime || offImage || r.status !== "unpatched" || onDevice(r));
+  const inScope = (r: CveRow) => inView(r) && (buildTime || offImage || r.status !== "affected" || onDevice(r));
   const byStatus = useMemo(() => rows.filter((r) => (status === "all" ? inView(r) : r.status === status && inScope(r)) &&
     (!disagreeOnly || defies(r))), [rows, status, offImage, buildTime, disagreeOnly]);
   const shown = useMemo(() => {
@@ -443,13 +488,13 @@ export default function Cves({ section, params }: { section: CveSection; params:
   const scoped = rows.filter(inView);
   const count = (k: CveStatus) => rows.filter((r) => r.status === k && inScope(r)).length;
   const statusOpts = [
-    { value: "unpatched", label: "Unpatched", n: count("unpatched") },
+    { value: "affected", label: "Affected", n: count("affected") },
     ...(section.sources.inventory ? [] : [
-      { value: "ignored", label: "Not affected", n: count("ignored") },
+      { value: "not_affected", label: "Not affected", n: count("not_affected") },
       { value: "fixed", label: "Fixed", n: count("fixed") },
     ]),
     ...(count("review") ? [{ value: "review", label: "Needs review", n: count("review") }] : []),
-    ...(count("investigating") ? [{ value: "investigating", label: "Under investigation", n: count("investigating") }] : []),
+    ...(count("under_investigation") ? [{ value: "under_investigation", label: "Under investigation", n: count("under_investigation") }] : []),
     ...(count("unknown") ? [{ value: "unknown", label: "Unknown", n: count("unknown") }] : []),
     ...(unmapped.length ? [{ value: "unmapped", label: "Needs mapping", n: unmapped.length }] : []),
     { value: "all", label: "All", n: scoped.length + unmapped.length },
@@ -484,15 +529,22 @@ export default function Cves({ section, params }: { section: CveSection; params:
           )}
           {disagreements > 0 && (
             // A disagreement can sit under any status (trowl may have moved it from Not affected to
-            // Unpatched, or to Needs review), so turning this on shows every status.
-            <button className={`fchip ${disagreeOnly ? "on" : ""}`} title={DEFIES_NOTE}
+            // Affected, or to Needs review), so turning this on shows every status.
+            <button className={`fchip ${disagreeOnly ? "on" : ""}`} title={DISAGREE_NOTE}
               onClick={() => { if (!disagreeOnly) setStatus("all"); setDisagreeOnly(!disagreeOnly); }}>
-              <span className="cve-d">≠</span> SBOM disagreements <span className="n">{disagreements}</span>
+              <span className="cve-d">≠</span> Disagreements <span className="n">{disagreements}</span>
               {disagreeOnly && <X size={13} className="x-mark" />}
             </button>
           )}
           <span className="spacer" />
           <span className="muted num">{shown.length.toLocaleString()} CVEs{mapRows.length > 0 && ` · ${mapRows.length.toLocaleString()} need mapping`}</span>
+          {section.sources.openvex && (
+            // openvex.json sits beside index.html, so a relative link finds it.
+            <a className="fchip" href="openvex.json" download style={{ textDecoration: "none" }}
+              title={`Trowl's verdicts as OpenVEX, ${section.sources.openvex.statements.toLocaleString()} statements`}>
+              <Download size={13} /> OpenVEX
+            </a>
+          )}
         </div>
         <div className="table-wrap">
           <table className="cve-table">
@@ -517,7 +569,7 @@ export default function Cves({ section, params }: { section: CveSection; params:
                     {r.carriers.length > 1 && <span className="muted"> +{r.carriers.length - 1}</span>}
                   </td>
                   <td><FixCell c={r.carriers[0]} /></td>
-                  <td><StatusLabel s={r.status} />{defies(r) && <sup className="cve-d" title={DEFIES_NOTE}>≠</sup>}</td>
+                  <td><StatusLabel s={r.status} />{defies(r) && <sup className="cve-d" title={decider(r)?.vex?.overridden ? OVERRIDE_NOTE : decider(r)?.vex ? DEFIES_VEX_NOTE : DEFIES_NOTE}>≠</sup>}</td>
                   <td><Score r={r} /></td>
                   <td>{r.vector ? VECTOR[r.vector] : <span className="muted">–</span>}</td>
                   <td className="c"><ShippedCell r={r} /></td>

@@ -2,10 +2,8 @@ package sbom
 
 // One row per CVE the SBOM attaches to a component, for the dashboard's CVE page.
 //
-// The status comes from the SBOM's own VEX, whichever build system or scanner wrote it:
-// affected -> unpatched, not_affected -> ignored, fixed -> fixed. Whether the CVE matters for
-// this image is decided per CVE across every component that carries it. A CVE only stops
-// mattering when none of its carriers ship. That is package-level evidence only.
+// The status comes from the SBOM's VEX, whatever tool wrote it. A CVE counts for the image as
+// long as one of the components carrying it ships. This is judged per package, not per file.
 
 import (
 	"regexp"
@@ -16,15 +14,14 @@ import (
 	"github.com/corefense-security/trowl/internal/pyjson"
 )
 
-// "investigating" is the SBOM's under_investigation. "unknown" is a CVE the SBOM lists without a
-// status.
-var statusOfVex = map[string]string{"affected": "unpatched", "not_affected": "ignored", "fixed": "fixed",
-	"under_investigation": "investigating", "": "unknown"}
+// Trowl uses the OpenVEX status names. "unknown" means the SBOM lists the CVE without a status.
+var statusOfVex = map[string]string{"affected": "affected", "not_affected": "not_affected", "fixed": "fixed",
+	"under_investigation": "under_investigation", "": "unknown"}
 
 // Worst first. The row shows the worst status among the carriers that decide it.
 // "review" is trowl's own status for a CVE in range whose files the kernel tree couldn't trace
 // (see reviewed).
-var statusOrder = []string{"unpatched", "review", "investigating", "unknown", "ignored", "fixed"}
+var statusOrder = []string{"affected", "review", "under_investigation", "unknown", "not_affected", "fixed"}
 
 var shippedOfRecipe = map[string]string{"present": "yes", "modified": "yes", "partial": "yes", "build-only": "build",
 	"absent": "no", "unknown": "unknown"}
@@ -138,6 +135,31 @@ func assessmentObj(a *Assessment) *pyjson.Obj {
 		"sbom_status", or(statusOfVex, a.Stated, ""), "sbom_notes", a.StatedNotes, "defies_sbom", a.Defies)
 }
 
+// carrierStatus is the status of a CVE on one component, with the --vex statement and Trowl's
+// kernel verdict behind it. A --vex statement decides unless --override lets Trowl's verdict
+// replace it. Without a statement Trowl's verdict has already replaced the SBOM's where it could
+// decide (see Assess).
+func carrierStatus(sb *Sbom, cve, comp string) (string, *UserVEX, *Assessment) {
+	a := sb.AssessmentOf(cve, comp)
+	if u := sb.UserVEXOf(cve, comp); u != nil {
+		if sb.Overridden(cve, comp) {
+			return a.Status, u, a
+		}
+		return u.Stmt.Status, u, a
+	}
+	if reviewed(a) {
+		return "review", nil, a
+	}
+	return or(statusOfVex, sb.Vex(cve, comp), "unknown"), nil, a
+}
+
+// userVEXObj is a --vex statement as the report carries it.
+func userVEXObj(u *UserVEX, overridden bool) *pyjson.Obj {
+	return pyjson.O("status", u.Stmt.Status, "justification", u.Stmt.Justification, "impact", u.Stmt.Impact,
+		"action", u.Stmt.Action, "notes", u.Stmt.Notes, "product", firstKey(u.Product), "link", u.Link,
+		"overridden", overridden)
+}
+
 func BuildCVEs(sb *Sbom, status *Status) []*pyjson.Obj {
 	var order []string
 	carriers := map[string][]*carrier{}
@@ -153,21 +175,26 @@ func BuildCVEs(sb *Sbom, status *Status) []*pyjson.Obj {
 		kernel := pkg.IsKernel()
 		for _, cve := range sb.Vulns.M[comp] {
 			shipped := or(shippedOfRecipe, recipeStatus, "unknown")
-			st := or(statusOfVex, sb.Vex(cve, comp), "unknown")
-			a := sb.AssessmentOf(cve, comp)
-			if reviewed(a) {
-				st = "review"
+			st, user, a := carrierStatus(sb, cve, comp)
+			src := source(sb, cve, comp)
+			if user != nil {
+				src = "vex"
 			}
 			fix := sb.FixOf(cve, comp)
 			c := &carrier{name: pkg.Name, shipped: shipped, status: st, kernel: kernel,
 				obj: pyjson.O("name", pkg.Name, "version", pkg.Version, "shipped", shipped, "status", st,
-					"notes", sb.VexNotes(cve, comp), "kernel", kernel, "source", source(sb, cve, comp),
+					"notes", sb.VexNotes(cve, comp), "kernel", kernel, "source", src,
 					"name_only", sb.NameOnly(cve, comp) && !kernel, "sbom_unstated", sb.Unstated(cve, comp),
 					"fixed_in", fix.Version, "fix_commit", fix.Commit, "backport", fix.Backport,
 					"mainline", fix.Mainline, "mainline_commit", fix.MainlineCommit,
 					"stable", fix.Stable, "stable_commit", fix.StableCommit)}
+			if user != nil {
+				c.obj.Set("vex", userVEXObj(user, sb.Overridden(cve, comp)))
+			}
 			if a != nil {
-				c.obj.Set("assessment", assessmentObj(a))
+				ao := assessmentObj(a)
+				ao.Set("defies_vex", user != nil && defiesUser(user.Stmt, a.Status))
+				c.obj.Set("assessment", ao)
 			}
 			// Without an SBOM a component's files are where its version was read from (binary
 			// fingerprints). An SBOM's own file lists only show presence, so they are left out.
@@ -285,7 +312,7 @@ func Summary(rows []*pyjson.Obj) *pyjson.Obj {
 	notShipped, high, kev := 0, 0, 0
 	for _, r := range rows {
 		statusCount.Add(r.G("status").(string), 1)
-		if r.G("status") == "unpatched" {
+		if r.G("status") == "affected" {
 			if MayShip(r.G("shipped").(string)) {
 				openShipped = append(openShipped, r)
 			} else {
@@ -306,7 +333,7 @@ func Summary(rows []*pyjson.Obj) *pyjson.Obj {
 		}
 		for _, c := range r.G("carriers").([]any) {
 			co := c.(*pyjson.Obj)
-			if MayShip(co.G("shipped").(string)) && co.G("status") == "unpatched" {
+			if MayShip(co.G("shipped").(string)) && co.G("status") == "affected" {
 				name := co.G("name").(string)
 				if _, ok := byComp[name]; !ok {
 					byComp[name] = pyjson.NewCounter()
@@ -334,8 +361,8 @@ func Summary(rows []*pyjson.Obj) *pyjson.Obj {
 	}
 	return pyjson.O(
 		"status", statusCount,
-		"unpatched_shipped", len(openShipped),
-		"unpatched_not_shipped", notShipped,
+		"affected_shipped", len(openShipped),
+		"affected_not_shipped", notShipped,
 		"high", high,
 		"kev", kev,
 		"severity", sevCount,

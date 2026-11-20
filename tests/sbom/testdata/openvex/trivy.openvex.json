@@ -1,0 +1,15 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://example.com/vex/trivy",
+  "author": "Trivy user",
+  "timestamp": "2026-11-01T00:00:00Z",
+  "version": 1,
+  "statements": [
+    {
+      "vulnerability": {"name": "CVE-2025-1001"},
+      "products": [{"@id": "pkg:generic/openssl@3.5.4?arch=x86_64"}],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path"
+    }
+  ]
+}

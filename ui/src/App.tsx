@@ -80,7 +80,7 @@ export default function App({ initial, error }: { initial: Report | null; error?
       off: binaries ? undefined : "Not found", why: "No executables or libraries found in the image" },
     { id: "sbom", label: "SBOM Analysis", icon: <Network size={17} />, badge: report.sbom?.graph.nodes.length,
       off: report.sbom ? undefined : "Not provided", why: "Scan with --sbom to compare an SBOM against the image" },
-    { id: "cves", label: "CVEs", icon: <ShieldAlert size={17} />, badge: cves?.summary.unpatched_shipped,
+    { id: "cves", label: "CVEs", icon: <ShieldAlert size={17} />, badge: cves?.summary.affected_shipped,
       off: cves ? undefined : "Not found", why: "No SBOM, package database or kernel version to match CVEs against" },
   ];
   const current = nav.find((n) => n.id === route && !n.off) ?? nav[0];

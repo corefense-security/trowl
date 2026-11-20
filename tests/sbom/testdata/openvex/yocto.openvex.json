@@ -1,0 +1,22 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://example.com/vex/yocto-triage",
+  "author": "Product security",
+  "timestamp": "2026-11-01T00:00:00Z",
+  "version": 1,
+  "statements": [
+    {
+      "vulnerability": {"name": "CVE-2022-48174"},
+      "products": [{"@id": "busybox-syslog@1.36.1"}],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The image doesn't run the affected applet."
+    },
+    {
+      "vulnerability": {"name": "CVE-2023-42363"},
+      "products": [{"@id": "cpe:2.3:a:busybox:busybox:1.36.1:*:*:*:*:*:*:*"}],
+      "status": "under_investigation",
+      "timestamp": "2026-11-02T00:00:00Z"
+    }
+  ]
+}
