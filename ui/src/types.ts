@@ -74,8 +74,10 @@ export interface CveCarrier {
   status: CveStatus;
   notes: string;
   kernel: boolean;
-  /** Where the status comes from (the SBOM's own VEX or trowl's version match). */
-  source?: "sbom" | "version-match";
+  /** Where the status comes from. That is the SBOM's own VEX, trowl's version match or the --vex file. */
+  source?: "sbom" | "version-match" | "vex";
+  /** The --vex file's statement. When set it decides the status. */
+  vex?: CveVex;
   /** The SBOM lists the CVE without a status and trowl's version match set one. */
   sbom_unstated?: boolean;
   /** Matched by package name alone. The SBOM gives no vendor, so it may be another product. */
@@ -96,6 +98,21 @@ export interface CveCarrier {
   /** Set when there is no SBOM or package database. The files the version was read from
    *  ("/usr/sbin/sshd"). */
   found_in?: string[];
+}
+
+/** A statement from the --vex file (OpenVEX) on this CVE and component. */
+export interface CveVex {
+  status: "affected" | "not_affected" | "fixed" | "under_investigation";
+  justification: string;
+  impact: string;
+  action: string;
+  notes: string;
+  /** The product or subcomponent ID the statement named. */
+  product: string;
+  /** How the statement was linked to the component. One of id, purl, cpe or name. */
+  link: "id" | "purl" | "cpe" | "name";
+  /** --override let Trowl's kernel check replace this statement's status. */
+  overridden?: boolean;
 }
 
 /** The verdict on one file a kernel CVE record names. */
@@ -130,6 +147,8 @@ export interface CveAssessment {
   sbom_notes?: string;
   /** trowl's verdict contradicts the SBOM's. */
   defies_sbom: boolean;
+  /** trowl's verdict contradicts the --vex file's, which still decides the status. */
+  defies_vex?: boolean;
 }
 
 export interface CveRow {
@@ -169,6 +188,11 @@ export interface CveSection {
     inventory?: string;
     /** Set when --kernel-tree was given: the tree the kernel CVEs got their VEX status from. */
     kernel_vex?: { tree: string; version: string } | null;
+    /** What happened to the statements of the OpenVEX file given with --vex. */
+    vex?: { file: string; statements: number; applied: number; no_cve: number; no_product: number } | null;
+    /** The openvex.json written beside the report. unnamed counts CVEs left out because their
+     *  component has no PURL or CPE. */
+    openvex?: { statements: number; unnamed: number };
   };
   rows: CveRow[];
   /** Components with no product in NVD, so they couldn't be checked. Only without an SBOM. */

@@ -53,7 +53,7 @@ const ABOUT: Record<string, string> = {
 };
 
 /** The kernel tree verdict on a CVE if it has one. */
-const kernelAssessment = (r: CveRow) => r.carriers.find((c) => c.kernel && c.assessment)?.assessment;
+const kernelCarrier = (r: CveRow) => r.carriers.find((c) => c.kernel && c.assessment);
 
 export default function Overview({ r, go }: { r: Report; go: (r: Route, p?: Record<string, string>) => void }) {
   const judged = useMemo(() => r.binaries.filter((b) => b.kind === "executable" || b.kind === "library"), [r]);
@@ -84,21 +84,25 @@ export default function Overview({ r, go }: { r: Report; go: (r: Route, p?: Reco
   // Kernel CVEs the tree clears are split by reason. Other Not affected ones come from the SBOM.
   const cves = r.cves;
   const t = useMemo(() => {
-    const n = { affected: 0, notCompiled: 0, moduleOff: 0, sbomNA: 0, review: 0, fixed: 0,
+    const n = { affected: 0, notCompiled: 0, moduleOff: 0, sbomNA: 0, vexNA: 0, review: 0, fixed: 0,
       disagree: 0, falsePos: 0, falseNeg: 0, disagreeReview: 0 };
     for (const x of cves?.rows ?? []) {
       if (x.shipped === "build" || x.shipped === "no") continue;
-      const a = x.kernel ? kernelAssessment(x) : undefined;
+      const c = x.kernel ? kernelCarrier(x) : undefined;
+      const a = c?.assessment;
+      // A VEX file statement decides the status, so Trowl's verdict only counts as a disagreement.
+      const vexed = x.carriers.some((k) => k.status === x.status && k.vex && !k.vex.overridden);
       if (x.status === "fixed") n.fixed++;
       else if (x.status === "affected") n.affected++;
       else if (x.status === "review" || x.status === "under_investigation" || x.status === "unknown") n.review++;
+      else if (vexed) n.vexNA++;
       else if (a?.status === "not_affected" && a.justification === "vulnerable_code_not_present") n.notCompiled++;
       else if (a?.status === "not_affected" && a.justification === "component_not_present") n.moduleOff++;
       else n.sbomNA++;
-      if (a?.defies_sbom) {
+      if (c?.vex ? a?.defies_vex : a?.defies_sbom) {
         n.disagree++;
-        if (a.status === "not_affected") n.falsePos++;
-        else if (a.status === "affected") n.falseNeg++;
+        if (a!.status === "not_affected") n.falsePos++;
+        else if (a!.status === "affected") n.falseNeg++;
         else n.disagreeReview++;
       }
     }
@@ -110,6 +114,7 @@ export default function Overview({ r, go }: { r: Report; go: (r: Route, p?: Reco
     { label: "Kernel code not compiled", value: t.notCompiled, color: "var(--violet)" },
     { label: "Kernel module not shipped", value: t.moduleOff, color: "var(--violet-soft)" },
     { label: "Per SBOM", value: t.sbomNA, color: "color-mix(in srgb, var(--violet) 40%, var(--surface))" },
+    { label: "Per VEX file", value: t.vexNA, color: "color-mix(in srgb, var(--violet) 25%, var(--surface))" },
     { label: "Needs review", value: t.review, color: "var(--neutral)" },
   ].filter((s) => s.value > 0);
 
@@ -166,8 +171,8 @@ export default function Overview({ r, go }: { r: Report; go: (r: Route, p?: Reco
             <p className="ov-none">{cves ? "Every CVE on an installed package is fixed." : "No CVE data for this scan."}</p>
           )}
           {t.disagree > 0 && (
-            <div className="ov-dg" title="Kernel CVEs where trowl's check of the kernel tree disagrees with the SBOM's VEX status">
-              <span className="ov-dg-lead"><TriangleAlert size={14} />{t.disagree} disagree with SBOM</span>
+            <div className="ov-dg" title="Kernel CVEs where trowl's check of the kernel tree disagrees with the SBOM or the VEX file">
+              <span className="ov-dg-lead"><TriangleAlert size={14} />{t.disagree} disagree with SBOM or VEX</span>
               <span className="ov-dg-split">{[
                 t.falsePos && `${t.falsePos} false positive${t.falsePos === 1 ? "" : "s"}`,
                 t.falseNeg && `${t.falseNeg} false negative${t.falseNeg === 1 ? "" : "s"}`,

@@ -1,6 +1,6 @@
-import { Check, ExternalLink, X } from "lucide-react";
+import { Check, Download, ExternalLink, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { CveAssessment, CveCarrier, CveRow, CveSection, CveStatus, FileVerdict } from "../types";
+import type { CveAssessment, CveCarrier, CveRow, CveSection, CveStatus, CveVex, FileVerdict } from "../types";
 import { Card, Dropdown, SearchBox, Switch, usePage } from "../ui";
 
 const SEV_COLOR: Record<string, string> = {
@@ -166,6 +166,9 @@ function ByComponent({ s }: { s: CveSection["summary"] }) {
 }
 
 const DEFIES_NOTE = "Trowl's check of the kernel tree and image disagrees with the SBOM's status.";
+const DEFIES_VEX_NOTE = "Trowl's check of the kernel tree and image disagrees with the VEX file, whose status is shown.";
+const OVERRIDE_NOTE = "Trowl's check of the kernel tree and image overrides the VEX file (--override).";
+const DISAGREE_NOTE = "Trowl's check of the kernel tree and image disagrees with the SBOM or the VEX file.";
 const UNSTATED_NOTE = "The SBOM lists this CVE without a status. Trowl's version match puts it in range.";
 
 /** The carrier that decides the row's status. */
@@ -175,6 +178,16 @@ const unstated = (r: CveRow) => !!decider(r)?.sbom_unstated;
 
 /** trowl's verdict on a kernel CVE (the kernel carrier's), when --kernel-tree ran. */
 const assessmentOf = (r: CveRow) => r.carriers.find((c) => c.kernel && c.assessment)?.assessment;
+
+/** Trowl's verdict disagrees with whatever set the status. That is the VEX file when it has a
+ *  statement, else the SBOM. */
+function defies(r: CveRow) {
+  const c = r.carriers.find((x) => x.kernel && x.assessment);
+  return c?.vex ? !!c.assessment?.defies_vex : !!c?.assessment?.defies_sbom;
+}
+
+/** A VEX statement's reason in a few words. */
+const vexReason = (v: CveVex) => v.justification.replace(/_/g, " ") || v.impact || v.notes;
 
 
 // Colours follow the CVE statuses. Code in the image gets Affected's colour, code absent from
@@ -217,6 +230,26 @@ function StatusCell({ r, a, inventory }: { r: CveRow; a?: CveAssessment; invento
     <span><StatusLabel s={s} /><span className="muted"> ({source}){reason && ` · ${reason}`}</span></span>
   );
   const carrier = decider(r);
+  // With --override Trowl's verdict replaced the file's, so it leads and the file's follows.
+  if (carrier?.vex?.overridden && a) {
+    return (
+      <span className="st-stack" title={OVERRIDE_NOTE}>
+        {line(r.status, "Trowl", a.reason)}
+        {line(carrier.vex.status, "VEX", vexReason(carrier.vex))}
+      </span>
+    );
+  }
+  // A VEX file statement decides. Trowl's verdict only shows when it disagrees.
+  if (carrier?.vex) {
+    const vex = line(r.status, "VEX", vexReason(carrier.vex));
+    if (!a?.defies_vex) return vex;
+    return (
+      <span className="st-stack" title={DEFIES_VEX_NOTE}>
+        {vex}
+        {line(a.status as CveStatus, "Trowl", a.reason)}
+      </span>
+    );
+  }
   const trowl = line(r.status, "Trowl", a?.reason || (carrier?.source === "version-match" || inventory ? "version in range" : ""));
   if (a?.defies_sbom) {
     const said = a.sbom_status && a.sbom_status !== "unknown";
@@ -267,8 +300,22 @@ function KernelFiles({ a }: { a: CveAssessment }) {
 }
 
 function verdict(r: CveRow, treeGiven: boolean, notes?: string) {
-  // trowl only judges kernel CVEs the config can decide, never a fixed one, so its verdict leads.
   const a = assessmentOf(r);
+  // The VEX file's statement decides, so it leads. Trowl's verdict follows only to disagree.
+  const v = decider(r)?.vex;
+  if (v?.overridden && a) {
+    const why = vexReason(v);
+    return <>Trowl's kernel check overrides the VEX file, which marks this CVE {STATUS[v.status].label.toLowerCase()}{why && ` (${why})`}. {assessedVerdict(a)}</>;
+  }
+  if (v) {
+    const why = vexReason(v);
+    return <>
+      The VEX file marks this CVE {STATUS[r.status].label.toLowerCase()}{why && ` (${why})`}.
+      {v.action && <> {v.action}</>}
+      {a?.defies_vex && <> Trowl's kernel check disagrees. {assessedVerdict(a)}</>}
+    </>;
+  }
+  // trowl only judges kernel CVEs the config can decide, never a fixed one, so its verdict leads.
   if (a) return assessedVerdict(a);
   const why = notes ? ` (${notes})` : "";
   if (r.status === "fixed") return <>The SBOM marks this CVE fixed{why}.</>;
@@ -411,7 +458,6 @@ export default function Cves({ section, params }: { section: CveSection; params:
   const [buildTime, setBuildTime] = useState(false);
   const [open, setOpen] = useState<CveRow | null>(null);
   const rows = section.rows;
-  const defies = (r: CveRow) => !!assessmentOf(r)?.defies_sbom;
   const disagreements = useMemo(() => rows.filter(defies).length, [rows]);
   const unmapped = section.unmapped ?? [];
   // Without an SBOM every row is a version match, so the mark would say nothing.
@@ -484,14 +530,21 @@ export default function Cves({ section, params }: { section: CveSection; params:
           {disagreements > 0 && (
             // A disagreement can sit under any status (trowl may have moved it from Not affected to
             // Affected, or to Needs review), so turning this on shows every status.
-            <button className={`fchip ${disagreeOnly ? "on" : ""}`} title={DEFIES_NOTE}
+            <button className={`fchip ${disagreeOnly ? "on" : ""}`} title={DISAGREE_NOTE}
               onClick={() => { if (!disagreeOnly) setStatus("all"); setDisagreeOnly(!disagreeOnly); }}>
-              <span className="cve-d">≠</span> SBOM disagreements <span className="n">{disagreements}</span>
+              <span className="cve-d">≠</span> Disagreements <span className="n">{disagreements}</span>
               {disagreeOnly && <X size={13} className="x-mark" />}
             </button>
           )}
           <span className="spacer" />
           <span className="muted num">{shown.length.toLocaleString()} CVEs{mapRows.length > 0 && ` · ${mapRows.length.toLocaleString()} need mapping`}</span>
+          {section.sources.openvex && (
+            // openvex.json sits beside index.html, so a relative link finds it.
+            <a className="fchip" href="openvex.json" download style={{ textDecoration: "none" }}
+              title={`Trowl's verdicts as OpenVEX, ${section.sources.openvex.statements.toLocaleString()} statements`}>
+              <Download size={13} /> OpenVEX
+            </a>
+          )}
         </div>
         <div className="table-wrap">
           <table className="cve-table">
@@ -516,7 +569,7 @@ export default function Cves({ section, params }: { section: CveSection; params:
                     {r.carriers.length > 1 && <span className="muted"> +{r.carriers.length - 1}</span>}
                   </td>
                   <td><FixCell c={r.carriers[0]} /></td>
-                  <td><StatusLabel s={r.status} />{defies(r) && <sup className="cve-d" title={DEFIES_NOTE}>≠</sup>}</td>
+                  <td><StatusLabel s={r.status} />{defies(r) && <sup className="cve-d" title={decider(r)?.vex?.overridden ? OVERRIDE_NOTE : decider(r)?.vex ? DEFIES_VEX_NOTE : DEFIES_NOTE}>≠</sup>}</td>
                   <td><Score r={r} /></td>
                   <td>{r.vector ? VECTOR[r.vector] : <span className="muted">–</span>}</td>
                   <td className="c"><ShippedCell r={r} /></td>
