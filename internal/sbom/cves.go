@@ -135,6 +135,26 @@ func assessmentObj(a *Assessment) *pyjson.Obj {
 		"sbom_status", or(statusOfVex, a.Stated, ""), "sbom_notes", a.StatedNotes, "defies_sbom", a.Defies)
 }
 
+// carrierStatus is the status of a CVE on one component, with the --vex statement and Trowl's
+// kernel verdict behind it. A --vex statement always decides. Otherwise Trowl's verdict has
+// already replaced the SBOM's where it could decide (see Assess).
+func carrierStatus(sb *Sbom, cve, comp string) (string, *UserVEX, *Assessment) {
+	a := sb.AssessmentOf(cve, comp)
+	if u := sb.UserVEXOf(cve, comp); u != nil {
+		return u.Stmt.Status, u, a
+	}
+	if reviewed(a) {
+		return "review", nil, a
+	}
+	return or(statusOfVex, sb.Vex(cve, comp), "unknown"), nil, a
+}
+
+// userVEXObj is a --vex statement as the report carries it.
+func userVEXObj(u *UserVEX) *pyjson.Obj {
+	return pyjson.O("status", u.Stmt.Status, "justification", u.Stmt.Justification, "impact", u.Stmt.Impact,
+		"action", u.Stmt.Action, "notes", u.Stmt.Notes, "product", firstKey(u.Product), "link", u.Link)
+}
+
 func BuildCVEs(sb *Sbom, status *Status) []*pyjson.Obj {
 	var order []string
 	carriers := map[string][]*carrier{}
@@ -150,21 +170,26 @@ func BuildCVEs(sb *Sbom, status *Status) []*pyjson.Obj {
 		kernel := pkg.IsKernel()
 		for _, cve := range sb.Vulns.M[comp] {
 			shipped := or(shippedOfRecipe, recipeStatus, "unknown")
-			st := or(statusOfVex, sb.Vex(cve, comp), "unknown")
-			a := sb.AssessmentOf(cve, comp)
-			if reviewed(a) {
-				st = "review"
+			st, user, a := carrierStatus(sb, cve, comp)
+			src := source(sb, cve, comp)
+			if user != nil {
+				src = "vex"
 			}
 			fix := sb.FixOf(cve, comp)
 			c := &carrier{name: pkg.Name, shipped: shipped, status: st, kernel: kernel,
 				obj: pyjson.O("name", pkg.Name, "version", pkg.Version, "shipped", shipped, "status", st,
-					"notes", sb.VexNotes(cve, comp), "kernel", kernel, "source", source(sb, cve, comp),
+					"notes", sb.VexNotes(cve, comp), "kernel", kernel, "source", src,
 					"name_only", sb.NameOnly(cve, comp) && !kernel, "sbom_unstated", sb.Unstated(cve, comp),
 					"fixed_in", fix.Version, "fix_commit", fix.Commit, "backport", fix.Backport,
 					"mainline", fix.Mainline, "mainline_commit", fix.MainlineCommit,
 					"stable", fix.Stable, "stable_commit", fix.StableCommit)}
+			if user != nil {
+				c.obj.Set("vex", userVEXObj(user))
+			}
 			if a != nil {
-				c.obj.Set("assessment", assessmentObj(a))
+				ao := assessmentObj(a)
+				ao.Set("defies_vex", user != nil && defiesUser(user.Stmt, a.Status))
+				c.obj.Set("assessment", ao)
 			}
 			// Without an SBOM a component's files are where its version was read from (binary
 			// fingerprints). An SBOM's own file lists only show presence, so they are left out.

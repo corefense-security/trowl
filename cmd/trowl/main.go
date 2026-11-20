@@ -67,7 +67,8 @@ func commands() []*command {
 			opts: []opt{
 				{names: []string{"--sbom"}, value: true, help: "SBOM for the image: SPDX 3.0 JSON-LD, SPDX 2.2 " +
 					"(Yocto's IMAGE.spdx.tar.zst, or a directory of its documents) or CycloneDX JSON"},
-				{names: []string{"--vex"}, value: true, help: "CycloneDX VEX for the --sbom when it is a separate file (meta-cyclonedx)"},
+				{names: []string{"--vex"}, value: true, help: "OpenVEX file whose statements override the SBOM and Trowl's own verdicts, " +
+					"or a CycloneDX VEX for the --sbom when it is a separate file (meta-cyclonedx)"},
 				{names: []string{"-o", "--output"}, value: true, def: "trowl-report", help: "output directory"},
 				{names: []string{"--kernel-config"}, value: true, help: "kernel .config to check when the image carries none " +
 					"(/boot/config-* or a config embedded in the kernel image)"},
@@ -262,7 +263,8 @@ func scanBanner(a args) {
 		{"sbom", orNone(a["sbom"], "not supplied")},
 	}
 	if a["vex"] != "" {
-		rows = append(rows, [2]string{"vex", py.CleanPath(a["vex"])})
+		vexLabel := py.CleanPath(a["vex"])
+		rows = append(rows, [2]string{"vex", vexLabel})
 	}
 	rows = append(rows, [2]string{"kernel", kernel})
 	if a["kernel-tree"] != "" {
@@ -280,9 +282,6 @@ func scanBanner(a args) {
 }
 
 func cmdScan(a args) int {
-	if a["vex"] != "" && a["sbom"] == "" {
-		return fail("scan", "argument --vex: needs --sbom")
-	}
 	scanBanner(a)
 	out := a["output"]
 	// Fail before the scan, not after it, when the report can't be saved (in a container this is
@@ -364,6 +363,14 @@ func cmdScan(a args) int {
 		st.Fail("")
 		status.Warn("%v", err)
 		return 1
+	}
+	if res.OpenVEX != nil {
+		if err := res.OpenVEX.Write(filepath.Join(out, "openvex.json")); err != nil {
+			st.Fail("")
+			status.Warn("%v", err)
+			return 1
+		}
+		jsonPath += ", " + joinPath(out, "openvex.json")
 	}
 	if html {
 		st.Ok("")

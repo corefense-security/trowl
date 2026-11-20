@@ -3,6 +3,7 @@ package scan
 
 import (
 	"fmt"
+	"os"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -19,6 +20,7 @@ import (
 	"github.com/corefense-security/trowl/internal/llm"
 	"github.com/corefense-security/trowl/internal/model"
 	"github.com/corefense-security/trowl/internal/nvd"
+	"github.com/corefense-security/trowl/internal/openvex"
 	"github.com/corefense-security/trowl/internal/py"
 	"github.com/corefense-security/trowl/internal/pyjson"
 	"github.com/corefense-security/trowl/internal/sbom"
@@ -29,7 +31,7 @@ import (
 
 type Options struct {
 	SBOM         string
-	VEX          string // CycloneDX VEX kept apart from the SBOM
+	VEX          string // an OpenVEX file, or a CycloneDX VEX kept apart from the SBOM
 	Network      bool
 	CacheDir     string
 	Links        string // open | all | none
@@ -46,7 +48,8 @@ type Result struct {
 	Files      int
 	Binaries   int
 	Format     string
-	SbomCounts *pyjson.Obj // nil without an SBOM
+	SbomCounts *pyjson.Obj  // nil without an SBOM
+	OpenVEX    *openvex.Doc // nil when no CVEs were checked
 }
 
 func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
@@ -54,6 +57,7 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 	if started.IsZero() {
 		started = time.Now()
 	}
+	opt.Started = started
 	rootfs := u.Rootfs
 	var findings []model.Finding
 	binaries := []any{}
@@ -112,7 +116,32 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 		st.Fail("not found")
 	}
 
+	// An OpenVEX file is read now, so a broken one stops the scan before the slow part. It is
+	// applied once the CVEs are known. A CycloneDX VEX belongs to its SBOM and is applied with it.
+	var userVEX *openvex.Doc
+	cdxVEX := ""
+	if opt.VEX != "" {
+		raw, err := os.ReadFile(opt.VEX)
+		if err != nil {
+			return nil, err
+		}
+		switch {
+		case openvex.Is(raw):
+			st = status.Start("reading VEX")
+			if userVEX, err = openvex.Read(opt.VEX); err != nil {
+				st.Fail("")
+				return nil, err
+			}
+			st.Ok(fmt.Sprintf("OpenVEX, %d statements", len(userVEX.Statements)))
+		case opt.SBOM == "":
+			return nil, fmt.Errorf("%s: not an OpenVEX document, and a CycloneDX VEX needs --sbom", py.CleanPath(opt.VEX))
+		default:
+			cdxVEX = opt.VEX
+		}
+	}
+
 	var sbomSection, cves *pyjson.Obj
+	var vexOut *openvex.Doc
 	var sb *sbom.Sbom
 	if opt.SBOM != "" {
 		st = status.Start("reading SBOM")
@@ -137,9 +166,9 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 			detail += fmt.Sprintf(", %d VEX refs skipped (unlisted component or another BOM)", sb.VEXSkipped)
 		}
 		st.Ok(detail)
-		if opt.VEX != "" {
+		if cdxVEX != "" {
 			st = status.Start("reading VEX")
-			res, err := sbom.LoadVEX(sb, opt.VEX)
+			res, err := sbom.LoadVEX(sb, cdxVEX)
 			if err != nil {
 				st.Fail("")
 				return nil, err
@@ -203,9 +232,11 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 			"not_present", cmp.NotPresent,
 			"graph", sbom.Graph(sb, cmp.Status),
 		)
-		cves, err = cveSection(sb, cmp.Status, rootfs, opt)
+		cves, vexOut, err = cveSection(sb, cmp.Status, rootfs, opt, userVEX)
 	} else if inv, presence := imageInventory(rootfs, kernelVersion(kernelSection)); inv != nil {
-		cves, err = cveSection(inv, presence, rootfs, opt)
+		cves, vexOut, err = cveSection(inv, presence, rootfs, opt, userVEX)
+	} else if userVEX != nil {
+		status.Warn("no components to check, so the VEX file isn't applied")
 	}
 	if err != nil {
 		return nil, err
@@ -268,7 +299,7 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 	}
 	result.G("summary").(*pyjson.Obj).Set("duration_s", py.Round2(time.Since(started).Seconds()))
 	res := &Result{Report: result, Findings: findings, Files: fileCount, Binaries: len(binaries),
-		Format: u.SourceFormat}
+		Format: u.SourceFormat, OpenVEX: vexOut}
 	if sbomSection != nil {
 		res.SbomCounts = sbomSection.G("status_counts").(*pyjson.Obj)
 	}
@@ -791,14 +822,38 @@ func imageInventory(rootfs, kernel string) (*sbom.Sbom, *sbom.Status) {
 	return sbom.FromInventory(source, comps)
 }
 
-func cveSection(sb *sbom.Sbom, presence *sbom.Status, rootfs string, opt Options) (*pyjson.Obj, error) {
+// cveSection builds the report's CVE section and the OpenVEX document Trowl writes beside it.
+func cveSection(sb *sbom.Sbom, presence *sbom.Status, rootfs string, opt Options, userVEX *openvex.Doc) (*pyjson.Obj, *openvex.Doc, error) {
 	matched, known, inFeed, feed := versionMatch(sb, opt)
 	kernelVex, err := assessKernel(sb, feed, rootfs, opt)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	// The VEX file goes last, so its statements win over the SBOM and Trowl's own verdicts.
+	var vexIn any
+	if userVEX != nil {
+		st := status.Start("applying VEX")
+		n := sb.ApplyOpenVEX(userVEX)
+		if n.NoProduct == n.Statements {
+			st.Fail("")
+			return nil, nil, fmt.Errorf("%s: none of its %d statements name a component in this image", py.CleanPath(opt.VEX), n.Statements)
+		}
+		detail := fmt.Sprintf("%d of %d statements applied", n.Applied, n.Statements)
+		if n.NoCVE > 0 {
+			detail += fmt.Sprintf(", %d for CVEs Trowl didn't find", n.NoCVE)
+		}
+		if n.NoProduct > 0 {
+			detail += fmt.Sprintf(", %d for components not in the image", n.NoProduct)
+		}
+		st.Ok(detail)
+		vexIn = pyjson.O("file", py.CleanPath(opt.VEX), "statements", n.Statements, "applied", n.Applied,
+			"no_cve", n.NoCVE, "no_product", n.NoProduct)
 	}
 	rows := sbom.BuildCVEs(sb, presence)
-	sources := pyjson.O("kev", nil, "epss", nil, "links", "none", "version_match", matched, "kernel_vex", kernelVex)
+	stmts, unnamed := sbom.ExportVEX(sb, presence)
+	vexOut := openvex.New(stmts, opt.Started, model.Version)
+	sources := pyjson.O("kev", nil, "epss", nil, "links", "none", "version_match", matched, "kernel_vex", kernelVex,
+		"vex", vexIn, "openvex", pyjson.O("statements", len(stmts), "unnamed", unnamed))
 	if opt.Network && opt.CacheDir != "" {
 		st := status.Start("fetching KEV")
 		kev, kevMeta := feeds.KEV(opt.CacheDir)
@@ -873,7 +928,7 @@ func cveSection(sb *sbom.Sbom, presence *sbom.Status, rootfs string, opt Options
 		}
 		out.Set("unmapped", unmapped)
 	}
-	return out, nil
+	return out, vexOut, nil
 }
 
 // assessKernel sets the VEX status of the kernel's CVEs from the config gates of the files their

@@ -1,0 +1,17 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://example.com/vex/grype",
+  "author": "Grype user",
+  "timestamp": "2026-11-01T00:00:00Z",
+  "version": 1,
+  "statements": [
+    {
+      "vulnerability": {"name": "GHSA-aaaa-bbbb-cccc", "aliases": ["CVE-2025-1002"]},
+      "products": [{
+        "@id": "pkg:oci/core-image-minimal?tag=latest",
+        "subcomponents": [{"@id": "cpe:2.3:a:busybox:busybox:1.37.0:*:*:*:*:*:*:*"}]
+      }],
+      "status": "fixed"
+    }
+  ]
+}
