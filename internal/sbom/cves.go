@@ -136,11 +136,15 @@ func assessmentObj(a *Assessment) *pyjson.Obj {
 }
 
 // carrierStatus is the status of a CVE on one component, with the --vex statement and Trowl's
-// kernel verdict behind it. A --vex statement always decides. Otherwise Trowl's verdict has
-// already replaced the SBOM's where it could decide (see Assess).
+// kernel verdict behind it. A --vex statement decides unless --override lets Trowl's verdict
+// replace it. Without a statement Trowl's verdict has already replaced the SBOM's where it could
+// decide (see Assess).
 func carrierStatus(sb *Sbom, cve, comp string) (string, *UserVEX, *Assessment) {
 	a := sb.AssessmentOf(cve, comp)
 	if u := sb.UserVEXOf(cve, comp); u != nil {
+		if sb.Overridden(cve, comp) {
+			return a.Status, u, a
+		}
 		return u.Stmt.Status, u, a
 	}
 	if reviewed(a) {
@@ -150,9 +154,10 @@ func carrierStatus(sb *Sbom, cve, comp string) (string, *UserVEX, *Assessment) {
 }
 
 // userVEXObj is a --vex statement as the report carries it.
-func userVEXObj(u *UserVEX) *pyjson.Obj {
+func userVEXObj(u *UserVEX, overridden bool) *pyjson.Obj {
 	return pyjson.O("status", u.Stmt.Status, "justification", u.Stmt.Justification, "impact", u.Stmt.Impact,
-		"action", u.Stmt.Action, "notes", u.Stmt.Notes, "product", firstKey(u.Product), "link", u.Link)
+		"action", u.Stmt.Action, "notes", u.Stmt.Notes, "product", firstKey(u.Product), "link", u.Link,
+		"overridden", overridden)
 }
 
 func BuildCVEs(sb *Sbom, status *Status) []*pyjson.Obj {
@@ -184,7 +189,7 @@ func BuildCVEs(sb *Sbom, status *Status) []*pyjson.Obj {
 					"mainline", fix.Mainline, "mainline_commit", fix.MainlineCommit,
 					"stable", fix.Stable, "stable_commit", fix.StableCommit)}
 			if user != nil {
-				c.obj.Set("vex", userVEXObj(user))
+				c.obj.Set("vex", userVEXObj(user, sb.Overridden(cve, comp)))
 			}
 			if a != nil {
 				ao := assessmentObj(a)

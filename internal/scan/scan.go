@@ -32,6 +32,7 @@ import (
 type Options struct {
 	SBOM         string
 	VEX          string // an OpenVEX file, or a CycloneDX VEX kept apart from the SBOM
+	Override     bool   // Trowl's kernel verdicts replace the VEX file's statements they contradict
 	Network      bool
 	CacheDir     string
 	Links        string // open | all | none
@@ -848,6 +849,14 @@ func cveSection(sb *sbom.Sbom, presence *sbom.Status, rootfs string, opt Options
 		st.Ok(detail)
 		vexIn = pyjson.O("file", py.CleanPath(opt.VEX), "statements", n.Statements, "applied", n.Applied,
 			"no_cve", n.NoCVE, "no_product", n.NoProduct)
+	}
+	if opt.Override {
+		sb.Override = true
+		if kernelVex == nil {
+			status.Warn("--override has nothing to do without the kernel check: pass --kernel-tree")
+		} else {
+			status.Start("overriding VEX").Ok(fmt.Sprintf("%d kernel CVE statuses from Trowl's check", sb.CountOverridden()))
+		}
 	}
 	rows := sbom.BuildCVEs(sb, presence)
 	stmts, unnamed := sbom.ExportVEX(sb, presence)

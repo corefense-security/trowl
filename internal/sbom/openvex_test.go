@@ -1,6 +1,7 @@
 package sbom
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -177,5 +178,87 @@ func TestApplyOpenVEXVendorlessCPE(t *testing.T) {
 	}
 	if u := sb.UserVEXOf("CVE-2", "inventory/zlib"); u == nil || u.Link != "name" {
 		t.Errorf("zlib, whose CPE Trowl made up, %+v", u)
+	}
+}
+
+// kernelSbom has a kernel with CVE-1 and CVE-2, which Trowl found not compiled and compiled, and
+// a userland zlib with CVE-3.
+func kernelSbom() (*Sbom, *Status) {
+	sb, st := FromInventory("opkg", []Package{{Name: "zlib", Version: "1.3.1",
+		Cpes: []string{"cpe:2.3:a:zlib:zlib:1.3.1:*:*:*:*:*:*:*"}}})
+	k := &Package{ID: "inventory/linux", Name: "linux", Version: "6.6.1", Role: "recipe",
+		Cpes: []string{"cpe:2.3:o:linux:linux_kernel:6.6.1:*:*:*:*:*:*:*"}}
+	sb.Packages[k.ID] = k
+	sb.PackageOrder = append(sb.PackageOrder, k.ID)
+	st.set(k.ID, pyjson.O("status", "present"))
+	sb.AddMatch(k.ID, "CVE-1", nil)
+	sb.AddMatch(k.ID, "CVE-2", nil)
+	sb.AddMatch("inventory/zlib", "CVE-3", nil)
+	sb.Assess("CVE-1", k.ID, &Assessment{Status: "not_affected", Justification: "vulnerable_code_not_present", Detail: "Not compiled"})
+	sb.Assess("CVE-2", k.ID, &Assessment{Status: "affected", Detail: "Compiled"})
+	return sb, st
+}
+
+// --override lets Trowl's kernel verdict replace a file statement it contradicts. A statement
+// Trowl doesn't contradict and every userland statement keep the file's status.
+func TestOverride(t *testing.T) {
+	sb, st := kernelSbom()
+	kernel := "cpe:2.3:o:linux:linux_kernel:6.6.1:*:*:*:*:*:*:*"
+	mitigated := stmt("CVE-2", kernel, "not_affected", 1)
+	mitigated.Justification = "inline_mitigations_already_exist"
+	sb.ApplyOpenVEX(&openvex.Doc{Statements: []*openvex.Statement{
+		stmt("CVE-1", kernel, "affected", 1),
+		mitigated,
+		stmt("CVE-3", "cpe:2.3:a:zlib:zlib:1.3.1:*:*:*:*:*:*:*", "fixed", 1),
+	}})
+	for _, override := range []bool{false, true} {
+		sb.Override = override
+		got := map[string]string{}
+		for _, c := range [][2]string{{"CVE-1", "inventory/linux"}, {"CVE-2", "inventory/linux"}, {"CVE-3", "inventory/zlib"}} {
+			got[c[0]], _, _ = carrierStatus(sb, c[0], c[1])
+		}
+		want := map[string]string{"CVE-1": "affected", "CVE-2": "not_affected", "CVE-3": "fixed"}
+		if override {
+			want["CVE-1"] = "not_affected" // Trowl found it not compiled
+		}
+		for k, v := range want {
+			if got[k] != v {
+				t.Errorf("override %v: %s is %s, want %s", override, k, got[k], v)
+			}
+		}
+	}
+	if sb.CountOverridden() != 1 {
+		t.Errorf("overridden %d", sb.CountOverridden())
+	}
+	out, _ := ExportVEX(sb, st)
+	for _, s := range out {
+		if s.Vulnerability.Name == "CVE-1" && (s.Status != "not_affected" ||
+			!strings.HasPrefix(s.Notes, "Trowl's kernel check overrides the VEX file, which said affected.")) {
+			t.Errorf("CVE-1 exported as %+v", s)
+		}
+		if s.Vulnerability.Name == "CVE-2" && s.Justification != "inline_mitigations_already_exist" {
+			t.Errorf("CVE-2 exported as %+v", s)
+		}
+	}
+}
+
+// A CycloneDX VEX file's statements become file statements, with their justification in OpenVEX's
+// words, so --override treats them like an OpenVEX file's.
+func TestCycloneDXFileStatement(t *testing.T) {
+	sb, _ := kernelSbom()
+	k := pair{"CVE-2", "inventory/linux"}
+	sb.vex[k] = "not_affected"
+	sb.fileStatement(k, "code_not_present", "STATE: Ignored")
+	u := sb.UserVEXOf("CVE-2", "inventory/linux")
+	if u == nil || u.Stmt.Status != "not_affected" || u.Stmt.Justification != "vulnerable_code_not_present" ||
+		u.Product.ID != "cpe:2.3:o:linux:linux_kernel:6.6.1:*:*:*:*:*:*:*" {
+		t.Fatalf("got %+v", u)
+	}
+	if st, _, _ := carrierStatus(sb, "CVE-2", "inventory/linux"); st != "not_affected" {
+		t.Errorf("without --override the file decides, got %s", st)
+	}
+	sb.Override = true
+	if st, _, _ := carrierStatus(sb, "CVE-2", "inventory/linux"); st != "affected" {
+		t.Errorf("with --override Trowl's compiled verdict decides, got %s", st)
 	}
 }

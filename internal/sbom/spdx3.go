@@ -95,6 +95,7 @@ type Sbom struct {
 	fixes        map[pair]Fix    // upstream fix, from the CVE record
 	assessed     map[pair]*Assessment
 	user         map[pair]*UserVEX // statements from the --vex file
+	Override     bool              // Trowl's kernel verdicts replace --vex statements they contradict
 	Name         string
 	VulnInfo     map[string]*VulnInfo
 	Inventory    string // the package database this came from, when it isn't a real SBOM

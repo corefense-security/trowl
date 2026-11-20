@@ -175,6 +175,56 @@ func (s *Sbom) carriersOf(comp string) []string {
 	return out
 }
 
+// CycloneDX justifications in OpenVEX's words. The requires_* ones have no match and go in the
+// impact statement.
+var cdxJustification = map[string]string{
+	"code_not_present":                "vulnerable_code_not_present",
+	"code_not_reachable":              "vulnerable_code_not_in_execute_path",
+	"protected_by_compiler":           "inline_mitigations_already_exist",
+	"protected_at_runtime":            "inline_mitigations_already_exist",
+	"protected_at_perimeter":          "inline_mitigations_already_exist",
+	"protected_by_mitigating_control": "inline_mitigations_already_exist",
+}
+
+// fileStatement keeps a CycloneDX VEX file's analysis of a pair as a file statement. The pair's
+// status is already set from it. A later statement on the pair replaces it.
+func (s *Sbom) fileStatement(k pair, justification, detail string) {
+	if s.user == nil {
+		s.user = map[pair]*UserVEX{}
+	}
+	st := &openvex.Statement{Vulnerability: openvex.Vulnerability{Name: k.a}, Status: s.vex[k], Notes: detail}
+	if st.Status == "not_affected" {
+		if j := cdxJustification[justification]; j != "" {
+			st.Justification = j
+		} else if justification != "" {
+			st.Impact = "CycloneDX justification " + justification
+		}
+	}
+	product := openvex.Product{ID: k.b}
+	if p, ok := productOf(s.Packages[k.b]); ok {
+		product = p
+	}
+	s.user[k] = &UserVEX{Stmt: st, Product: product, Link: "id"}
+}
+
+// Overridden reports whether Trowl's kernel verdict replaces the pair's file statement. That is
+// only with --override, and only where the two disagree about the code being built.
+func (s *Sbom) Overridden(cve, comp string) bool {
+	u, a := s.user[pair{cve, comp}], s.assessed[pair{cve, comp}]
+	return s.Override && u != nil && a != nil && defiesUser(u.Stmt, a.Status)
+}
+
+// CountOverridden counts the pairs whose file statement Trowl's verdict replaced.
+func (s *Sbom) CountOverridden() int {
+	n := 0
+	for k := range s.user {
+		if s.Overridden(k.a, k.b) {
+			n++
+		}
+	}
+	return n
+}
+
 // defiesUser reports whether Trowl's kernel verdict contradicts a --vex statement. Only a claim
 // about the code being built can be contradicted. Other justifications, such as an inline
 // mitigation, say something Trowl doesn't check.
@@ -197,8 +247,9 @@ func firstKey(p openvex.Product) string {
 }
 
 // ExportVEX writes one statement per CVE on each component that may ship. A pair the --vex file
-// covered keeps that file's statement as given. Every other pair gets Trowl's status. A component
-// with no PURL and no real CPE can't be named, so it is left out and counted.
+// covered keeps that file's statement as given, unless --override replaced it with Trowl's
+// verdict. Every other pair gets Trowl's status. A component with no PURL and no real CPE can't
+// be named, so it is left out and counted.
 func ExportVEX(sb *Sbom, status *Status) (out []*openvex.Statement, unnamed int) {
 	for _, comp := range sb.Vulns.Keys {
 		pkg := sb.Packages[comp]
@@ -208,7 +259,7 @@ func ExportVEX(sb *Sbom, status *Status) (out []*openvex.Statement, unnamed int)
 		product, named := productOf(pkg)
 		for _, cve := range sb.Vulns.M[comp] {
 			st, user, a := carrierStatus(sb, cve, comp)
-			if user != nil {
+			if user != nil && !sb.Overridden(cve, comp) {
 				out = append(out, &openvex.Statement{Vulnerability: openvex.Vulnerability{Name: cve},
 					Timestamp: user.Stmt.Timestamp, Products: []openvex.Product{{ID: firstKey(user.Product),
 						Identifiers: user.Product.Identifiers}},
@@ -216,12 +267,23 @@ func ExportVEX(sb *Sbom, status *Status) (out []*openvex.Statement, unnamed int)
 					Action: user.Stmt.Action, Notes: user.Stmt.Notes})
 				continue
 			}
+			p := product
 			if !named {
-				unnamed++
-				continue
+				if user == nil {
+					unnamed++
+					continue
+				}
+				p = openvex.Product{ID: firstKey(user.Product), Identifiers: user.Product.Identifiers}
 			}
-			s := &openvex.Statement{Vulnerability: openvex.Vulnerability{Name: cve}, Products: []openvex.Product{product}}
+			s := &openvex.Statement{Vulnerability: openvex.Vulnerability{Name: cve}, Products: []openvex.Product{p}}
 			trowlStatement(s, sb, pkg, cve, comp, st, a)
+			if user != nil {
+				said := user.Stmt.Status
+				if user.Stmt.Justification != "" {
+					said += " (" + user.Stmt.Justification + ")"
+				}
+				s.Notes = strings.TrimSpace("Trowl's kernel check overrides the VEX file, which said " + said + ". " + s.Notes)
+			}
 			out = append(out, s)
 		}
 	}
