@@ -162,7 +162,7 @@ export default function Overview({ r, go }: { r: Report; go: (r: Route, p?: Reco
       <div className="ov-row">
         <OvCard icon={<ShieldAlert size={16} />} title="CVEs in installed packages" open="Open the CVEs" onOpen={() => go("cves")}>
           {cves && open > 0 ? (
-            <Donut slices={slices} center={open.toLocaleString()} centerLabel="Affected">
+            <Donut slices={slices} center={open.toLocaleString()} centerLabel="Not fixed">
               {!cves.sources.kernel_vex && (
                 <p className="dn-hint">Scan with <code className="cmd">--kernel-tree</code> to rule out kernel CVEs</p>
               )}
