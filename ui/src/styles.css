@@ -477,6 +477,15 @@ tr.sel td { background: var(--accent-soft); }
 .share-link { display: flex; align-items: center; gap: 2px; width: fit-content; margin-top: 6px; background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; }
 .share-link:hover { text-decoration: underline; }
 @media (max-width: 1100px) { .ov-row { grid-template-columns: 1fr; } }
+/* On a wide screen the donut and its legend are larger, so the CVE card fills its width. The cards
+   keep the height of their content, and the coverage bars spread over the CVE card's height. */
+@media (min-width: 1101px) {
+  .ov-row .dn { grid-template-columns: 200px minmax(0, 1fr); }
+  .ov-row .dn-svg { width: 200px; height: 200px; }
+  .ov-row .dn-legend { gap: 12px; }
+  .ov-row .dn-legend li { font-size: 14px; }
+  .ov-row .ov-pk { grid-template-columns: 200px minmax(0, 1fr); }
+}
 @media (max-width: 760px) {
   .stat { border-left: 0; border-top: 1px solid var(--grid); }
   .dn, .ov-pk { grid-template-columns: 1fr; gap: 16px; }
