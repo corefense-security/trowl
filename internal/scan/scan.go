@@ -3,6 +3,7 @@ package scan
 
 import (
 	"fmt"
+	"os"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -19,6 +20,7 @@ import (
 	"github.com/corefense-security/trowl/internal/llm"
 	"github.com/corefense-security/trowl/internal/model"
 	"github.com/corefense-security/trowl/internal/nvd"
+	"github.com/corefense-security/trowl/internal/openvex"
 	"github.com/corefense-security/trowl/internal/py"
 	"github.com/corefense-security/trowl/internal/pyjson"
 	"github.com/corefense-security/trowl/internal/sbom"
@@ -29,7 +31,8 @@ import (
 
 type Options struct {
 	SBOM         string
-	VEX          string // CycloneDX VEX kept apart from the SBOM
+	VEX          string // an OpenVEX file, or a CycloneDX VEX kept apart from the SBOM
+	Override     bool   // Trowl's kernel verdicts replace the VEX file's statements they contradict
 	Network      bool
 	CacheDir     string
 	Links        string // open | all | none
@@ -46,7 +49,8 @@ type Result struct {
 	Files      int
 	Binaries   int
 	Format     string
-	SbomCounts *pyjson.Obj // nil without an SBOM
+	SbomCounts *pyjson.Obj  // nil without an SBOM
+	OpenVEX    *openvex.Doc // nil when no CVEs were checked
 }
 
 func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
@@ -54,6 +58,7 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 	if started.IsZero() {
 		started = time.Now()
 	}
+	opt.Started = started
 	rootfs := u.Rootfs
 	var findings []model.Finding
 	binaries := []any{}
@@ -112,7 +117,32 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 		st.Fail("not found")
 	}
 
+	// An OpenVEX file is read now, so a broken one stops the scan before the slow part. It is
+	// applied once the CVEs are known. A CycloneDX VEX belongs to its SBOM and is applied with it.
+	var userVEX *openvex.Doc
+	cdxVEX := ""
+	if opt.VEX != "" {
+		raw, err := os.ReadFile(opt.VEX)
+		if err != nil {
+			return nil, err
+		}
+		switch {
+		case openvex.Is(raw):
+			st = status.Start("reading VEX")
+			if userVEX, err = openvex.Read(opt.VEX); err != nil {
+				st.Fail("")
+				return nil, err
+			}
+			st.Ok(fmt.Sprintf("OpenVEX, %d statements", len(userVEX.Statements)))
+		case opt.SBOM == "":
+			return nil, fmt.Errorf("%s: not an OpenVEX document, and a CycloneDX VEX needs --sbom", py.CleanPath(opt.VEX))
+		default:
+			cdxVEX = opt.VEX
+		}
+	}
+
 	var sbomSection, cves *pyjson.Obj
+	var vexOut *openvex.Doc
 	var sb *sbom.Sbom
 	if opt.SBOM != "" {
 		st = status.Start("reading SBOM")
@@ -137,9 +167,9 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 			detail += fmt.Sprintf(", %d VEX refs skipped (unlisted component or another BOM)", sb.VEXSkipped)
 		}
 		st.Ok(detail)
-		if opt.VEX != "" {
+		if cdxVEX != "" {
 			st = status.Start("reading VEX")
-			res, err := sbom.LoadVEX(sb, opt.VEX)
+			res, err := sbom.LoadVEX(sb, cdxVEX)
 			if err != nil {
 				st.Fail("")
 				return nil, err
@@ -203,9 +233,11 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 			"not_present", cmp.NotPresent,
 			"graph", sbom.Graph(sb, cmp.Status),
 		)
-		cves, err = cveSection(sb, cmp.Status, rootfs, opt)
+		cves, vexOut, err = cveSection(sb, cmp.Status, rootfs, opt, userVEX)
 	} else if inv, presence := imageInventory(rootfs, kernelVersion(kernelSection)); inv != nil {
-		cves, err = cveSection(inv, presence, rootfs, opt)
+		cves, vexOut, err = cveSection(inv, presence, rootfs, opt, userVEX)
+	} else if userVEX != nil {
+		status.Warn("no components to check, so the VEX file isn't applied")
 	}
 	if err != nil {
 		return nil, err
@@ -268,7 +300,7 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 	}
 	result.G("summary").(*pyjson.Obj).Set("duration_s", py.Round2(time.Since(started).Seconds()))
 	res := &Result{Report: result, Findings: findings, Files: fileCount, Binaries: len(binaries),
-		Format: u.SourceFormat}
+		Format: u.SourceFormat, OpenVEX: vexOut}
 	if sbomSection != nil {
 		res.SbomCounts = sbomSection.G("status_counts").(*pyjson.Obj)
 	}
@@ -426,7 +458,7 @@ func hardeningFacts(binaries []any) *pyjson.Obj {
 	return out
 }
 
-// topCVE names the highest-CVSS unpatched CVE on a shipped package, with its component. With
+// topCVE names the highest-CVSS affected CVE on a shipped package, with its component. With
 // userland set it leaves out kernel CVEs. Equal scores go to the lowest id, so the fact is the
 // same every run.
 func topCVE(rows []any, userland bool) string {
@@ -450,13 +482,13 @@ func topCVE(rows []any, userland bool) string {
 }
 
 func openShipped(row *pyjson.Obj) bool {
-	return row.G("status") == "unpatched" && sbom.MayShip(row.G("shipped").(string))
+	return row.G("status") == "affected" && sbom.MayShip(row.G("shipped").(string))
 }
 
-// openCarrier is the first shipped package that leaves the CVE unpatched.
+// openCarrier is the first shipped package the CVE affects.
 func openCarrier(row *pyjson.Obj) string {
 	for _, c := range row.G("carriers").([]any) {
-		if co := c.(*pyjson.Obj); sbom.MayShip(co.G("shipped").(string)) && co.G("status") == "unpatched" {
+		if co := c.(*pyjson.Obj); sbom.MayShip(co.G("shipped").(string)) && co.G("status") == "affected" {
 			return co.G("name").(string)
 		}
 	}
@@ -473,7 +505,7 @@ func hasBackport(row *pyjson.Obj) bool {
 	return false
 }
 
-// topEPSS is the shipped, unpatched CVE most likely to be exploited soon, by EPSS score.
+// topEPSS picks the affected CVE on a shipped package with the highest EPSS score.
 func topEPSS(rows []any) string {
 	var best *pyjson.Obj
 	top := -1.0
@@ -494,7 +526,7 @@ func topEPSS(rows []any) string {
 	return fmt.Sprintf("%s (EPSS %.2f, %s)", best.G("id"), top, openCarrier(best))
 }
 
-// topPackages lists the packages with the most critical, then high, unpatched CVEs.
+// topPackages lists the packages with the most critical and then high affected CVEs.
 func topPackages(components []any, limit int) []any {
 	count := func(o *pyjson.Obj, k string) int {
 		v, _ := o.G(k).(int)
@@ -520,7 +552,7 @@ func topPackages(components []any, limit int) []any {
 	return out
 }
 
-// cveFacts adds the CVE triage facts. Only shipped, unpatched CVEs count.
+// cveFacts adds the CVE facts for triage. Only affected CVEs on shipped packages count.
 func cveFacts(sv, cv *pyjson.Obj, hasSBOM bool) {
 	sources := cv.G("sources").(*pyjson.Obj)
 	summary := cv.G("summary").(*pyjson.Obj)
@@ -556,7 +588,7 @@ func cveFacts(sv, cv *pyjson.Obj, hasSBOM bool) {
 	if severity != nil && severity.G("none") != nil {
 		bySeverity.Set("no CVSS score yet", severity.G("none"))
 	}
-	sv.Set("Unpatched CVEs by severity", bySeverity)
+	sv.Set("Affected CVEs by severity", bySeverity)
 	kernelHigh, userHigh, networkHigh := 0, 0, 0
 	kernelTotal, kernelBackport := 0, 0
 	kernelNames := map[string]bool{}
@@ -589,14 +621,14 @@ func cveFacts(sv, cv *pyjson.Obj, hasSBOM bool) {
 		}
 	}
 	if kernelTotal > 0 {
-		sv.Set("Unpatched kernel CVEs", kernelTotal)
-		sv.Set("Unpatched kernel CVEs with a backport for this kernel's stable series", kernelBackport)
+		sv.Set("Affected kernel CVEs", kernelTotal)
+		sv.Set("Affected kernel CVEs with a backport for this kernel's stable series", kernelBackport)
 	}
-	sv.Set("Critical or high unpatched CVEs in the kernel", kernelHigh)
-	sv.Set("Critical or high unpatched CVEs in userland", userHigh)
-	sv.Set("Critical or high unpatched CVEs with a network attack vector", networkHigh)
+	sv.Set("Critical or high affected CVEs in the kernel", kernelHigh)
+	sv.Set("Critical or high affected CVEs in userland", userHigh)
+	sv.Set("Critical or high affected CVEs with a network attack vector", networkHigh)
 	if components, _ := summary.G("by_component").([]any); len(components) > 0 {
-		sv.Set("Packages with the most critical and high unpatched CVEs", topPackages(components, 5))
+		sv.Set("Packages with the most critical and high affected CVEs", topPackages(components, 5))
 		userland := []any{}
 		for _, c := range components {
 			if !kernelNames[c.(*pyjson.Obj).G("name").(string)] {
@@ -608,19 +640,19 @@ func cveFacts(sv, cv *pyjson.Obj, hasSBOM bool) {
 		}
 	}
 	if sources.G("kev") == nil {
-		sv.Set("Unpatched CVEs in the CISA Known Exploited Vulnerabilities list", "not checked")
+		sv.Set("Affected CVEs in the CISA Known Exploited Vulnerabilities list", "not checked")
 	} else if len(kevRows) == 0 {
-		sv.Set("Unpatched CVEs in the CISA Known Exploited Vulnerabilities list", "none")
+		sv.Set("Affected CVEs in the CISA Known Exploited Vulnerabilities list", "none")
 	} else {
-		sv.Set("Unpatched CVEs in the CISA Known Exploited Vulnerabilities list", kevRows[:min(10, len(kevRows))])
+		sv.Set("Affected CVEs in the CISA Known Exploited Vulnerabilities list", kevRows[:min(10, len(kevRows))])
 	}
-	sv.Set("Highest-CVSS unpatched CVE", topCVE(rows, false))
-	sv.Set("Highest-CVSS unpatched userland CVE", topCVE(rows, true))
+	sv.Set("Highest-CVSS affected CVE", topCVE(rows, false))
+	sv.Set("Highest-CVSS affected userland CVE", topCVE(rows, true))
 	if sources.G("epss") != nil {
-		sv.Set("Highest-EPSS unpatched CVE", topEPSS(rows))
+		sv.Set("Highest-EPSS affected CVE", topEPSS(rows))
 	}
-	if n, _ := summary.G("unpatched_not_shipped").(int); n > 0 {
-		sv.Set("Unpatched CVEs on packages that don't ship", n)
+	if n, _ := summary.G("affected_not_shipped").(int); n > 0 {
+		sv.Set("Affected CVEs on packages that don't ship", n)
 	}
 	if d := disagreementFacts(rows); d != nil {
 		sv.Set("Kernel CVEs where Trowl's VEX check of the kernel tree disagrees with the SBOM", d)
@@ -657,7 +689,7 @@ func disagreementFacts(rows []any) *pyjson.Obj {
 		return nil
 	}
 	return pyjson.O("Total", cleared+affected+review,
-		"SBOM says unpatched, but the vulnerable code is not compiled or its module is not shipped (not affected)", cleared,
+		"SBOM says affected, but the vulnerable code is not compiled or its module is not shipped (not affected)", cleared,
 		"SBOM says not affected or fixed, but the vulnerable code is compiled into this kernel (affected)", affected,
 		"SBOM status that the kernel tree check could not confirm (needs review)", review)
 }
@@ -791,14 +823,46 @@ func imageInventory(rootfs, kernel string) (*sbom.Sbom, *sbom.Status) {
 	return sbom.FromInventory(source, comps)
 }
 
-func cveSection(sb *sbom.Sbom, presence *sbom.Status, rootfs string, opt Options) (*pyjson.Obj, error) {
+// cveSection builds the report's CVE section and the OpenVEX document Trowl writes beside it.
+func cveSection(sb *sbom.Sbom, presence *sbom.Status, rootfs string, opt Options, userVEX *openvex.Doc) (*pyjson.Obj, *openvex.Doc, error) {
 	matched, known, inFeed, feed := versionMatch(sb, opt)
 	kernelVex, err := assessKernel(sb, feed, rootfs, opt)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	// The VEX file goes last, so its statements win over the SBOM and Trowl's own verdicts.
+	var vexIn any
+	if userVEX != nil {
+		st := status.Start("applying VEX")
+		n := sb.ApplyOpenVEX(userVEX)
+		if n.NoProduct == n.Statements {
+			st.Fail("")
+			return nil, nil, fmt.Errorf("%s: none of its %d statements name a component in this image", py.CleanPath(opt.VEX), n.Statements)
+		}
+		detail := fmt.Sprintf("%d of %d statements applied", n.Applied, n.Statements)
+		if n.NoCVE > 0 {
+			detail += fmt.Sprintf(", %d for CVEs Trowl didn't find", n.NoCVE)
+		}
+		if n.NoProduct > 0 {
+			detail += fmt.Sprintf(", %d for components not in the image", n.NoProduct)
+		}
+		st.Ok(detail)
+		vexIn = pyjson.O("file", py.CleanPath(opt.VEX), "statements", n.Statements, "applied", n.Applied,
+			"no_cve", n.NoCVE, "no_product", n.NoProduct)
+	}
+	if opt.Override {
+		sb.Override = true
+		if kernelVex == nil {
+			status.Warn("--override has nothing to do without the kernel check: pass --kernel-tree")
+		} else {
+			status.Start("overriding VEX").Ok(fmt.Sprintf("%d kernel CVE statuses from Trowl's check", sb.CountOverridden()))
+		}
 	}
 	rows := sbom.BuildCVEs(sb, presence)
-	sources := pyjson.O("kev", nil, "epss", nil, "links", "none", "version_match", matched, "kernel_vex", kernelVex)
+	stmts, unnamed := sbom.ExportVEX(sb, presence)
+	vexOut := openvex.New(stmts, opt.Started, model.Version)
+	sources := pyjson.O("kev", nil, "epss", nil, "links", "none", "version_match", matched, "kernel_vex", kernelVex,
+		"vex", vexIn, "openvex", pyjson.O("statements", len(stmts), "unnamed", unnamed))
 	if opt.Network && opt.CacheDir != "" {
 		st := status.Start("fetching KEV")
 		kev, kevMeta := feeds.KEV(opt.CacheDir)
@@ -873,7 +937,7 @@ func cveSection(sb *sbom.Sbom, presence *sbom.Status, rootfs string, opt Options
 		}
 		out.Set("unmapped", unmapped)
 	}
-	return out, nil
+	return out, vexOut, nil
 }
 
 // assessKernel sets the VEX status of the kernel's CVEs from the config gates of the files their

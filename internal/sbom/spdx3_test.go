@@ -38,12 +38,12 @@ func TestKernelOnABootPartitionIsNotAbsent(t *testing.T) {
 
 func TestUnknownStaysInPlay(t *testing.T) {
 	rows := []*pyjson.Obj{
-		pyjson.O("status", "unpatched", "shipped", "unknown", "severity", "high", "kev", nil, "carriers", []any{}),
-		pyjson.O("status", "unpatched", "shipped", "no", "severity", "high", "kev", nil, "carriers", []any{}),
+		pyjson.O("status", "affected", "shipped", "unknown", "severity", "high", "kev", nil, "carriers", []any{}),
+		pyjson.O("status", "affected", "shipped", "no", "severity", "high", "kev", nil, "carriers", []any{}),
 	}
 	s := Summary(rows)
-	if s.G("unpatched_shipped") != 1 || s.G("unpatched_not_shipped") != 1 {
-		t.Errorf("shipped %v, not shipped %v", s.G("unpatched_shipped"), s.G("unpatched_not_shipped"))
+	if s.G("affected_shipped") != 1 || s.G("affected_not_shipped") != 1 {
+		t.Errorf("shipped %v, not shipped %v", s.G("affected_shipped"), s.G("affected_not_shipped"))
 	}
 }
 

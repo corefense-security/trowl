@@ -353,8 +353,9 @@ type VEXResult struct {
 type resolver func(ref string) (comp string, ok bool)
 
 // applyVulns records the statuses and CVE details of vulns. A VEX file needs an analysis on
-// every statement. An SBOM may leave it out when nothing was analysed.
-func (sb *Sbom) applyVulns(vulns []cdxVuln, resolve resolver, needAnalysis bool) (VEXResult, error) {
+// every statement. An SBOM may leave it out when nothing was analysed. A VEX file's statements
+// are also kept as file statements, so they win like an OpenVEX file's.
+func (sb *Sbom) applyVulns(vulns []cdxVuln, resolve resolver, vexFile bool) (VEXResult, error) {
 	res := VEXResult{Statements: len(vulns)}
 	for i := range vulns {
 		v := &vulns[i]
@@ -367,7 +368,7 @@ func (sb *Sbom) applyVulns(vulns []cdxVuln, resolve resolver, needAnalysis bool)
 		}
 		a := v.Analysis
 		switch {
-		case a == nil && needAnalysis:
+		case a == nil && vexFile:
 			return res, fmt.Errorf("%s has no analysis", name)
 		case a != nil && a.State == "":
 			return res, fmt.Errorf("%s has an analysis with no state", name)
@@ -443,6 +444,9 @@ func (sb *Sbom) applyVulns(vulns []cdxVuln, resolve resolver, needAnalysis bool)
 			}
 			if fix := statedFixRe.FindStringSubmatch(a.Detail); fix != nil {
 				sb.stated[k] = fix[1]
+			}
+			if vexFile {
+				sb.fileStatement(k, a.Justification, a.Detail)
 			}
 		}
 	}

@@ -67,7 +67,10 @@ func commands() []*command {
 			opts: []opt{
 				{names: []string{"--sbom"}, value: true, help: "SBOM for the image: SPDX 3.0 JSON-LD, SPDX 2.2 " +
 					"(Yocto's IMAGE.spdx.tar.zst, or a directory of its documents) or CycloneDX JSON"},
-				{names: []string{"--vex"}, value: true, help: "CycloneDX VEX for the --sbom when it is a separate file (meta-cyclonedx)"},
+				{names: []string{"--vex"}, value: true, help: "OpenVEX file whose statements override the SBOM and Trowl's own verdicts, " +
+					"or a CycloneDX VEX for the --sbom when it is a separate file (meta-cyclonedx)"},
+				{names: []string{"--override"}, help: "with --vex, let Trowl's kernel check replace the file's status where they " +
+					"disagree about kernel code being built. Userland CVEs keep the file's status"},
 				{names: []string{"-o", "--output"}, value: true, def: "trowl-report", help: "output directory"},
 				{names: []string{"--kernel-config"}, value: true, help: "kernel .config to check when the image carries none " +
 					"(/boot/config-* or a config embedded in the kernel image)"},
@@ -262,7 +265,11 @@ func scanBanner(a args) {
 		{"sbom", orNone(a["sbom"], "not supplied")},
 	}
 	if a["vex"] != "" {
-		rows = append(rows, [2]string{"vex", py.CleanPath(a["vex"])})
+		vexLabel := py.CleanPath(a["vex"])
+		if a.flag("override") {
+			vexLabel += ", kernel check overrides it"
+		}
+		rows = append(rows, [2]string{"vex", vexLabel})
 	}
 	rows = append(rows, [2]string{"kernel", kernel})
 	if a["kernel-tree"] != "" {
@@ -280,8 +287,8 @@ func scanBanner(a args) {
 }
 
 func cmdScan(a args) int {
-	if a["vex"] != "" && a["sbom"] == "" {
-		return fail("scan", "argument --vex: needs --sbom")
+	if a.flag("override") && a["vex"] == "" {
+		return fail("scan", "argument --override: needs --vex")
 	}
 	scanBanner(a)
 	out := a["output"]
@@ -338,7 +345,7 @@ func cmdScan(a args) int {
 		}
 		st.Ok(u.SourceFormat)
 		res, err := scan.Run(u, a["image"], scan.Options{
-			SBOM: a["sbom"], VEX: a["vex"], Network: !a.flag("no-network"), CacheDir: cache, Links: a["links"],
+			SBOM: a["sbom"], VEX: a["vex"], Override: a.flag("override"), Network: !a.flag("no-network"), CacheDir: cache, Links: a["links"],
 			Model: modelName, KernelConfig: a["kernel-config"], KernelTree: a["kernel-tree"], KernelPolicy: a["kernel-policy"],
 			Started: started,
 		})
@@ -364,6 +371,14 @@ func cmdScan(a args) int {
 		st.Fail("")
 		status.Warn("%v", err)
 		return 1
+	}
+	if res.OpenVEX != nil {
+		if err := res.OpenVEX.Write(filepath.Join(out, "openvex.json")); err != nil {
+			st.Fail("")
+			status.Warn("%v", err)
+			return 1
+		}
+		jsonPath += ", " + joinPath(out, "openvex.json")
 	}
 	if html {
 		st.Ok("")

@@ -6,28 +6,28 @@
   "Packages changed after build": 2,
   "Packages with files missing": 0,
   "How CVEs were found": "Matched by package version; not confirmed as exploitable on this image",
-  "Unpatched CVEs by severity": {
+  "Affected CVEs by severity": {
    "critical": 12,
    "high": 240,
    "medium": 96,
    "low": 8,
    "no CVSS score yet": 476
   },
-  "Unpatched kernel CVEs": 832,
-  "Unpatched kernel CVEs with a backport for this kernel's stable series": 756,
-  "Critical or high unpatched CVEs in the kernel": 231,
-  "Critical or high unpatched CVEs in userland": 21,
-  "Critical or high unpatched CVEs with a network attack vector": 88,
-  "Packages with the most critical and high unpatched CVEs": [
+  "Affected kernel CVEs": 832,
+  "Affected kernel CVEs with a backport for this kernel's stable series": 756,
+  "Critical or high affected CVEs in the kernel": 231,
+  "Critical or high affected CVEs in userland": 21,
+  "Critical or high affected CVEs with a network attack vector": 88,
+  "Packages with the most critical and high affected CVEs": [
    "linux-yocto: 9 critical, 222 high",
    "openssl: 2 critical, 9 high",
    "openssh: 1 critical, 6 high"
   ],
   "Userland package most affected": "openssl: 2 critical, 9 high",
-  "Unpatched CVEs in the CISA Known Exploited Vulnerabilities list": "none",
-  "Highest-CVSS unpatched CVE": "CVE-2026-99153 (CVSS 9.8, linux-yocto)",
-  "Highest-CVSS unpatched userland CVE": "CVE-2026-11111 (CVSS 9.1, openssl)",
-  "Highest-EPSS unpatched CVE": "CVE-2026-22222 (EPSS 0.30, openssh)"
+  "Affected CVEs in the CISA Known Exploited Vulnerabilities list": "none",
+  "Highest-CVSS affected CVE": "CVE-2026-99153 (CVSS 9.8, linux-yocto)",
+  "Highest-CVSS affected userland CVE": "CVE-2026-11111 (CVSS 9.1, openssl)",
+  "Highest-EPSS affected CVE": "CVE-2026-22222 (EPSS 0.30, openssh)"
  },
  "2. Kernel": {
   "Kernel": "Linux 6.18.52 x86",

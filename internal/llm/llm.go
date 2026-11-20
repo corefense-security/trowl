@@ -48,7 +48,7 @@ var Models = map[string]spec{
 
 const (
 	DefaultModel   = "qwen3.5-4b"
-	maxPoints      = 7
+	maxPoints      = 5
 	overviewTokens = 600
 )
 
@@ -69,7 +69,7 @@ Review the provided static firmware scan results and produce
 a concise security assessment.
 
 Rules:
-- Generate at most 7 bullet points, each under 30 words.
+- Generate at most 5 bullet points, each under 30 words.
 - Identify the most important security concerns and patterns.
 - Explain the finding, its security implication and useful next action.
 - Do not simply repeat statistics shown elsewhere.
@@ -80,7 +80,7 @@ Rules:
 - Never generate a colon or semi-colon anywhere in the bullet points, unless it comes from a fact handed to you
 - Omit categories without meaningful observations.
 - Open each bullet with the concrete risk or affected component, so an engineer sees the impact at once.
-- Write one bullet each for the kernel config, binaries, secrets, mounts and Userland and Kernel CVEs, and SBOM (if facts are available)
+- Choose which categories to cover from kernel config, binaries, secrets, mounts, Userland CVEs, Kernel CVEs and SBOM (if facts are available). Pick the ones with the most important findings.
 - Use a number only with the flag it belongs to; never merge two flags into one number.
 - Describe impact as what an attacker could do if they reach that weakness, not as a certainty.
 - Do not use words like "immediate", "urgent", "massive", "exploitable" or that imply them when summarising CVE impacts. Use "critical" only to describe CVE severity.
@@ -103,18 +103,18 @@ How to read the facts:
   Suggest the potential impact on runtime security.
 
 - Userland Package CVEs:
-  Write a single bullet.Focus on unpatched vulnerabilities in installed packages, highlighting high-severity ones.
+  Write a single bullet.Focus on affected vulnerabilities in installed packages, highlighting high-severity ones.
   Quote the "Userland package most affected" fact as written, and name any
   CISA KEV entries if applicable. 
 
-- Kernel CVEs: Write a single bullet. If the facts give them, state the number of unpatched kernel CVEs and how many have a
+- Kernel CVEs: Write a single bullet. If the facts give them, state the number of affected kernel CVEs and how many have a
   backport for this kernel's stable series, both copied exactly, in the CVE bullet.
 
 - SBOM: Write a single bullet only if SBOM information is available to you. Highlight inconsistencies between the SBOM and installed packages, if any. Then, state if there are any potential VEX disagreemnts with SBOM for kernel CVEs. If no SBOM was supplied, write no separate SBOM bullet;
 
   Do not generate bullet summaries by starting it with random category label or colon (:). Use natural prose.
   
-  You can report multiple findings for the same type only if: a unique type data (e.g. SBOM) is not available, and it does not exceed the 7 bullet points limit.
+  You can report multiple findings for the same type only if: a unique type data (e.g. SBOM) is not available, and it does not exceed the 5 bullet points limit.
   
   Return only the bullet points.`
 

@@ -1,0 +1,15 @@
+{
+  "@context": "https://openvex.dev/ns",
+  "@id": "https://example.com/vex/old",
+  "author": "Old tool",
+  "timestamp": "2023-06-01T00:00:00Z",
+  "version": "1",
+  "statements": [
+    {
+      "vulnerability": "CVE-2025-1003",
+      "products": ["urn:cdx:11111111-2222-3333-4444-555555555555/1#linux-yocto"],
+      "status": "affected",
+      "action_statement": "Update the kernel."
+    }
+  ]
+}

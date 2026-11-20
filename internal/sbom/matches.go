@@ -29,6 +29,7 @@ func FromInventory(source string, comps []Package) (*Sbom, *Status) {
 		}
 		if len(p.Cpes) == 0 {
 			p.Cpes = []string{"cpe:2.3:a:*:" + strings.ToLower(p.Name) + ":" + p.Version + ":*:*:*:*:*:*:*"}
+			p.GuessedCPE = true
 		}
 		s.Packages[p.ID] = &p
 		s.PackageOrder = append(s.PackageOrder, p.ID)
