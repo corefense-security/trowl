@@ -106,7 +106,7 @@ func check(points []string, facts string) []result {
 		if v, ok := cve["Userland package most affected"].(string); ok {
 			out = append(out, result{"quotes the most affected package: " + v, strings.Contains(all, v)})
 		}
-		for _, k := range []string{"Unpatched kernel CVEs", "Unpatched kernel CVEs with a backport for this kernel's stable series"} {
+		for _, k := range []string{"Affected kernel CVEs", "Affected kernel CVEs with a backport for this kernel's stable series"} {
 			if v, ok := cve[k].(float64); ok {
 				n := fmt.Sprintf("%d", int(v))
 				out = append(out, result{fmt.Sprintf("states %s (%s)", k, n), regexp.MustCompile(`\b` + n + `\b`).MatchString(all)})

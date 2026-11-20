@@ -18,12 +18,12 @@ func cveRow(id string, score float64, status, shipped string, kernel bool, comp 
 
 func TestTopCVE(t *testing.T) {
 	rows := []any{
-		cveRow("CVE-3", 9.9, "unpatched", "yes", true, "linux-yocto"),
-		cveRow("CVE-2", 9.8, "unpatched", "yes", false, "curl"),
-		cveRow("CVE-1", 9.8, "unpatched", "yes", false, "libsoup"),
+		cveRow("CVE-3", 9.9, "affected", "yes", true, "linux-yocto"),
+		cveRow("CVE-2", 9.8, "affected", "yes", false, "curl"),
+		cveRow("CVE-1", 9.8, "affected", "yes", false, "libsoup"),
 		cveRow("CVE-4", 10.0, "fixed", "yes", false, "openssl"),
-		cveRow("CVE-5", 10.0, "unpatched", "build", false, "gcc"),
-		pyjson.O("id", "CVE-6", "status", "unpatched", "shipped", "yes", "kernel", false, "cvss", nil),
+		cveRow("CVE-5", 10.0, "affected", "build", false, "gcc"),
+		pyjson.O("id", "CVE-6", "status", "affected", "shipped", "yes", "kernel", false, "cvss", nil),
 	}
 	if got, want := topCVE(rows, false), "CVE-3 (CVSS 9.9, linux-yocto)"; got != want {
 		t.Errorf("overall = %q, want %q", got, want)
@@ -49,7 +49,7 @@ func TestTopPackages(t *testing.T) {
 }
 
 func TestCveFactsWithoutSBOM(t *testing.T) {
-	row := cveRow("CVE-1", 9.8, "unpatched", "yes", false, "curl")
+	row := cveRow("CVE-1", 9.8, "affected", "yes", false, "curl")
 	row.Set("severity", "critical")
 	row.Set("vector", "network")
 	row.Set("kev", pyjson.O("date", "2026-01-01"))
@@ -62,24 +62,24 @@ func TestCveFactsWithoutSBOM(t *testing.T) {
 	if got := sv.G("SBOM"); got != "Not supplied; package versions came from the image's rpm database" {
 		t.Errorf("SBOM = %v", got)
 	}
-	if sv.G("Critical or high unpatched CVEs with a network attack vector") != 1 ||
+	if sv.G("Critical or high affected CVEs with a network attack vector") != 1 ||
 		sv.G("Packages not checked for CVEs (no CVE product mapping)") != 1 {
 		t.Errorf("facts: %s", pyjson.Default(sv))
 	}
-	if got := sv.G("Highest-EPSS unpatched CVE"); got != "CVE-1 (EPSS 0.50, curl)" {
+	if got := sv.G("Highest-EPSS affected CVE"); got != "CVE-1 (EPSS 0.50, curl)" {
 		t.Errorf("EPSS = %v", got)
 	}
 }
 
 func TestCveFactsKernelBackports(t *testing.T) {
-	fixed := cveRow("CVE-1", 7.5, "unpatched", "yes", true, "linux")
+	fixed := cveRow("CVE-1", 7.5, "affected", "yes", true, "linux")
 	fixed.G("carriers").([]any)[0].(*pyjson.Obj).Set("backport", true)
-	open := cveRow("CVE-2", 7.5, "unpatched", "yes", true, "linux")
+	open := cveRow("CVE-2", 7.5, "affected", "yes", true, "linux")
 	other := cveRow("CVE-3", 7.5, "fixed", "yes", true, "linux")
 	cv := pyjson.O("rows", []any{fixed, open, other}, "sources", pyjson.O("kev", nil, "epss", nil), "summary", pyjson.O())
 	sv := pyjson.New()
 	cveFacts(sv, cv, true)
-	if sv.G("Unpatched kernel CVEs") != 2 || sv.G("Unpatched kernel CVEs with a backport for this kernel's stable series") != 1 {
+	if sv.G("Affected kernel CVEs") != 2 || sv.G("Affected kernel CVEs with a backport for this kernel's stable series") != 1 {
 		t.Errorf("facts: %s", pyjson.Default(sv))
 	}
 }

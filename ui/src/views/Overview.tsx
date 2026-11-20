@@ -90,8 +90,8 @@ export default function Overview({ r, go }: { r: Report; go: (r: Route, p?: Reco
       if (x.shipped === "build" || x.shipped === "no") continue;
       const a = x.kernel ? kernelAssessment(x) : undefined;
       if (x.status === "fixed") n.fixed++;
-      else if (x.status === "unpatched") n.affected++;
-      else if (x.status === "review" || x.status === "investigating" || x.status === "unknown") n.review++;
+      else if (x.status === "affected") n.affected++;
+      else if (x.status === "review" || x.status === "under_investigation" || x.status === "unknown") n.review++;
       else if (a?.status === "not_affected" && a.justification === "vulnerable_code_not_present") n.notCompiled++;
       else if (a?.status === "not_affected" && a.justification === "component_not_present") n.moduleOff++;
       else n.sbomNA++;
@@ -139,8 +139,8 @@ export default function Overview({ r, go }: { r: Report; go: (r: Route, p?: Reco
       )}
       <section className="card statbar">
         {cves && (
-          <Stat icon={<ShieldAlert size={15} />} label="Affected CVEs" value={cves.summary.unpatched_shipped}
-            onClick={() => go("cves", { status: "unpatched" })}
+          <Stat icon={<ShieldAlert size={15} />} label="Affected CVEs" value={cves.summary.affected_shipped}
+            onClick={() => go("cves", { status: "affected" })}
             foot={cves.sources.kev ? `${cves.summary.kev} in CISA KEV` : "CISA KEV not checked"} />
         )}
         <Stat icon={<KeyRound size={15} />} label="Secrets" value={secrets.length} onClick={() => go("filesystems")}
@@ -157,7 +157,7 @@ export default function Overview({ r, go }: { r: Report; go: (r: Route, p?: Reco
       <div className="ov-row">
         <OvCard icon={<ShieldAlert size={16} />} title="CVEs in installed packages" open="Open the CVEs" onOpen={() => go("cves")}>
           {cves && open > 0 ? (
-            <Donut slices={slices} center={open.toLocaleString()} centerLabel="Unpatched">
+            <Donut slices={slices} center={open.toLocaleString()} centerLabel="Affected">
               {!cves.sources.kernel_vex && (
                 <p className="dn-hint">Scan with <code className="cmd">--kernel-tree</code> to rule out kernel CVEs</p>
               )}

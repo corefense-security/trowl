@@ -63,8 +63,8 @@ export interface GraphEdge {
 }
 
 /** trowl sets "review" when the version is in range but the kernel tree couldn't trace the CVE's files. */
-/** "investigating" is the SBOM's under_investigation. "unknown" is a CVE the SBOM lists without a status. */
-export type CveStatus = "unpatched" | "review" | "investigating" | "ignored" | "fixed" | "unknown";
+/** Trowl uses the OpenVEX status names. "unknown" means the SBOM lists the CVE without a status. */
+export type CveStatus = "affected" | "review" | "under_investigation" | "not_affected" | "fixed" | "unknown";
 export type Shipped = "yes" | "build" | "no" | "unknown";
 
 export interface CveCarrier {
@@ -151,8 +151,8 @@ export interface CveRow {
 export interface CveSection {
   summary: {
     status: Partial<Record<CveStatus, number>>;
-    unpatched_shipped: number;
-    unpatched_not_shipped: number;
+    affected_shipped: number;
+    affected_not_shipped: number;
     high: number;
     kev: number;
     severity: Record<string, number>;

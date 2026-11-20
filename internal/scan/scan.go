@@ -426,7 +426,7 @@ func hardeningFacts(binaries []any) *pyjson.Obj {
 	return out
 }
 
-// topCVE names the highest-CVSS unpatched CVE on a shipped package, with its component. With
+// topCVE names the highest-CVSS affected CVE on a shipped package, with its component. With
 // userland set it leaves out kernel CVEs. Equal scores go to the lowest id, so the fact is the
 // same every run.
 func topCVE(rows []any, userland bool) string {
@@ -450,13 +450,13 @@ func topCVE(rows []any, userland bool) string {
 }
 
 func openShipped(row *pyjson.Obj) bool {
-	return row.G("status") == "unpatched" && sbom.MayShip(row.G("shipped").(string))
+	return row.G("status") == "affected" && sbom.MayShip(row.G("shipped").(string))
 }
 
-// openCarrier is the first shipped package that leaves the CVE unpatched.
+// openCarrier is the first shipped package the CVE affects.
 func openCarrier(row *pyjson.Obj) string {
 	for _, c := range row.G("carriers").([]any) {
-		if co := c.(*pyjson.Obj); sbom.MayShip(co.G("shipped").(string)) && co.G("status") == "unpatched" {
+		if co := c.(*pyjson.Obj); sbom.MayShip(co.G("shipped").(string)) && co.G("status") == "affected" {
 			return co.G("name").(string)
 		}
 	}
@@ -473,7 +473,7 @@ func hasBackport(row *pyjson.Obj) bool {
 	return false
 }
 
-// topEPSS is the shipped, unpatched CVE most likely to be exploited soon, by EPSS score.
+// topEPSS picks the affected CVE on a shipped package with the highest EPSS score.
 func topEPSS(rows []any) string {
 	var best *pyjson.Obj
 	top := -1.0
@@ -494,7 +494,7 @@ func topEPSS(rows []any) string {
 	return fmt.Sprintf("%s (EPSS %.2f, %s)", best.G("id"), top, openCarrier(best))
 }
 
-// topPackages lists the packages with the most critical, then high, unpatched CVEs.
+// topPackages lists the packages with the most critical and then high affected CVEs.
 func topPackages(components []any, limit int) []any {
 	count := func(o *pyjson.Obj, k string) int {
 		v, _ := o.G(k).(int)
@@ -520,7 +520,7 @@ func topPackages(components []any, limit int) []any {
 	return out
 }
 
-// cveFacts adds the CVE triage facts. Only shipped, unpatched CVEs count.
+// cveFacts adds the CVE facts for triage. Only affected CVEs on shipped packages count.
 func cveFacts(sv, cv *pyjson.Obj, hasSBOM bool) {
 	sources := cv.G("sources").(*pyjson.Obj)
 	summary := cv.G("summary").(*pyjson.Obj)
@@ -556,7 +556,7 @@ func cveFacts(sv, cv *pyjson.Obj, hasSBOM bool) {
 	if severity != nil && severity.G("none") != nil {
 		bySeverity.Set("no CVSS score yet", severity.G("none"))
 	}
-	sv.Set("Unpatched CVEs by severity", bySeverity)
+	sv.Set("Affected CVEs by severity", bySeverity)
 	kernelHigh, userHigh, networkHigh := 0, 0, 0
 	kernelTotal, kernelBackport := 0, 0
 	kernelNames := map[string]bool{}
@@ -589,14 +589,14 @@ func cveFacts(sv, cv *pyjson.Obj, hasSBOM bool) {
 		}
 	}
 	if kernelTotal > 0 {
-		sv.Set("Unpatched kernel CVEs", kernelTotal)
-		sv.Set("Unpatched kernel CVEs with a backport for this kernel's stable series", kernelBackport)
+		sv.Set("Affected kernel CVEs", kernelTotal)
+		sv.Set("Affected kernel CVEs with a backport for this kernel's stable series", kernelBackport)
 	}
-	sv.Set("Critical or high unpatched CVEs in the kernel", kernelHigh)
-	sv.Set("Critical or high unpatched CVEs in userland", userHigh)
-	sv.Set("Critical or high unpatched CVEs with a network attack vector", networkHigh)
+	sv.Set("Critical or high affected CVEs in the kernel", kernelHigh)
+	sv.Set("Critical or high affected CVEs in userland", userHigh)
+	sv.Set("Critical or high affected CVEs with a network attack vector", networkHigh)
 	if components, _ := summary.G("by_component").([]any); len(components) > 0 {
-		sv.Set("Packages with the most critical and high unpatched CVEs", topPackages(components, 5))
+		sv.Set("Packages with the most critical and high affected CVEs", topPackages(components, 5))
 		userland := []any{}
 		for _, c := range components {
 			if !kernelNames[c.(*pyjson.Obj).G("name").(string)] {
@@ -608,19 +608,19 @@ func cveFacts(sv, cv *pyjson.Obj, hasSBOM bool) {
 		}
 	}
 	if sources.G("kev") == nil {
-		sv.Set("Unpatched CVEs in the CISA Known Exploited Vulnerabilities list", "not checked")
+		sv.Set("Affected CVEs in the CISA Known Exploited Vulnerabilities list", "not checked")
 	} else if len(kevRows) == 0 {
-		sv.Set("Unpatched CVEs in the CISA Known Exploited Vulnerabilities list", "none")
+		sv.Set("Affected CVEs in the CISA Known Exploited Vulnerabilities list", "none")
 	} else {
-		sv.Set("Unpatched CVEs in the CISA Known Exploited Vulnerabilities list", kevRows[:min(10, len(kevRows))])
+		sv.Set("Affected CVEs in the CISA Known Exploited Vulnerabilities list", kevRows[:min(10, len(kevRows))])
 	}
-	sv.Set("Highest-CVSS unpatched CVE", topCVE(rows, false))
-	sv.Set("Highest-CVSS unpatched userland CVE", topCVE(rows, true))
+	sv.Set("Highest-CVSS affected CVE", topCVE(rows, false))
+	sv.Set("Highest-CVSS affected userland CVE", topCVE(rows, true))
 	if sources.G("epss") != nil {
-		sv.Set("Highest-EPSS unpatched CVE", topEPSS(rows))
+		sv.Set("Highest-EPSS affected CVE", topEPSS(rows))
 	}
-	if n, _ := summary.G("unpatched_not_shipped").(int); n > 0 {
-		sv.Set("Unpatched CVEs on packages that don't ship", n)
+	if n, _ := summary.G("affected_not_shipped").(int); n > 0 {
+		sv.Set("Affected CVEs on packages that don't ship", n)
 	}
 	if d := disagreementFacts(rows); d != nil {
 		sv.Set("Kernel CVEs where Trowl's VEX check of the kernel tree disagrees with the SBOM", d)
@@ -657,7 +657,7 @@ func disagreementFacts(rows []any) *pyjson.Obj {
 		return nil
 	}
 	return pyjson.O("Total", cleared+affected+review,
-		"SBOM says unpatched, but the vulnerable code is not compiled or its module is not shipped (not affected)", cleared,
+		"SBOM says affected, but the vulnerable code is not compiled or its module is not shipped (not affected)", cleared,
 		"SBOM says not affected or fixed, but the vulnerable code is compiled into this kernel (affected)", affected,
 		"SBOM status that the kernel tree check could not confirm (needs review)", review)
 }

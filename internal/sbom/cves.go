@@ -2,10 +2,8 @@ package sbom
 
 // One row per CVE the SBOM attaches to a component, for the dashboard's CVE page.
 //
-// The status comes from the SBOM's own VEX, whichever build system or scanner wrote it:
-// affected -> unpatched, not_affected -> ignored, fixed -> fixed. Whether the CVE matters for
-// this image is decided per CVE across every component that carries it. A CVE only stops
-// mattering when none of its carriers ship. That is package-level evidence only.
+// The status comes from the SBOM's VEX, whatever tool wrote it. A CVE counts for the image as
+// long as one of the components carrying it ships. This is judged per package, not per file.
 
 import (
 	"regexp"
@@ -16,15 +14,14 @@ import (
 	"github.com/corefense-security/trowl/internal/pyjson"
 )
 
-// "investigating" is the SBOM's under_investigation. "unknown" is a CVE the SBOM lists without a
-// status.
-var statusOfVex = map[string]string{"affected": "unpatched", "not_affected": "ignored", "fixed": "fixed",
-	"under_investigation": "investigating", "": "unknown"}
+// Trowl uses the OpenVEX status names. "unknown" means the SBOM lists the CVE without a status.
+var statusOfVex = map[string]string{"affected": "affected", "not_affected": "not_affected", "fixed": "fixed",
+	"under_investigation": "under_investigation", "": "unknown"}
 
 // Worst first. The row shows the worst status among the carriers that decide it.
 // "review" is trowl's own status for a CVE in range whose files the kernel tree couldn't trace
 // (see reviewed).
-var statusOrder = []string{"unpatched", "review", "investigating", "unknown", "ignored", "fixed"}
+var statusOrder = []string{"affected", "review", "under_investigation", "unknown", "not_affected", "fixed"}
 
 var shippedOfRecipe = map[string]string{"present": "yes", "modified": "yes", "partial": "yes", "build-only": "build",
 	"absent": "no", "unknown": "unknown"}
@@ -285,7 +282,7 @@ func Summary(rows []*pyjson.Obj) *pyjson.Obj {
 	notShipped, high, kev := 0, 0, 0
 	for _, r := range rows {
 		statusCount.Add(r.G("status").(string), 1)
-		if r.G("status") == "unpatched" {
+		if r.G("status") == "affected" {
 			if MayShip(r.G("shipped").(string)) {
 				openShipped = append(openShipped, r)
 			} else {
@@ -306,7 +303,7 @@ func Summary(rows []*pyjson.Obj) *pyjson.Obj {
 		}
 		for _, c := range r.G("carriers").([]any) {
 			co := c.(*pyjson.Obj)
-			if MayShip(co.G("shipped").(string)) && co.G("status") == "unpatched" {
+			if MayShip(co.G("shipped").(string)) && co.G("status") == "affected" {
 				name := co.G("name").(string)
 				if _, ok := byComp[name]; !ok {
 					byComp[name] = pyjson.NewCounter()
@@ -334,8 +331,8 @@ func Summary(rows []*pyjson.Obj) *pyjson.Obj {
 	}
 	return pyjson.O(
 		"status", statusCount,
-		"unpatched_shipped", len(openShipped),
-		"unpatched_not_shipped", notShipped,
+		"affected_shipped", len(openShipped),
+		"affected_not_shipped", notShipped,
 		"high", high,
 		"kev", kev,
 		"severity", sevCount,

@@ -103,11 +103,11 @@ How to read the facts:
   Suggest the potential impact on runtime security.
 
 - Userland Package CVEs:
-  Write a single bullet.Focus on unpatched vulnerabilities in installed packages, highlighting high-severity ones.
+  Write a single bullet.Focus on affected vulnerabilities in installed packages, highlighting high-severity ones.
   Quote the "Userland package most affected" fact as written, and name any
   CISA KEV entries if applicable. 
 
-- Kernel CVEs: Write a single bullet. If the facts give them, state the number of unpatched kernel CVEs and how many have a
+- Kernel CVEs: Write a single bullet. If the facts give them, state the number of affected kernel CVEs and how many have a
   backport for this kernel's stable series, both copied exactly, in the CVE bullet.
 
 - SBOM: Write a single bullet only if SBOM information is available to you. Highlight inconsistencies between the SBOM and installed packages, if any. Then, state if there are any potential VEX disagreemnts with SBOM for kernel CVEs. If no SBOM was supplied, write no separate SBOM bullet;
