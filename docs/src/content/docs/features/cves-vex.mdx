@@ -178,7 +178,7 @@ Name-only matches can pick up CVEs for other projects with the same name, such a
 - **The versions are written as text.** CVE-2016-7837 says BlueZ "5.41 and earlier". Text can't be compared, so NVD's range up to 5.41 applies.
 - **There's no version to compare,** such as a git commit or "n/a".
 
-Version matches appear as `Unpatched` unless the SBOM supplies a status. See [How Trowl reads each format](../sbom/#how-trowl-reads-each-format).
+Version matches appear as `Affected` unless the SBOM or a [VEX file](#vex-files) supplies a status. See [How Trowl reads each format](../sbom/#how-trowl-reads-each-format).
 
 ## Kernel CVEs
 
@@ -247,7 +247,7 @@ When config enables a file, uncertain kernel or module linkage is kept as Compil
 
 ## VEX assessment
 
-Trowl assigns VEX only to kernel CVEs. Userland CVEs keep their SBOM status or `Unpatched` from version matching.
+Trowl assigns VEX only to kernel CVEs. Userland CVEs keep their SBOM or VEX file status, or `Affected` from version matching.
 
 ### CVE verdicts
 
@@ -257,8 +257,8 @@ The first matching row applies. For `Not affected`, the second line gives the Op
 
 | First Match | Verdict |
 | --- | --- |
-| Any `Compiled` | `Unpatched` |
-| Any `Unknown` | `Needs review` unless the SBOM already says `Unpatched` |
+| Any `Compiled` | `Affected` |
+| Any `Unknown` | `Needs review` unless the SBOM already says `Affected` |
 | Any `Module not shipped` | `Not affected`<br/>`component_not_present` |
 | All `Not compiled` | `Not affected`<br/>`vulnerable_code_not_present` |
 
@@ -266,11 +266,11 @@ The first matching row applies. For `Not affected`, the second line gives the Op
 
 CVEs with no listed files or only skipped paths keep their status without a new verdict.
 
-Yocto's `sbom-cve-check` may mark a CVE Ignored when its files are absent from the build. If the version is affected but exclusion cannot be confirmed, Trowl uses Needs review because the files may have moved or been renamed. These cases appear under [SBOM disagreements](#sbom-disagreements).
+Yocto's `sbom-cve-check` may mark a CVE Ignored when its files are absent from the build. If the version is affected but exclusion cannot be confirmed, Trowl uses Needs review because the files may have moved or been renamed. These cases appear under [Disagreements](#disagreements).
 
-### SBOM disagreements
+### Disagreements<span id="sbom-disagreements"></span>
 
-![CVE table filtered to SBOM disagreements](../../../assets/screens/cves-disagreements.png)
+![CVE table filtered to disagreements](../../../assets/screens/cves-disagreements.png)
 
 Existing VEX statuses are handled as follows, with examples from a Yocto `sbom-cve-check` SPDX 3.0.1 SBOM. The same rules apply to CycloneDX.
 
@@ -280,11 +280,76 @@ Existing VEX statuses are handled as follows, with examples from a Yocto `sbom-c
 | --- | --- | --- |
 | `Fixed` | Keeps it unchanged, compiled code may already contain the fix. | None. Fixed is never changed |
 | `Not affected` | Recheck only config exclusions for affected versions. These use the `not-applicable-config` status note in Yocto SPDX 3.0 from `sbom-cve-check` or the `code_not_present` justification in CycloneDX. Otherwise keep the status. | Becomes <span class="st bad">Affected</span> if the code is compiled, or <span class="st warn">Needs review</span> if the version is in range but the affected files aren't in the tree (e.g. because they were renamed) |
-| `Unpatched`<br/>`Under investigation`<br/>`Unknown` | Checks the code and applies the verdict above. | `Unpatched` becomes <span class="st ok">Not affected</span>, for example when a module isn't shipped |
+| `Affected`<br/>`Under investigation`<br/>`Unknown` | Checks the code and applies the verdict above. | `Affected` becomes <span class="st ok">Not affected</span>, for example when a module isn't shipped |
 
 </div>
 
 
+A [VEX file](#vex-files) works differently. Its status stays and Trowl only flags the disagreement, unless `--override` is passed.
+
 ### Where the verdicts go
 
-Verdicts appear in the dashboard and `report.json` with their status and justification in OpenVEX terms. A standalone VEX document is not written.
+Verdicts appear in the dashboard, in `report.json` and in `openvex.json`, which every scan writes beside the report. See [OpenVEX output](../../reference/report/#openvex-output).
+
+## VEX files
+
+Pass your own triage, or a supplier's statements, with `--vex`. Trowl reads OpenVEX (v0.2.0 and the older v0.0.x) and CycloneDX VEX JSON.
+
+```sh
+trowl scan image.rootfs.ext4 --sbom image.spdx.json --kernel-tree linux --vex triage.openvex.json -o report
+```
+
+Each statement sets the status of a CVE that Trowl found on a component. A statement never adds a CVE. An OpenVEX file works with or without `--sbom`. A CycloneDX VEX file names components by BOM-Link, so it needs its SBOM. See [Separate VEX files](../sbom/#separate-vex-files).
+
+### Linking statements to components
+
+Trowl links an OpenVEX product to a component by the first identifier that matches.
+
+<div style={{ overflowX: 'auto' }}>
+
+| Order | Identifier | Matches when |
+| --- | --- | --- |
+| 1 | SBOM ID | The product's `@id` is an SPDX element ID or a CycloneDX BOM-Link in the SBOM |
+| 2 | PURL | Type, namespace, name and version agree. Qualifiers are ignored, and a PURL without a version matches every version |
+| 3 | CPE | Vendor, product and version agree. A `*` matches anything |
+| 4 | Name and version | The name and version from a PURL, a CPE or `name@version` equal the component's. Without an SBOM, Trowl drops the epoch and packaging revision first |
+
+</div>
+
+A product with `subcomponents` is the image, so Trowl matches only its subcomponents. This is how Grype and Trivy write statements for an image. A statement on a Yocto binary package also covers the recipe that carries its CVEs.
+
+When several statements cover the same CVE on a component, the newest one wins. The scan output counts statements for CVEs Trowl didn't find and for components that aren't in the image. A file where no statement names a component in the image stops the scan.
+
+### Precedence
+
+The first source in this table that covers a CVE sets its status.
+
+<div style={{ overflowX: 'auto' }}>
+
+| Source | Wins over |
+| --- | --- |
+| VEX file (`--vex`) | The SBOM's own VEX, Trowl's kernel verdict and version matching |
+| Trowl's kernel verdict (`--kernel-tree`) | The SBOM's own VEX and version matching |
+| The SBOM's own VEX | Version matching |
+| Version matching | Nothing. It gives `Affected` |
+
+</div>
+
+When Trowl's kernel verdict contradicts a VEX file, the file's status stays and the row gets a yellow <code class="mark warn">≠</code>. The CVE overlay shows Trowl's verdict and the files behind it. Trowl only contradicts a statement about kernel code being built:
+
+- `affected`, when Trowl finds the code not compiled or its module not shipped
+- `not_affected` with `vulnerable_code_not_present` or `component_not_present`, when Trowl finds the code compiled
+
+Other statements, such as `not_affected` with `inline_mitigations_already_exist`, make claims Trowl doesn't check.
+
+No standard sets the order between VEX inside an SBOM and a separate VEX file. Trowl treats the file as the more deliberate decision, the way Trivy and Grype let a VEX file override their own findings.
+
+### Letting Trowl's kernel check win<span id="override"></span>
+
+With `--override`, Trowl's kernel verdict replaces a VEX file's status wherever the two disagree as described above. The row shows Trowl's verdict first and the file's status below it.
+
+```sh
+trowl scan image.rootfs.ext4 --sbom bom.json --kernel-tree linux --vex vex.json --override -o report
+```
+
+Use it for VEX that the build generates rather than a person, such as the cve-check results Yocto's `meta-cyclonedx` writes. Userland CVEs always keep the file's status, because a version match can't see a patch that was backported without a version change.

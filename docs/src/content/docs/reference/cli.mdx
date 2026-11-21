@@ -11,13 +11,14 @@ sidebar:
 trowl scan [options] IMAGE
 ```
 
-Scans an image and writes `index.html` and `report.json` to the output folder.
+Scans an image and writes `index.html`, `report.json` and `openvex.json` to the output folder.
 
 | Option | Description |
 | --- | --- |
 | `-o`, `--output DIR` | Output folder. Defaults to `trowl-report` |
 | `--sbom FILE` | SPDX 3.0 JSON-LD or CycloneDX JSON. SPDX 2.2 accepts JSON, tar archives such as `IMAGE.spdx.tar.zst` or a document folder |
-| `--vex FILE` | Separate CycloneDX VEX JSON for `--sbom` |
+| `--vex FILE` | OpenVEX file, or a separate CycloneDX VEX JSON for `--sbom`. Its statuses override the SBOM's and Trowl's kernel verdicts. See [VEX files](../../features/cves-vex/#vex-files) |
+| `--override` | With `--vex`, Trowl's kernel verdicts replace the file's statuses where they disagree. Userland CVEs keep the file's status. See [Letting Trowl's kernel check win](../../features/cves-vex/#override) |
 | `--kernel-config FILE` | Fallback kernel `.config` when the image has none |
 | `--kernel-tree DIR` | Source tree matching the image's kernel commit and patches. Enables [kernel VEX](../../features/cves-vex/) |
 | `--kernel-policy FILE` | YAML to accept known failures or add config checks. See [Team policy](../../features/hardening/#team-policy) |

@@ -46,17 +46,17 @@ Each VEX relationship type gets mapped to a Trowl status in the report.
 | --- | --- |
 | `security_VexFixedVulnAssessmentRelationship` | Fixed |
 | `security_VexNotAffectedVulnAssessmentRelationship` | Not affected |
-| `security_VexAffectedVulnAssessmentRelationship` | Unpatched |
+| `security_VexAffectedVulnAssessmentRelationship` | Affected |
 | `security_VexUnderInvestigationVulnAssessmentRelationship` | Under investigation |
 
 :::note
-A `security_Vulnerability` with no VEX relationship gets Unknown, or Unpatched when its version is in range.
+A `security_Vulnerability` with no VEX relationship gets Unknown, or Affected when its version is in range.
 :::
 
 ### SPDX 2.2
 Tested with Yocto Scarthgap (`create-spdx-2.2`), which writes a document for each recipe and package, bundled as `IMAGE.spdx.tar.zst`.
 
-These documents do not list unpatched CVEs. Trowl finds those through version matching.
+These documents only list fixed CVEs. Trowl finds the others through version matching.
 
 | Element | Trowl uses it for |
 | --- | --- |
@@ -73,7 +73,7 @@ SPDX 2.2 has no VEX, so the patched list is the only status Trowl takes from it.
 | --- | --- |
 | `CVEs fixed:` in the recipe's `sourceInfo` | Fixed |
 
-Userland CVEs found by version match are marked as Unpatched, while kernel CVEs get VEX with `--kernel-tree`.
+Userland CVEs found by version match are marked as Affected, while kernel CVEs get VEX with `--kernel-tree`.
 
 ### CycloneDX
 
@@ -96,19 +96,21 @@ Trowl maps each `analysis.state` whether it comes from the SBOM or a separate VE
 | --- | --- |
 | `resolved` `resolved_with_pedigree` | Fixed |
 | `not_affected` `false_positive` | Not affected |
-| `exploitable` | Unpatched |
+| `exploitable` | Affected |
 | `in_triage` | Under investigation |
 
 :::note
-A `vulnerabilities` entry with no `analysis` gets Unknown, or Unpatched when its version is in range.
+A `vulnerabilities` entry with no `analysis` gets Unknown, or Affected when its version is in range.
 :::
 
 #### Separate VEX files
 
-Pass separate CycloneDX JSON VEX files (e.g. Yocto's `meta-cyclonedx`) via `--vex`.
+Pass separate CycloneDX JSON VEX files (e.g. Yocto's `meta-cyclonedx`) via `--vex`. Like any [VEX file](../cves-vex/#vex-files), its statuses override the SBOM's and Trowl's kernel verdicts.
+
+`meta-cyclonedx` writes the build's cve-check results to this file. Add `--override` so Trowl's kernel check can still clear kernel CVEs whose code isn't built.
 
 ```sh
-trowl scan image.rootfs.ext4 --sbom bom.json --vex vex.json -o report
+trowl scan image.rootfs.ext4 --sbom bom.json --vex vex.json --kernel-tree linux --override -o report
 ```
 
 ##### SBOM linking
@@ -201,9 +203,9 @@ Trowl uses the SBOM's CVE information and VEX statuses, then adds its own findin
 
 - **CVE matching.** Trowl matches CVEs to the SBOM's recipes, or to its packages if there are no recipes. See [Matching](../cves-vex/#matching).
 - **Additional CVEs.** Version matching finds CVEs the SBOM doesn't list, often published after the build. A <code class="mark">*</code> after the CVE ID marks these findings.
-- **Statuses for CVEs the SBOM leaves blank.** When the SBOM lists a CVE without a status and its version is in range, Trowl marks it Unpatched without the <code class="mark">*</code>. The detail panel shows Unknown from the SBOM under Trowl's Unpatched.
-- **Shipping status.** Presence checks set the Shipped column. Unpatched CVEs on packages that don't ship are counted separately.
-- **Kernel verdicts.** With `--kernel-tree`, Trowl re-checks the SBOM's kernel CVE statuses against the config. A differing verdict adds a yellow <code class="mark warn">≠</code> to the status and includes the CVE in the [SBOM disagreements](../cves-vex/#sbom-disagreements) filter.
+- **Statuses for CVEs the SBOM leaves blank.** When the SBOM lists a CVE without a status and its version is in range, Trowl marks it Affected without the <code class="mark">*</code>. The detail panel shows Unknown from the SBOM under Trowl's Affected.
+- **Shipping status.** Presence checks set the Shipped column. Affected CVEs on packages that don't ship are counted separately.
+- **Kernel verdicts.** With `--kernel-tree`, Trowl re-checks the SBOM's kernel CVE statuses against the config. A differing verdict adds a yellow <code class="mark warn">≠</code> to the status and includes the CVE in the [Disagreements](../cves-vex/#disagreements) filter.
 - **Name-only matches.** If the SBOM's CPE has no vendor, the match relies on the product name alone and may refer to another project. The CVE ID appears in yellow, like <code class="warn">CVE-2026-12345</code>.
 - **Kernel version.** The scan stops if the SBOM's kernel release doesn't match `/lib/modules` in the image. The SBOM probably belongs to a different build.
 

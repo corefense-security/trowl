@@ -1,11 +1,11 @@
 ---
 title: Report output
-description: JSON reports, static HTML dashboards and upcoming OpenVEX export.
+description: JSON reports, static HTML dashboards and OpenVEX documents.
 sidebar:
   order: 3
 ---
 
-Each scan writes a JSON report and a static HTML dashboard to the output folder. OpenVEX export is coming soon. The output location depends on how you run Trowl:
+Each scan writes a JSON report, a static HTML dashboard and an OpenVEX document to the output folder. The output location depends on how you run Trowl:
 
 <div style={{ overflowX: 'auto' }}>
 
@@ -23,8 +23,7 @@ Each scan writes a JSON report and a static HTML dashboard to the output folder.
 | --- | --- |
 | JSON | `report.json` with scan results |
 | Static HTML | `index.html` with the dashboard in one file |
-| OpenVEX | Coming soon |
-
+| OpenVEX | `openvex.json` with a VEX statement for each CVE on a shipped component |
 
 
 ## Static HTML dashboard
@@ -54,6 +53,24 @@ The top-level keys are:
 | `fstab` | Mount entries and missing flags |
 | `kernel` | Config source, version, arch, baseline results, policy and modules |
 | `sbom` | Components, presence status and the dependency graph. `null` without `--sbom` |
-| `cves` | CVE rows with status, CVSS, KEV, EPSS, links and kernel assessment |
+| `cves` | CVE rows with status, CVSS, KEV, EPSS, links, kernel assessment and any VEX file statement |
 | `overview` | The AI summary if a model ran |
 
+## OpenVEX output
+
+`openvex.json` is an OpenVEX v0.2.0 document that Trivy, Grype and VulnScout can read. It holds one statement for each CVE on a component that ships in the image. The dashboard's CVE page has a download link for it.
+
+Each statement names the component by its PURL, or by its CPE when it has no PURL. A component with neither is left out, and the report counts it under `cves.sources.openvex.unnamed`. Without an SBOM this applies to most package database entries, because Trowl only makes up a CPE from their names.
+
+<div style={{ overflowX: 'auto' }}>
+
+| Trowl status | OpenVEX status | Also written |
+| --- | --- | --- |
+| Affected | `affected` | `action_statement` with the fixed version when the CVE record gives one |
+| Not affected | `not_affected` | `justification` from Trowl's kernel check or the SBOM's note, otherwise an `impact_statement` |
+| Fixed | `fixed` | The SBOM's note in `status_notes` |
+| Needs review<br/>Under investigation<br/>Unknown | `under_investigation` | Trowl's reason or the SBOM's note in `status_notes` |
+
+</div>
+
+A CVE covered by a [VEX file](../../features/cves-vex/#vex-files) keeps that file's statement as written. With `--override`, a statement that Trowl's kernel check replaced gets Trowl's status and a `status_notes` line that says what the file said.
