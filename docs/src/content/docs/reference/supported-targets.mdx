@@ -28,6 +28,7 @@ Trowl extracts all supported disk partitions. The first with `/etc` and either `
 | --- | --- |
 | Disk image (`.wic`) | MBR or GPT partition table |
 | tar | ustar archives |
+| cpio | newc archives, such as Yocto's `cpio` images and initramfs. Device nodes are skipped |
 | Unpacked directory | Scanned in place |
 
 </div>
@@ -45,7 +46,7 @@ Trowl extracts all supported disk partitions. The first with `/etc` and either `
 
 ## Compression
 
-Trowl supports various compressed images and filesystem archives such as `zstd`, `xz`, `gzip` and `bzip2`, and handles de-compression automatically.
+Images compressed with `zstd`, `xz`, `gzip`, `bzip2` or `lz4` are decompressed automatically. Trowl detects the compression from the file contents, not the extension. This includes Yocto's `cpio.lz4`.
 
 ## SBOMs
 

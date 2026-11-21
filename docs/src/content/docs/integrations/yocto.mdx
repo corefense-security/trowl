@@ -44,7 +44,7 @@ Reports default to `trowl/<image>/` in the build directory, outside `TMPDIR`.
 
 ## Toolchain and dependencies
 
-Trowl is built from the layer's checkout. Recipes pin Go and Node because Scarthgap ships an older Go and neither release ships Node. Go modules and npm packages are downloaded directly and checked against `go.sum` and `package-lock.json`.
+The layer builds the Trowl commit pinned in its recipe (`SRCREV`), whichever branch of the clone is checked out. The recipe pins Go and Node because Scarthgap ships an older Go and neither release ships Node. Go modules and npm packages are downloaded directly and checked against `go.sum` and `package-lock.json`.
 
 ## Input discovery
 
@@ -68,7 +68,7 @@ Image and SBOM filenames use `IMAGE_LINK_NAME` plus a suffix. Kernel paths come 
 | --- | --- | --- |
 | Image | The first type in `TROWL_FSTYPES` that the build also lists in `IMAGE_FSTYPES`. Above, that is `ext4` | Scan skipped |
 | SBOM | The first suffix in `TROWL_SBOM_NAMES` that exists: `.sbom-cve-check.spdx.json`, then `.spdx.json` (SPDX 3.0), then `.spdx.tar.zst` (SPDX 2.2) | Image scanned without an SBOM |
-| Kernel config | `TROWL_KERNEL_CONFIG` if set, else `.config` in `STAGING_KERNEL_BUILDDIR` | Config from the image, if available |
+| Kernel config | `TROWL_KERNEL_CONFIG` if set, else `.config` in `STAGING_KERNEL_BUILDDIR`. Used only when the image carries no config | Only the image's config, if any |
 | Kernel source | `TROWL_KERNEL_TREE` if set, else `STAGING_KERNEL_DIR` | Kernel CVEs remain version matches |
 
 `IMAGE_FSTYPES` defines the formats Yocto builds. `TROWL_FSTYPES` sets Trowl's preference order for supported formats and can be overridden in `local.conf`.
@@ -100,7 +100,7 @@ Set these in `local.conf`.
 | `TROWL_FSTYPES` | ext4, squashfs, tar, cpio and wic variants | Image types the layer looks for, in order |
 | `TROWL_SBOM_NAMES` | see above | SBOM names the layer looks for, in order |
 | `TROWL_KERNEL_TREE` | empty | Kernel source tree used instead of `STAGING_KERNEL_DIR` |
-| `TROWL_KERNEL_CONFIG` | empty | Kernel `.config` used instead of the one in `STAGING_KERNEL_BUILDDIR` |
+| `TROWL_KERNEL_CONFIG` | empty | Kernel `.config` used instead of the one in `STAGING_KERNEL_BUILDDIR`, when the image carries none |
 | `TROWL_LLM` | `0` | `1` adds the Overview summary |
 | `TROWL_LLM_MODEL` | `qwen3.5-4b` | `qwen3-4b`, `qwen3.5-4b` or `qwen3.5-9b` |
 
