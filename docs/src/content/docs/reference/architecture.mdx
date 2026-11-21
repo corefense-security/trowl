@@ -15,9 +15,9 @@ Trowl unpacks and analyses the image locally. It fetches and caches external dat
 
 ## Analysis
 
-Trowl checks ELF hardening, kernel config, mounts and secrets. Components come from the SBOM or a package database. Without either, it uses supported binary fingerprints.
+Trowl unpacks the image into a root filesystem, then parses the other inputs. Components come from the SBOM, a package database or supported binary fingerprints, in that order. With `--kernel-tree`, the [kcond fork](https://github.com/corefense-security/kcond) reads the kernel's build rules.
 
-SBOM presence checks compare declared files with the image. For kernel VEX, the [kcond fork](https://github.com/corefense-security/kcond) reads build rules from the matching source. Trowl checks those rules against the config and shipped modules.
+CVE analysis matches component versions, checks kernel CVEs against the config and shipped modules, applies the [`--vex` file](../../features/cves-vex/#vex-files) and adds CISA KEV and EPSS. Image checks cover ELF hardening, kernel config, mounts and secrets, and compare the SBOM's declared files with the image.
 
 ## Network and cache<span id="cache"></span>
 

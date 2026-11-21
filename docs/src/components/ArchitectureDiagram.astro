@@ -1,110 +1,129 @@
 ---
 // Trowl's architecture, left to right: inputs, then parse, analyse and report inside Trowl, with the
 // cached external data above the stages that read it. Facts here follow internal/scan/scan.go,
-// internal/unpack, internal/sbom, internal/inventory and ui/src.
-const TOP = 116; // top of the stage cards
-const H = 302; // stage card height
-const parse = { x: 160, w: 200 };
-const analyse = { x: 380, w: 308 };
-const report = { x: 708, w: 172 };
+// internal/unpack, internal/sbom, internal/inventory, internal/openvex, internal/llm and ui/src.
+const TOP = 172; // top of the stage cards
+const H = 350; // stage card height
+const parse = { x: 160, w: 214 };
+const analyse = { x: 392, w: 300 };
+const report = { x: 708, w: 172, h: 280, y: 35 }; // as tall as its contents, centred on the stages
+// Unpack turns the image into a rootfs. Parse then reads the VEX file, the components from the first
+// source found and the kernel tree's build rules, which kcond reads. The input boxes already name each
+// input, so a mini only lists formats. Parse mini positions are relative to its card.
+const unpack = { h: 88 };
+const parseCard = { y: 102 };
 const parsers = [
-	{ y: 66, title: 'Image', sub: 'tar · ext4 · squashfs · disk' },
-	{ y: 146, title: 'SBOM', sub: 'SPDX 2/3 · CycloneDX' },
-	{ y: 198, title: 'Package database', sub: 'opkg · dpkg · rpm' },
-	{ y: 250, title: 'Fingerprints', sub: 'versions in ELF files' },
+	{ y: 54, label: 'OpenVEX, CycloneDX' },
+	{ y: 108, label: 'SPDX 2/3, CycloneDX' },
+	{ y: 140, label: 'opkg, dpkg, rpm' },
+	{ y: 172, label: 'ELF fingerprints' },
+	{ y: 212, label: 'Kbuild, .config' },
 ];
-const cardW = (analyse.w - 40) / 2;
-const checks = [
-	{ x: 14, y: 112, title: 'Image checks', sub: ['hardening and', 'secrets'] },
-	{ x: 26 + cardW, y: 112, title: 'SBOM presence', sub: ['declared files', 'vs the image'] },
-	{ x: 14, y: 206, title: 'CVE matching', sub: ['CNA ranges,', 'then NVD'] },
-	{ x: 26 + cardW, y: 206, title: 'Kernel VEX', sub: ['config gates and', 'modules, via kcond'] },
+// Analyse: one card per analysis. CVE analysis sits on top, under the feeds it reads.
+const analyses = [
+	{ y: 66, title: 'CVE analysis', sub: 'version match, kernel VEX, KEV, EPSS' },
+	{ y: 130, title: 'SBOM analysis', sub: 'declared files vs the image' },
+	{ y: 194, title: 'Hardening', sub: 'ELF flags, kernel config, mounts' },
+	{ y: 258, title: 'Secrets', sub: 'private keys, API tokens' },
 ];
+const cve = analyses[0];
 const outputs = [
 	{ y: 166, title: 'report.json', sub: 'every finding as JSON' },
-	{ y: 222, title: 'OpenVEX', sub: 'planned', planned: true },
+	{ y: 222, title: 'openvex.json', sub: 'CVE statuses as VEX' },
 ];
-const feeds = [
-	{ cx: 470, w: 164, label: 'CVE records · NVD + CNA' },
-	{ cx: 620, w: 126, label: 'KEV · EPSS · links' },
-	{ cx: 794, w: 110, label: 'Model weights' },
-];
+// The feeds go to the CVE engine, each named with the format it is fetched in. The model only reaches
+// the local LLM, which writes the summary.
+const cveX = analyse.x + analyse.w / 2;
+const llm = { x: 742, y: 134, w: 104, h: 24 };
+const cache = { x: 372, w: 508, y: 76, h: 22 }; // the feeds and the model land here before Trowl reads them
+const feedW = 112;
+const cveFeeds = ['NVD (JSON)', 'CISA KEV (JSON)', 'EPSS (CSV)'].map((label, i) => ({ label, x: cveX - (feedW * 3 + 12) / 2 + i * (feedW + 6) }));
+const model = { label: 'Hugging Face (GGUF)', cx: llm.x + llm.w / 2, w: 140 };
 const inputs = [
-	{ y: 179, title: 'Image', sub: 'required' },
-	{ y: 254, title: 'SBOM', sub: 'optional', optional: true },
-	{ y: 366, title: 'Kernel tree', sub: '+ config · optional', optional: true },
+	{ y: TOP + 42, title: 'Image', sub: 'required' },
+	{ y: TOP + 148, title: '--vex', flag: true, sub: 'optional', optional: true },
+	{ y: TOP + 202, title: '--sbom', flag: true, sub: 'optional', optional: true },
+	{ y: TOP + 306, title: '--kernel-tree', flag: true, sub: '+ optional .config', optional: true },
 ];
-const kernelX = analyse.x + 26 + cardW + cardW / 2;
 ---
 <figure class="arch">
 	<div class="scroll" role="region" aria-label="Trowl architecture diagram" tabindex="0">
-		<svg viewBox="0 0 900 448" role="img" aria-labelledby="arch-title arch-desc">
+		<svg viewBox="0 0 900 542" role="img" aria-labelledby="arch-title arch-desc">
 			<title id="arch-title">Trowl architecture</title>
-			<desc id="arch-desc">The image, an optional SBOM and an optional kernel tree with config go into Trowl, which runs locally. Trowl parses the image (tar, ext4, squashfs or disk) and takes components from the first source found: the SBOM (SPDX 2, SPDX 3 or CycloneDX), the package database (opkg, dpkg or rpm) or fingerprints of versions in ELF files. It then analyses the image: image checks for hardening and secrets, SBOM presence of declared files, CVE matching against CNA ranges then NVD, and kernel VEX from config gates and modules through kcond. CISA KEV, EPSS and advisory links are added to each CVE. The report is index.html, a dashboard of React and Cytoscape views built by Vite into one static file with the report data embedded, plus report.json and, later, OpenVEX, with a summary by a local LLM. CVE records, KEV, EPSS, link results and model weights are fetched once and cached in ~/.cache/trowl.</desc>
+			<desc id="arch-desc">The image, an optional VEX file, an optional SBOM and an optional kernel tree with config go into Trowl, which runs locally. Trowl unpacks the image (ext4, squashfs, cpio or disk) into a root filesystem. It parses the VEX file (OpenVEX or CycloneDX) and the kernel tree's Kbuild files with its .config, and takes components from the first source found: the SBOM (SPDX 2, SPDX 3 or CycloneDX), the package database (opkg, dpkg or rpm) or fingerprints of versions in ELF files. It then analyses the image. CVE analysis matches versions, checks kernel CVEs against the kernel tree, applies the VEX file and adds CISA KEV and EPSS. SBOM analysis compares the SBOM's declared files with the image. Hardening covers ELF flags, the kernel config and mounts. Secrets finds private keys and API tokens. The report is index.html, a dashboard built by Vite into one static file with the report data embedded, plus report.json and openvex.json with each CVE's status. An optional local LLM, using a model from Hugging Face, writes a short summary into the dashboard. NVD (JSON), CISA KEV (JSON), EPSS (CSV) and the Hugging Face model (GGUF) are fetched when stale and cached in ~/.cache/trowl.</desc>
 
 			<!-- External data, cached -->
 			<rect class="band" x="144" y="4" width="752" height="48" rx="10" />
 			<text class="kicker" x="160" y="25">External data</text>
-			<text class="sub" x="160" y="41">cached in ~/.cache/trowl</text>
-			{feeds.map((f) => (
+			<text class="sub" x="160" y="41">fetched when stale</text>
+			{cveFeeds.map((f) => (
 				<g>
-					<rect class="feed" x={f.cx - f.w / 2} y="15" width={f.w} height="26" rx="13" />
-					<text class="feedtext" x={f.cx} y="32" text-anchor="middle">{f.label}</text>
-					<path class="dash" d={`M${f.cx} 43V${TOP - 4}m-4-5 4 5 4-5`} />
+					<rect class="feed" x={f.x} y="15" width={feedW} height="26" rx="13" />
+					<text class="feedtext" x={f.x + feedW / 2} y="32" text-anchor="middle">{f.label}</text>
 				</g>
 			))}
+			<rect class="feed optional" x={model.cx - model.w / 2} y="15" width={model.w} height="26" rx="13" />
+			<text class="feedtext" x={model.cx} y="32" text-anchor="middle">{model.label}</text>
+
+			<!-- Local cache, between the sources and the stages that read them -->
+			<path class="cache" d={`M${cache.x} ${cache.y}h${cache.w}v${cache.h}c0 3-${cache.w / 4} 5-${cache.w / 2} 5s-${cache.w / 2}-2-${cache.w / 2}-5v-${cache.h}z`} />
+			<ellipse class="cache" cx={cache.x + cache.w / 2} cy={cache.y} rx={cache.w / 2} ry="4" />
+			<text class="tag" x={cache.x + 14} y={cache.y + 16}>Cache</text>
+			<text class="cachetext" x={cache.x + 62} y={cache.y + 16}>~/.cache/trowl</text>
 
 			<!-- Trowl, local -->
-			<rect class="host" x="144" y="78" width="752" height="364" rx="12" />
-			<text class="kicker" x="160" y="100">Trowl · runs locally</text>
+			<rect class="host" x="144" y="122" width="752" height="414" rx="12" />
+			<rect class="llm" x={llm.x} y={llm.y} width={llm.w} height={llm.h} rx="7" />
+			<text class="item" x={llm.x + llm.w / 2} y={llm.y + 16} text-anchor="middle">Local LLM</text>
 
 			<!-- Inputs -->
 			{inputs.map((i) => (
 				<g>
-					<rect class:list={['input', { optional: i.optional }]} x="0" y={i.y} width="126" height="52" rx="8" />
-					<text class="title" x="14" y={i.y + 23}>{i.title}</text>
-					<text class="sub" x="14" y={i.y + 40}>{i.sub}</text>
+					<rect class:list={['input', { optional: i.optional }]} x="0" y={i.y} width="126" height="44" rx="8" />
+					<text class:list={['title', { flag: i.flag }]} x="14" y={i.y + 19}>{i.title}</text>
+					<text class="sub" x="14" y={i.y + 35}>{i.sub}</text>
 				</g>
 			))}
 
-			<!-- 01 Parse -->
+			<!-- 01 Unpack and 02 Parse share the first column -->
 			<g transform={`translate(${parse.x} ${TOP})`}>
-				<rect class="stage" width={parse.w} height={H} rx="10" />
-				<text class="num" x="14" y="24">01</text>
-				<text class="title" x="14" y="44">Parse</text>
-				<line class="rule" x1="14" x2={parse.w - 14} y1="56" y2="56" />
-				<text class="tag" x="14" y="136">Components, first found</text>
+				<rect class="stage" width={parse.w} height={unpack.h} rx="10" />
+				<text class="num" x="14" y="20">01</text>
+				<text class="title" x="14" y="38">Unpack</text>
+				<rect class="mini" x="12" y="50" width={parse.w - 24} height="28" rx="7" />
+				<text class="item" x="24" y="69">ext4, squashfs, cpio, disk</text>
+			</g>
+			<g transform={`translate(${parse.x} ${TOP + parseCard.y})`}>
+				<rect class="stage" width={parse.w} height={H - parseCard.y} rx="10" />
+				<text class="num" x="14" y="20">02</text>
+				<text class="title" x="14" y="38">Parse</text>
 				{parsers.map((p) => (
 					<g>
-						<rect class="mini" x="12" y={p.y} width={parse.w - 24} height="44" rx="7" />
-						<text class="item" x="24" y={p.y + 19}>{p.title}</text>
-						<text class="sub" x="24" y={p.y + 35}>{p.sub}</text>
+						<rect class="mini" x="12" y={p.y} width={parse.w - 24} height="28" rx="7" />
+						<text class="item" x="24" y={p.y + 19}>{p.label}</text>
 					</g>
 				))}
 			</g>
 
-			<!-- 02 Analyse -->
+			<!-- 03 Analyse -->
 			<g transform={`translate(${analyse.x} ${TOP})`}>
 				<rect class="stage main" width={analyse.w} height={H} rx="10" />
-				<text class="num" x="14" y="24">02</text>
+				<text class="num" x="14" y="24">03</text>
 				<text class="title big" x="14" y="45">Analyse</text>
 				<line class="rule" x1="14" x2={analyse.w - 14} y1="56" y2="56" />
-				<rect class="enrich" x="14" y="66" width={analyse.w - 28} height="34" rx="7" />
-				<text class="tag" x="26" y="87">ENRICH</text>
-				<text class="enrichtext" x="78" y="87">CISA KEV · EPSS · advisory links</text>
-				{checks.map((c) => (
+				{analyses.map((a) => (
 					<g>
-						<rect class="card" x={c.x} y={c.y} width={cardW} height="82" rx="8" />
-						<text class="item strong" x={c.x + 12} y={c.y + 24}>{c.title}</text>
-						{c.sub.map((s, j) => <text class="sub" x={c.x + 12} y={c.y + 44 + j * 15}>{s}</text>)}
+						<rect class="card" x="14" y={a.y} width={analyse.w - 28} height="54" rx="8" />
+						<text class="item strong" x="26" y={a.y + 22}>{a.title}</text>
+						<text class="sub" x="26" y={a.y + 40}>{a.sub}</text>
 					</g>
 				))}
 			</g>
 
-			<!-- 03 Report -->
-			<g transform={`translate(${report.x} ${TOP})`}>
-				<rect class="stage" width={report.w} height={H} rx="10" />
-				<text class="num" x="14" y="24">03</text>
+			<!-- 04 Report -->
+			<g transform={`translate(${report.x} ${TOP + report.y})`}>
+				<rect class="stage" width={report.w} height={report.h} rx="10" />
+				<text class="num" x="14" y="24">04</text>
 				<text class="title" x="14" y="44">Report</text>
 				<line class="rule" x1="14" x2={report.w - 14} y1="56" y2="56" />
 				<rect class="mini" x="12" y="66" width={report.w - 24} height="90" rx="7" />
@@ -114,24 +133,29 @@ const kernelX = analyse.x + 26 + cardW + cardW / 2;
 				<text class="sub" x="24" y="135">one file with the report</text>
 				{outputs.map((o) => (
 					<g>
-						<rect class:list={['mini', { planned: o.planned }]} x="12" y={o.y} width={report.w - 24} height="44" rx="7" />
+						<rect class="mini" x="12" y={o.y} width={report.w - 24} height="44" rx="7" />
 						<text class="mono" x="24" y={o.y + 19}>{o.title}</text>
 						<text class="sub" x="24" y={o.y + 35}>{o.sub}</text>
 					</g>
 				))}
-				<text class="sub" x="14" y="290">+ local LLM summary</text>
 			</g>
 
-			{[[parse.x + parse.w, analyse.x], [analyse.x + analyse.w, report.x]].map(([a, b]) => (
-				<path class="arrow" d={`M${a} 156H${b - 4}m-5-5 5 5-5 5`} />
+			<!-- Arrows, drawn over the stage edges -->
+			<!-- Unpack hands the rootfs to Parse and to Analyse. Parse hands its results to Analyse. -->
+			{[[parse.x + parse.w, analyse.x, TOP + 44], [parse.x + parse.w, analyse.x, TOP + parseCard.y + 124], [analyse.x + analyse.w, report.x, TOP + report.y + 40]].map(([a, b, y]) => (
+				<path class="arrow" d={`M${a} ${y}H${b - 4}m-5-5 5 5-5 5`} />
 			))}
-			<!-- Input arrows, drawn over the stage edges -->
-			<path class="arrow" d={`M126 205H${parse.x + 12 - 4}m-5-5 5 5-5 5`} />
-			<path class="arrow" d={`M126 280H${parse.x + 12 - 4}m-5-5 5 5-5 5`} />
-			<path class="arrow" d={`M126 392H136V432H${kernelX}V${TOP + 288 + 4}m-5 5 5-5 5 5`} />
+			<path class="arrow" d={`M${parse.x + parse.w / 2} ${TOP + unpack.h}V${TOP + parseCard.y - 4}m-5-5 5 5 5-5`} />
+			{[cveX, model.cx].map((x, i) => <path class:list={['dash', { optional: i === 1 }]} d={`M${x} 43V${cache.y - 6}m-4-5 4 5 4-5`} />)}
+			<path class="dash" d={`M${cveX} ${cache.y + cache.h + 5}V${TOP + cve.y - 4}m-4-5 4 5 4-5`} />
+			<path class="dash optional" d={`M${model.cx} ${cache.y + cache.h + 5}V${llm.y - 4}m-4-5 4 5 4-5`} />
+			<path class="dash optional" d={`M${llm.x + llm.w / 2} ${llm.y + llm.h}V${TOP + report.y + 66 - 4}m-4-5 4 5 4-5`} />
+			{inputs.map((i) => (
+				<path class="arrow" d={`M126 ${i.y + 22}H${parse.x + 12 - 4}m-5-5 5 5-5 5`} />
+			))}
 		</svg>
 	</div>
-	<figcaption>Analysis runs on your machine. Only CVE data, scores, link checks and model weights are fetched, then cached.</figcaption>
+	<figcaption>Analysis runs on your machine. Only the vulnerability feeds and the optional model are fetched, then cached. The model writes the dashboard's summary.</figcaption>
 </figure>
 
 <style>
@@ -143,17 +167,19 @@ const kernelX = analyse.x + 26 + cardW + cardW / 2;
 	.stage.main { stroke: color-mix(in srgb, var(--sl-color-accent) 70%, transparent); fill: color-mix(in srgb, var(--sl-color-accent) 7%, var(--sl-color-bg)); }
 	.input.optional { stroke-dasharray: 4 3; }
 	.mini { fill: color-mix(in srgb, var(--sl-color-white) 4%, transparent); }
-	.mini.planned { fill: none; stroke: var(--sl-color-gray-5); stroke-dasharray: 3 3; }
 	.card { fill: var(--sl-color-bg); stroke: color-mix(in srgb, var(--sl-color-accent) 35%, transparent); }
-	.enrich { fill: none; stroke: color-mix(in srgb, var(--sl-color-accent) 45%, transparent); stroke-dasharray: 3 3; }
-	.enrichtext { font-size: 11.5px; fill: var(--sl-color-gray-2); }
+	.llm { fill: var(--sl-color-bg); stroke: var(--sl-color-gray-4); stroke-dasharray: 4 3; }
 	.feed { fill: color-mix(in srgb, var(--sl-color-accent) 8%, transparent); stroke: color-mix(in srgb, var(--sl-color-accent) 45%, transparent); }
+	.feed.optional { stroke-dasharray: 4 3; }
+	.cache { fill: color-mix(in srgb, var(--sl-color-accent) 14%, var(--sl-color-bg)); stroke: color-mix(in srgb, var(--sl-color-accent) 70%, transparent); }
+	.cachetext { font-family: var(--sl-font-mono); font-size: 12px; font-weight: 600; fill: var(--sl-color-accent-high); }
 	.feedtext { font-family: var(--sl-font-mono); font-size: 11px; fill: var(--sl-color-accent-high); }
 	.kicker, .num, .tag { font-family: var(--sl-font-mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; fill: var(--sl-color-gray-3); }
 	.tag { font-size: 9.5px; }
 	.num { fill: var(--sl-color-accent-high); }
 	.title { font-size: 14px; font-weight: 600; fill: var(--sl-color-white); }
 	.title.big { font-size: 16px; }
+	.title.flag { font-family: var(--sl-font-mono); font-size: 13px; }
 	.item { font-size: 12.5px; fill: var(--sl-color-gray-1); }
 	.item.strong { font-size: 12.5px; font-weight: 600; fill: var(--sl-color-white); }
 	.sub { font-size: 11px; fill: var(--sl-color-gray-3); }
@@ -161,4 +187,5 @@ const kernelX = analyse.x + 26 + cardW + cardW / 2;
 	.rule { stroke: var(--sl-color-gray-6); }
 	.arrow, .dash { fill: none; stroke: var(--sl-color-gray-3); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
 	.dash { stroke: color-mix(in srgb, var(--sl-color-accent) 55%, transparent); stroke-dasharray: 3 3; }
+	.dash.optional { stroke: var(--sl-color-gray-4); }
 </style>
