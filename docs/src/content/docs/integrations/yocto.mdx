@@ -104,9 +104,9 @@ Set these in `local.conf`.
 | `TROWL_LLM` | `0` | `1` adds the Overview summary |
 | `TROWL_LLM_MODEL` | `qwen3.5-4b` | `qwen3-4b`, `qwen3.5-4b` or `qwen3.5-9b` |
 
-### LLM summary
+### Local AI summary
 
-The summary is off by default because the model is a 2.7 GB download. To turn it on, add this to `local.conf`.
+LLM inference is off by default. To enable AI-based scan summary, add this to `local.conf`.
 
 ```sh
 TROWL_LLM = "1"
@@ -116,7 +116,7 @@ The next `bitbake` also builds `llama-server` from llama.cpp and fetches the mod
 
 ### Offline builds
 
-Set `BB_NO_NETWORK = "1"` for offline scans. CVE feeds must already be cached in `~/.cache/trowl` from an online scan. See [Network and cache](../../reference/architecture/#offline-scans).
+Set `BB_NO_NETWORK = "1"` for offline scans. CVE feeds must already be cached in `~/.cache/trowl` from an online scan. See [Data fetching and caching](../../reference/architecture/#offline-scans).
 
 ## Troubleshooting
 

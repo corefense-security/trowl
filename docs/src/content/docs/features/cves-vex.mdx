@@ -7,7 +7,7 @@ sidebar:
 
 import KernelVexFlow from '../../../components/KernelVexFlow.astro';
 
-Trowl matches userland components and the kernel against CVE version ranges. For kernel CVEs, `--kernel-tree` also checks whether your build includes the affected code.
+Trowl matches userland components and the kernel against CVE version ranges. For kernel CVEs, `--kernel-tree` also checks whether your build includes the affected code, and applies VEX.
 
 ## Data sources
 
@@ -30,7 +30,7 @@ The detail panel links to NVD, [OSV](https://osv.dev/) and [cve.org](https://www
 
 Trowl caches downloaded data and link-check results, usually in `~/.cache/trowl`. Online scans refresh stale data and use an existing cached copy if a download fails. 
 
-See [Network and cache](../../reference/architecture/#network-and-cache) for details.
+See [Data fetching and caching](../../reference/architecture/#network-and-cache) for details.
 
 ## Userland CVEs
 
@@ -299,7 +299,7 @@ Pass your own triage, or a supplier's statements, with `--vex`. Trowl reads Open
 trowl scan image.rootfs.ext4 --sbom image.spdx.json --kernel-tree linux --vex triage.openvex.json -o report
 ```
 
-Each statement sets the status of a CVE that Trowl found on a component. A statement never adds a CVE. An OpenVEX file works with or without `--sbom`. A CycloneDX VEX file names components by BOM-Link, so it needs its SBOM. See [Separate VEX files](../sbom/#separate-vex-files).
+An OpenVEX file updates statuses for CVEs Trowl has already found. It does not add CVEs and works with or without --sbom. For CycloneDX VEX, see [Separate VEX files](../sbom/#separate-vex-files).
 
 ### Linking statements to components
 

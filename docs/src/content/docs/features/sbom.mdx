@@ -5,11 +5,7 @@ sidebar:
   order: 2
 ---
 
-Pass `--sbom` for SBOM analysis. Trowl draws the dependency graph, checks every package against the files in the image, and uses reads the component list for [CVE analysis](../cves-vex/).
-
-:::note
-Without an SBOM, Trowl still analyses CVEs but applies VEX only to Kernel CVEs. See [CVEs and VEX](../cves-vex).
-:::
+Pass `--sbom` for SBOM analysis. Trowl draws the dependency graph, checks every package against the files in the image, and reads the component list for [CVE analysis](../cves-vex).
 
 ## Supported formats
 
@@ -50,7 +46,7 @@ Each VEX relationship type gets mapped to a Trowl status in the report.
 | `security_VexUnderInvestigationVulnAssessmentRelationship` | Under investigation |
 
 :::note
-A `security_Vulnerability` with no VEX relationship gets Unknown, or Affected when its version is in range.
+A `security_Vulnerability` with no VEX relationship gets Unknown, or Affected (when version in range).
 :::
 
 ### SPDX 2.2
@@ -100,7 +96,7 @@ Trowl maps each `analysis.state` whether it comes from the SBOM or a separate VE
 | `in_triage` | Under investigation |
 
 :::note
-A `vulnerabilities` entry with no `analysis` gets Unknown, or Affected when its version is in range.
+A `vulnerabilities` entry with no `analysis` gets Unknown, or Affected when (version in range).
 :::
 
 #### Separate VEX files
@@ -167,8 +163,6 @@ What the graph shows depends on the format:
 | `SPDX 3.0` `SPDX 2.2` | Recipes as pills and binary packages as circles sized by file count | Dashed lines from each recipe to the packages it builds. Solid lines for runtime dependencies. |
 | `CycloneDX` | One node per component, since there are no recipes | The `dependencies` list |
 
-The dashboard UI toolbar shows the detected format and sets a layout (Layered, Radial or Force). Show switches between components, packages or both, and Status hides presence states. Large SBOMs start at component level, because drawing every package would be unreadable.
-
 **Table** lists the same nodes, relationships and metadata. Use it when the graph is too dense.
 
 ## Packages against files
@@ -179,8 +173,8 @@ Trowl checks each package’s declared files against the image by path and SHA-2
 
 | Status | Meaning |
 | --- | --- |
-| `In image` | Every declared file is present and its hash matches. |
-| `Changed` | Every file is present, but some were edited after the build. |
+| `In image` | Every declared file is present, or its hash matches. |
+| `Changed` | Every file is present, but their hashes don't match. |
 | `Partial` | Some declared files are missing. |
 | `Not in image` | None of the declared files are present. |
 | `No files declared` | The SBOM lists no files for the package, so there is nothing to compare. |
