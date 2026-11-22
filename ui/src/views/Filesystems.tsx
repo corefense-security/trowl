@@ -24,7 +24,7 @@ function mountOf(path: string, mounts: Mount[]): string {
 }
 
 function detail(f: Finding) {
-  const e = f.evidence as { encrypted?: boolean; preview?: string; sha256?: string };
+  const e = f.evidence as { encrypted?: boolean; sha256?: string };
   const parts = [];
   if (e.sha256) parts.push(<code key="h" title={`SHA-256 of the match: ${e.sha256}`}>{e.sha256.slice(0, 12)}…</code>);
   if (f.detail) parts.push(<span key="d" className="muted">{f.detail}</span>);

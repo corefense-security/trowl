@@ -158,4 +158,4 @@ Trowl scans every file up to 4 MiB for credentials. ELF binaries are skipped.
 | Cloud and SaaS tokens | AWS access key IDs, GitHub, GitLab and Slack tokens, and Google API keys. |
 | Keys in JSON | A `"private_key"` field holding a PEM key, as in cloud service account files. |
 
-The report keeps the first six characters and a SHA-256 of each match. The secret itself is never stored, and the hash lets you find the same secret across images.
+The report stores a `SHA-256` hash of each secret it reads, so the same secret can be identified across images. Secret values are never stored in the report.
