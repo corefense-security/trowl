@@ -1,2 +1,8 @@
-# No entries yet.
-[]
+- option: MODULES
+  expect: n
+  why: Allows kernel code to be added through loadable modules
+  ref: KSPP
+- option: MODULE_FORCE_LOAD
+  expect: n
+  why: Allows modules to load despite version or symbol mismatches
+  ref: KSPP

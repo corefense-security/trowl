@@ -1,0 +1,32 @@
+- option: STRICT_DEVMEM
+  expect: y
+  why: Restricts physical memory ranges accessible through /dev/mem
+  ref: KSPP
+- option: IO_STRICT_DEVMEM
+  expect: y
+  why: Restricts /dev/mem access to device memory already claimed by a driver
+  ref: KSPP
+- option: EFI_DISABLE_PCI_DMA
+  expect: y
+  why: Disables PCI DMA before the kernel configures its IOMMU
+  ref: KSPP
+- option: IOMMU_SUPPORT
+  expect: y
+  why: Enables device DMA isolation through an IOMMU
+  ref: KSPP
+- option: IOMMU_DEFAULT_DMA_STRICT
+  expect: y
+  why: Invalidates IOMMU mappings immediately when DMA buffers are released
+  ref: KSPP
+- option: IOMMU_DEFAULT_PASSTHROUGH
+  expect: n
+  why: Bypasses IOMMU translation for devices by default
+  ref: KSPP
+- option: HW_RANDOM_TPM
+  expect: y
+  why: Allows the TPM random number generator to contribute entropy
+  ref: KSPP
+- option: RESET_ATTACK_MITIGATION
+  expect: y
+  why: Requests that firmware clear RAM on reset
+  ref: KSPP

@@ -41,3 +41,44 @@
   expect: y
   why: Restricts ptrace to a process's own descendants by default
   ref: KSPP
+- option: HARDENED_USERCOPY_DEFAULT_ON
+  expect: y
+  since: '6.15'
+  why: Enables usercopy bounds checks by default
+  ref: KSPP
+- option: PROC_MEM_NO_FORCE
+  expect: y
+  why: Prevents /proc/pid/mem writes from bypassing read-only mappings
+  ref: KSPP
+- option: SECCOMP
+  expect: y
+  why: Allows processes to restrict their available system calls
+  ref: KSPP
+- option: SECCOMP_FILTER
+  expect: y
+  why: Allows BPF filters to restrict system calls and their arguments
+  ref: KSPP
+- option: SECURITY
+  expect: y
+  why: Enables the Linux Security Module framework
+  ref: KSPP
+- option: SECURITY_LANDLOCK
+  expect: y
+  why: Provides Landlock rules for applications to restrict their own access
+  ref: KSPP
+- option: SECURITY_LOCKDOWN_LSM
+  expect: y
+  why: Provides lockdown restrictions on access to kernel memory
+  ref: KSPP
+- option: SECURITY_LOCKDOWN_LSM_EARLY
+  expect: y
+  why: Initialises lockdown before the other security modules
+  ref: KSPP
+- option: LOCK_DOWN_KERNEL_FORCE_CONFIDENTIALITY
+  expect: y
+  why: Enforces lockdown restrictions on reading and modifying kernel memory
+  ref: KSPP
+- option: STATIC_USERMODEHELPER
+  expect: y
+  why: Routes kernel userspace helper requests through a fixed program
+  ref: KSPP

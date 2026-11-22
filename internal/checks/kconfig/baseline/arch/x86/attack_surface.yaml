@@ -1,0 +1,15 @@
+- option: X86_MSR
+  expect: n
+  arch: [x86]
+  why: Exposes CPU model-specific registers through device files
+  ref: KSPP
+- option: MODIFY_LDT_SYSCALL
+  expect: n
+  arch: [x86]
+  why: Allows userspace to modify its local descriptor table
+  ref: KSPP
+- option: COMPAT_VDSO
+  expect: n
+  arch: [x86]
+  why: Uses a fixed address for the x86 compatibility vDSO
+  ref: KSPP

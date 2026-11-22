@@ -14,7 +14,12 @@ const STATUS: Record<Shown, { label: string; color: string }> = {
   na: { label: "Not applicable", color: "var(--neutral)" },
   accepted: { label: "Accepted", color: "var(--accent)" },
 };
-const SUBSYSTEM: Record<string, string> = { security: "Security", fs: "Filesystems", mm: "Memory management", net: "Networking", module: "Modules", team: "Team policy" };
+const SUBSYSTEM: Record<string, string> = {
+  security: "Security", fs: "Filesystems", mm: "Memory management", net: "Networking", module: "Modules",
+  kernel: "Kernel", compiler: "Compiler", platform: "Platform", tty: "TTY", arch: "Architecture",
+  "arch/arm": "ARM", "arch/arm64": "ARM64", "arch/x86": "x86",
+  "arch/x86_32": "x86 (32-bit)", "arch/x86_64": "x86 (64-bit)", team: "Team policy",
+};
 
 function show(v: string | number | { min: number } | null) {
   if (v === null || v === undefined) return <span className="muted">absent</span>;
@@ -22,7 +27,7 @@ function show(v: string | number | { min: number } | null) {
   return v === "n" ? "not set" : String(v);
 }
 
-/** Enabling an attack-surface option increases attack surface. Enabling a hardening option increases security. */
+/** The bucket identifies an exposed interface or a recommended protection. */
 const EFFECT = {
   attack_surface: { label: "Increases attack surface", icon: <Unlock size={14} />, cls: "eff-surface" },
   harden: { label: "Increases security", icon: <ShieldCheck size={14} />, cls: "eff-secure" },
@@ -31,7 +36,8 @@ const ORDER: Shown[] = ["fail", "accepted", "pass", "na"];
 
 function Effect({ bucket }: { bucket: KernelEntry["bucket"] }) {
   const e = EFFECT[bucket];
-  return <span className={`eff ${e.cls}`} title={`Enabling it: ${e.label.toLowerCase()}`} aria-label={e.label}>{e.icon}</span>;
+  const title = bucket === "attack_surface" ? "Enabling it increases attack surface" : "The recommended setting increases security";
+  return <span className={`eff ${e.cls}`} title={title} aria-label={e.label}>{e.icon}</span>;
 }
 
 export default function Kernel({ r }: { r: Report }) {

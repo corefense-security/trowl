@@ -1,0 +1,77 @@
+- option: STACKPROTECTOR
+  expect: y
+  since: '4.18'
+  why: Adds stack canaries to detect overwritten return addresses
+  ref: KSPP
+- option: STACKPROTECTOR_STRONG
+  expect: y
+  since: '4.18'
+  why: Extends stack canary coverage to more functions
+  ref: KSPP
+- option: RANDSTRUCT_FULL
+  expect: y
+  why: Randomises the layout of sensitive kernel structures
+  ref: KSPP
+- option: ZERO_CALL_USED_REGS
+  expect: y
+  since: '5.15'
+  why: Clears caller-used registers on function return
+  ref: KSPP
+- option: WERROR
+  expect: y
+  since: '5.15'
+  why: Stops the kernel build when compiler warnings are emitted
+  ref: KSPP
+- option: GCC_PLUGINS
+  expect: y
+  why: Allows GCC plugins to add kernel hardening instrumentation
+  ref: KSPP
+- option: GCC_PLUGIN_LATENT_ENTROPY
+  expect: y
+  why: Adds compiler instrumentation to gather entropy during boot
+  ref: KSPP
+- option: UBSAN
+  expect: y
+  why: Enables compiler instrumentation for undefined behaviour checks
+  ref: KSPP
+- option: UBSAN_TRAP
+  expect: y
+  why: Traps on undefined behaviour instead of continuing after a report
+  ref: KSPP
+- option: UBSAN_BOUNDS
+  expect: y
+  why: Checks array indexes for out-of-bounds accesses
+  ref: KSPP
+- option: UBSAN_LOCAL_BOUNDS
+  expect: y
+  why: Checks bounds of local arrays with Clang
+  ref: KSPP
+- option: UBSAN_SHIFT
+  expect: n
+  why: Adds shift checks outside the KSPP bounds-only sanitizer profile
+  ref: KSPP
+- option: UBSAN_DIV_ZERO
+  expect: n
+  why: Adds division checks outside the KSPP bounds-only sanitizer profile
+  ref: KSPP
+- option: UBSAN_UNREACHABLE
+  expect: n
+  why: Adds unreachable-code checks outside the KSPP bounds-only sanitizer profile
+  ref: KSPP
+- option: UBSAN_INTEGER_WRAP
+  expect: n
+  since: '6.15'
+  why: Adds integer wrap checks outside the KSPP bounds-only sanitizer profile
+  ref: KSPP
+- option: UBSAN_BOOL
+  expect: n
+  why: Adds boolean checks outside the KSPP bounds-only sanitizer profile
+  ref: KSPP
+- option: UBSAN_ENUM
+  expect: n
+  why: Adds enum checks outside the KSPP bounds-only sanitizer profile
+  ref: KSPP
+- option: UBSAN_ALIGNMENT
+  expect: n
+  why: Adds alignment checks outside the KSPP bounds-only sanitizer profile
+  ref: KSPP

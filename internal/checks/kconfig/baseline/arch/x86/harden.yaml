@@ -1,0 +1,16 @@
+- option: MITIGATION_PAGE_TABLE_ISOLATION
+  expect: y
+  since: '6.9'
+  arch: [x86]
+  why: Separates user and kernel page tables to reduce information leaks
+  ref: KSPP
+- option: INTEL_IOMMU
+  expect: y
+  arch: [x86]
+  why: Supports DMA isolation on Intel platforms
+  ref: KSPP
+- option: INTEL_IOMMU_DEFAULT_ON
+  expect: y
+  arch: [x86]
+  why: Enables Intel IOMMU translation by default
+  ref: KSPP

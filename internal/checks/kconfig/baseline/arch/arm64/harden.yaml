@@ -1,0 +1,61 @@
+- option: ARM64_SW_TTBR0_PAN
+  expect: y
+  arch: [arm64]
+  why: Restricts kernel access to user memory through software PAN
+  ref: KSPP
+- option: UNMAP_KERNEL_AT_EL0
+  expect: y
+  arch: [arm64]
+  why: Removes kernel mappings while userspace runs
+  ref: KSPP
+- option: SHADOW_CALL_STACK
+  expect: y
+  arch: [arm64]
+  why: Stores return addresses separately to protect control flow
+  ref: KSPP
+- option: UNWIND_PATCH_PAC_INTO_SCS
+  expect: y
+  since: '6.2'
+  arch: [arm64]
+  why: Enables shadow call stacks when hardware pointer authentication is unavailable
+  ref: KSPP
+- option: ARM64_PTR_AUTH
+  expect: y
+  arch: [arm64]
+  why: Supports pointer authentication on capable ARM64 processors
+  ref: KSPP
+- option: ARM64_PTR_AUTH_KERNEL
+  expect: y
+  arch: [arm64]
+  why: Authenticates kernel return addresses with pointer authentication
+  ref: KSPP
+- option: ARM64_BTI
+  expect: y
+  arch: [arm64]
+  why: Supports branch target identification on ARM64
+  ref: KSPP
+- option: ARM64_BTI_KERNEL
+  expect: y
+  arch: [arm64]
+  why: Restricts indirect branch targets in kernel code
+  ref: KSPP
+- option: ARM64_MTE
+  expect: y
+  arch: [arm64]
+  why: Supports memory tagging on capable ARM64 processors
+  ref: KSPP
+- option: KASAN_HW_TAGS
+  expect: y
+  arch: [arm64]
+  why: Uses ARM64 memory tags to detect invalid kernel memory accesses
+  ref: KSPP
+- option: ARM64_E0PD
+  expect: y
+  arch: [arm64]
+  why: Restricts userspace translation of kernel addresses
+  ref: KSPP
+- option: ARM64_EPAN
+  expect: y
+  arch: [arm64]
+  why: Extends PAN restrictions to executable user mappings
+  ref: KSPP
