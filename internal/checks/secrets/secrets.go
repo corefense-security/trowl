@@ -1,19 +1,18 @@
 // Package secrets finds private keys, baked-in host keys and well-known token formats.
 //
-// Matched values are never written to the report in full. Evidence carries a short,
-// redacted preview and the SHA-256 of the match, so identical secrets across images
-// can be correlated without leaking them.
+// Matched values are never written to the report. Evidence carries their SHA-256
+// so identical secrets across images can be correlated.
 package secrets
 
 import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"regexp"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/corefense-security/trowl/internal/model"
 	"github.com/corefense-security/trowl/internal/py"
@@ -31,6 +30,8 @@ var pemBegin = regexp.MustCompile(`-----BEGIN ((?:RSA |EC |DSA |OPENSSH |ENCRYPT
 const pemMaxBody = 8192
 
 var putty = regexp.MustCompile(`PuTTY-User-Key-File-\d: [\w-]+\r?\nEncryption: ([\w-]+)`)
+var puttyEnd = regexp.MustCompile(`(?m)^Private-(?:MAC|Hash): [0-9a-fA-F]+\r?$`)
+var privateKeyJSON = regexp.MustCompile(`"private_key"\s*:\s*("-----BEGIN)`)
 
 type token struct {
 	check, title string
@@ -44,20 +45,14 @@ var tokens = []token{
 	{"secrets.gitlab-token", "GitLab personal access token", regexp.MustCompile(`\bglpat-[A-Za-z0-9_-]{20,}\b`)},
 	{"secrets.slack-token", "Slack token", regexp.MustCompile(`\bxox[abposr]-[A-Za-z0-9-]{10,}\b`)},
 	{"secrets.google-api-key", "Google API key", regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{35}\b`)},
-	{"secrets.private-key-json", "Private key embedded in JSON", regexp.MustCompile(`"private_key"\s*:\s*"-----BEGIN`)},
 }
 
 // Host keys generated at build time are shared by every device flashed with the image.
 var hostKeyPaths = regexp.MustCompile(`^/etc/(?:ssh/ssh_host_\w+_key|dropbear/dropbear_\w+_host_key)$`)
 
-func redact(value []byte, ev *pyjson.Obj) {
-	text := py.Latin1(value)
-	preview := "…"
-	if utf8.RuneCountInString(text) > 6 {
-		preview = string([]rune(text)[:6]) + "…"
-	}
+func setHash(value []byte, ev *pyjson.Obj) {
 	sum := sha256.Sum256(value)
-	ev.Set("preview", preview).Set("sha256", hex.EncodeToString(sum[:]))
+	ev.Set("sha256", hex.EncodeToString(sum[:]))
 }
 
 type pemMatch struct {
@@ -94,12 +89,15 @@ func pemMatches(data []byte) []pemMatch {
 
 func ScanFile(imagePath, real string) []model.Finding {
 	var findings []model.Finding
+	var hostKey *pyjson.Obj
 	if hostKeyPaths.MatchString(imagePath) {
+		hostKey = pyjson.New()
 		findings = append(findings, model.Finding{
 			Check: "secrets.baked-host-key", Path: imagePath,
 			Title: "SSH host key baked into the image",
 			Detail: "Every device flashed with this image shares the same host identity; " +
 				"generate host keys on first boot instead.",
+			Evidence: hostKey,
 		})
 	}
 	fi, err := os.Stat(real)
@@ -109,6 +107,9 @@ func ScanFile(imagePath, real string) []model.Finding {
 	data, err := os.ReadFile(real)
 	if err != nil {
 		return findings
+	}
+	if hostKey != nil {
+		setHash(data, hostKey)
 	}
 	if bytes.HasPrefix(data, elfMagic) {
 		return findings // the ELF checks cover binaries, and keys there are rare and noisy
@@ -137,26 +138,48 @@ func ScanFile(imagePath, real string) []model.Finding {
 			word = "Encrypted"
 		}
 		ev := pyjson.O("offset", m.start, "encrypted", encrypted)
-		redact(data[m.start:m.end], ev)
+		setHash(data[m.start:m.end], ev)
 		findings = append(findings, model.Finding{Check: "secrets.private-key", Path: imagePath,
 			Title: fmt.Sprintf("%s %s", word, strings.ToLower(m.kind)), Evidence: ev})
 	}
-	for _, loc := range putty.FindAllSubmatchIndex(data, -1) {
+	puttyMatches := putty.FindAllSubmatchIndex(data, -1)
+	for i, loc := range puttyMatches {
 		encrypted := string(data[loc[2]:loc[3]]) != "none"
 		word := "Unencrypted"
 		if encrypted {
 			word = "Encrypted"
 		}
+		end := len(data)
+		if i+1 < len(puttyMatches) {
+			end = puttyMatches[i+1][0]
+		}
+		// Include the key body, stopping at its MAC instead of unrelated trailing text.
+		if tail := puttyEnd.FindIndex(data[loc[1]:end]); tail != nil {
+			end = loc[1] + tail[1]
+		}
+		ev := pyjson.O("offset", loc[0], "encrypted", encrypted)
+		setHash(bytes.TrimSpace(data[loc[0]:end]), ev)
 		findings = append(findings, model.Finding{Check: "secrets.private-key", Path: imagePath,
-			Title: word + " PuTTY private key", Evidence: pyjson.O("offset", loc[0], "encrypted", encrypted)})
+			Title: word + " PuTTY private key", Evidence: ev})
 	}
 	for _, t := range tokens {
 		for _, loc := range t.re.FindAllIndex(data, -1) {
 			ev := pyjson.O("offset", loc[0])
-			redact(data[loc[0]:loc[1]], ev)
+			setHash(data[loc[0]:loc[1]], ev)
 			findings = append(findings, model.Finding{Check: t.check, Path: imagePath,
 				Title: t.title, Evidence: ev})
 		}
+	}
+	for _, loc := range privateKeyJSON.FindAllSubmatchIndex(data, -1) {
+		// Decode the value so the hash covers the key, not the JSON field marker.
+		var key string
+		if err := json.NewDecoder(bytes.NewReader(data[loc[2]:])).Decode(&key); err != nil {
+			continue
+		}
+		ev := pyjson.O("offset", loc[0])
+		setHash([]byte(key), ev)
+		findings = append(findings, model.Finding{Check: "secrets.private-key-json", Path: imagePath,
+			Title: "Private key embedded in JSON", Evidence: ev})
 	}
 	return findings
 }

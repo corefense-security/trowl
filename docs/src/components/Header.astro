@@ -1,0 +1,141 @@
+---
+// Starlight's header with the site links added before the social icons.
+import config from 'virtual:starlight/user-config';
+import Search from 'virtual:starlight/components/Search';
+import SiteTitle from 'virtual:starlight/components/SiteTitle';
+import SocialIcons from 'virtual:starlight/components/SocialIcons';
+import ThemeSelect from 'virtual:starlight/components/ThemeSelect';
+
+// match: the pages that count as that link being the current one.
+const links = [
+	{ text: 'Features', href: '/features/hardening/', match: '/features/' },
+	{ text: 'Get Started', href: '/getting-started/docker/' },
+	{ text: 'How it Works', href: '/reference/architecture/' },
+	{ text: 'Privacy', href: '/reference/architecture/#network-and-cache' },
+];
+const path = Astro.url.pathname;
+// The browser selects section links because the server cannot see URL fragments.
+const hasSectionLinks = links.some(({ href }) => href.startsWith(`${path}#`));
+const shouldRenderSearch = config.pagefind;
+---
+
+<div class="header">
+	<div class="title-wrapper sl-flex">
+		<SiteTitle />
+	</div>
+	<nav class="site-nav sl-hidden md:sl-flex print:hidden" aria-label="Site">
+		{
+			links.map(({ text, href, match }) => (
+				<a {href} data-match={match} aria-current={!hasSectionLinks && path.startsWith(match ?? href) ? 'page' : undefined}>
+					{text}
+				</a>
+			))
+		}
+	</nav>
+	<div class="tools print:hidden">
+		<div class="search">{shouldRenderSearch && <Search />}</div>
+		<div class="sl-hidden md:sl-flex extras">
+			<SocialIcons />
+			<ThemeSelect />
+		</div>
+	</div>
+</div>
+
+<script>
+	function updateCurrentLink() {
+		const links = [...document.querySelectorAll<HTMLAnchorElement>('.site-nav a')];
+		const current = links.find((link) => {
+			const url = new URL(link.href);
+			return url.hash && url.pathname === location.pathname && url.hash === location.hash;
+		}) ?? links.find((link) => {
+			const url = new URL(link.href);
+			return !url.hash && location.pathname.startsWith(link.dataset.match ?? url.pathname);
+		});
+		for (const link of links) link.removeAttribute('aria-current');
+		current?.setAttribute('aria-current', 'page');
+	}
+	updateCurrentLink();
+	window.addEventListener('hashchange', updateCurrentLink);
+	window.addEventListener('pageshow', updateCurrentLink);
+</script>
+
+<style>
+	.header {
+		display: flex;
+		align-items: center;
+		gap: 1.5rem;
+		height: 100%;
+	}
+	.title-wrapper {
+		overflow: clip;
+		padding: 0.25rem;
+		margin: -0.25rem;
+		min-width: 0;
+	}
+	/* The links sit right of centre and lean towards it through their spacing. */
+	.site-nav {
+		margin-inline-start: auto;
+		gap: 2.5rem;
+		align-items: center;
+		padding-inline-end: 1rem;
+	}
+	.site-nav a {
+		position: relative;
+		/* The same uppercase mono as the landing page's section labels. */
+		font-family: var(--sl-font-mono);
+		font-size: 0.8rem;
+		font-weight: 500;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		color: var(--sl-color-gray-2);
+		text-decoration: none;
+		white-space: nowrap;
+		transition: color 0.15s;
+	}
+	.site-nav a:hover,
+	.site-nav a[aria-current='page'] {
+		color: var(--sl-color-white);
+	}
+	.site-nav a[aria-current='page']::after {
+		content: '';
+		position: absolute;
+		inset-inline: 0;
+		bottom: -0.45rem;
+		height: 2px;
+		border-radius: 1px;
+		background: var(--sl-color-accent);
+	}
+	.tools {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		margin-inline-start: auto;
+	}
+	.site-nav + .tools {
+		margin-inline-start: 0;
+		padding-inline-start: 1.25rem;
+		border-inline-start: 1px solid var(--sl-color-gray-5);
+	}
+	.extras {
+		align-items: center;
+		gap: 0.75rem;
+	}
+	/* A compact search button next to the links instead of a wide box in the middle. */
+	@media (min-width: 50rem) {
+		.search :global(button[data-open-modal]) {
+			width: 11rem;
+			max-width: 11rem;
+		}
+	}
+	/* Below this width the links don't fit. The sidebar menu has them. */
+	@media (max-width: 68rem) {
+		.site-nav {
+			display: none;
+		}
+		.site-nav + .tools {
+			margin-inline-start: auto;
+			border: 0;
+			padding: 0;
+		}
+	}
+</style>

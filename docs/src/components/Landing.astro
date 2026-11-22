@@ -1,0 +1,398 @@
+---
+// The landing page sections under the hero: capabilities, build diffing and get started.
+const icons: Record<string, string> = {
+	shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>',
+	box: '<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
+	layers: '<path d="m12 2 10 5-10 5L2 7z"/><path d="m2 12 10 5 10-5"/><path d="m2 17 10 5 10-5"/>',
+	output: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M8 17v-4M12 17v-6M16 17v-2"/>',
+};
+
+const capabilities = [
+	{
+		icon: 'shield',
+		title: 'Hardening checks',
+		text: 'Unhardened binaries, leaked secrets, or other weaknesses that increase the attack surface.',
+		tags: [['compiler flags', 'secrets', 'mount flags', 'kernel hardening']],
+		href: '/features/hardening/',
+	},
+	{
+		icon: 'box',
+		title: 'SBOM and CVE analysis',
+		text: 'Dependency graphs, CVE and VEX assessments.',
+		tags: [['VEX Assessment', 'SPDX 3.0 JSON-LD', 'SPDX 2.2', 'CycloneDX']],
+		href: '/features/sbom/',
+	},
+	{
+		icon: 'layers',
+		title: 'Multi-format support',
+		text: 'Image and filesystems across several formats (with or without compression).',
+		tags: [['ext2/3/4', 'squashfs', 'wic', 'tar', 'cpio']],
+		href: '/reference/supported-targets/',
+	},
+	{
+		icon: 'output',
+		title: 'Reports',
+		text: 'Embedded static HTML report, JSON and OpenVEX output compatible with standard VEX tools.',
+		tags: [['Dashboard UI', 'OpenVEX', 'JSON {}']],
+		href: '/reference/report/',
+	},
+];
+
+// An example diff. Diffing isn't released yet, so this only shows what it will look like.
+const diff = [
+	{ kind: 'add', item: 'CVE-2026-93288', note: 'new in linux' },
+	{ kind: 'add', item: '/usr/sbin/dropbear', note: 'lost FORTIFY' },
+	{ kind: 'add', item: '/usr/bin/ping', note: 'gained setuid' },
+	{ kind: 'del', item: 'CVE-2026-98023', note: 'fixed' },
+	{ kind: 'del', item: 'CVE-2026-90359', note: 'module removed' },
+	{ kind: 'mod', item: 'busybox', note: '1.37.0 → 1.37.1' },
+];
+const mark = { add: '+', del: '−', mod: '~' } as const;
+const legend = [
+	{ kind: 'add', text: 'New risk' },
+	{ kind: 'del', text: 'Fixed or removed' },
+	{ kind: 'mod', text: 'Changed' },
+] as const;
+
+const start = [
+	{ title: 'Docker', text: 'Quick start without any installation.', href: '/getting-started/docker/' },
+	{ title: 'Install', text: 'Native binary on Debian or Ubuntu.', href: '/getting-started/install-script/' },
+	{ title: 'Yocto layer', text: 'Scan BitBake builds with meta-trowl.', href: '/integrations/yocto/' },
+];
+---
+
+<div class="landing not-content">
+	<section>
+		<h2>Capabilities</h2>
+		<p class="lede">Hardening, SBOM and CVE checks in one pass</p>
+		<div class="grid">
+			{
+				capabilities.map((c) => (
+					<a class="tile" href={c.href}>
+						<div class="tile-head">
+							<span class="ico">
+								<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" set:html={icons[c.icon]} />
+							</span>
+							<h3>{c.title}</h3>
+						</div>
+						<p>{c.text}</p>
+						<div class="tags">
+							{c.tags.map((group, i) => (
+								<>
+									{i > 0 && <span class="divider" />}
+									{group.map((t) => <span class="tag">{t}</span>)}
+								</>
+							))}
+						</div>
+					</a>
+				))
+			}
+		</div>
+	</section>
+
+	<section>
+		<h2>Semantic Diffing <em>Soon</em></h2>
+		<p class="lede">Track how security evolves across builds</p>
+		<div class="diff-row">
+			<div class="diff-text">
+				<p>New CVEs, SBOM changes, hardening regressions, and binaries that lost stack protection or gained new privileges.</p>
+				<ul class="legend" aria-label="Diff markers">
+					{legend.map((l) => <li class={l.kind}><b>{mark[l.kind]}</b>{l.text}</li>)}
+				</ul>
+			</div>
+			<div class="diff" aria-label="Example diff between two builds">
+				<div class="diff-head"><span>v1.4.0</span><span class="arrow">→</span><span>v1.5.0</span><span class="example">Example</span></div>
+				{
+					diff.map((d) => (
+						<div class:list={['diff-line', d.kind]}>
+							<b>{mark[d.kind as keyof typeof mark]}</b>
+							<span>{d.item}</span>
+							<i>{d.note}</i>
+						</div>
+					))
+				}
+			</div>
+		</div>
+	</section>
+
+	<section>
+		<span class="kicker">Get started</span>
+		<div class="start">
+			{
+				start.map((s) => (
+					<a class="start-card" href={s.href}>
+						<strong>
+							{s.title} <span aria-hidden="true">→</span>
+						</strong>
+						<span>{s.text}</span>
+					</a>
+				))
+			}
+		</div>
+	</section>
+</div>
+
+<style>
+	.landing {
+		--line: color-mix(in srgb, var(--sl-color-white) 8%, transparent);
+		--fill: color-mix(in srgb, var(--sl-color-white) 3%, transparent);
+	}
+	section {
+		margin-top: 5.5rem;
+	}
+	.kicker {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		font-family: var(--sl-font-mono);
+		font-size: 0.75rem;
+		letter-spacing: 0.16em;
+		text-transform: uppercase;
+		color: var(--sl-color-gray-3);
+	}
+	/* The Soon tag, styled like the badges above the hero headline. */
+	h2 em {
+		padding: 0.2rem 0.6rem;
+		border-radius: 999rem;
+		font-family: var(--sl-font-mono);
+		font-style: normal;
+		font-size: 0.7rem;
+		font-weight: 500;
+		line-height: 1.4;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: #c9a227;
+		background: color-mix(in srgb, #c9a227 8%, transparent);
+		box-shadow: inset 0 0 0 1px color-mix(in srgb, #c9a227 30%, transparent);
+	}
+	:global([data-theme='light']) h2 em {
+		color: #9a7a10;
+	}
+	/* Same face and weight as the hero headline and tile titles, so the page reads as one voice.
+	   Mono stays on the small technical bits: badges, tags and the diff. */
+	h2 {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		margin: 0;
+		font-size: clamp(1.75rem, 1.2rem + 1.6vw, 2.25rem);
+		line-height: 1.15;
+		letter-spacing: -0.025em;
+		font-weight: 700;
+		color: var(--sl-color-white);
+	}
+	.lede {
+		margin: 0.75rem 0 2rem;
+		font-family: var(--sl-font-mono);
+		font-size: 0.8rem;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		color: var(--sl-color-gray-2);
+	}
+	.grid {
+		display: grid;
+		grid-template-columns: 1fr;
+		gap: 0.9rem;
+	}
+	@media (min-width: 50rem) {
+		.grid {
+			grid-template-columns: 1fr 1fr;
+		}
+	}
+	.tile {
+		display: flex;
+		flex-direction: column;
+		padding: 1.75rem;
+		border-radius: 1rem;
+		background: linear-gradient(180deg, var(--fill), transparent);
+		box-shadow: inset 0 0 0 1px var(--line);
+		color: inherit;
+		text-decoration: none;
+		transition: box-shadow 0.15s;
+	}
+	a.tile:hover {
+		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sl-color-white) 18%, transparent);
+	}
+	.ico {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2.25rem;
+		height: 2.25rem;
+		flex: none;
+		border-radius: 0.6rem;
+		color: var(--sl-color-gray-1);
+		background: var(--fill);
+		box-shadow: inset 0 0 0 1px var(--line);
+	}
+	.tile-head {
+		display: flex;
+		align-items: center;
+		gap: 0.8rem;
+		margin-bottom: 0.75rem;
+	}
+	h3 {
+		margin: 0;
+		font-size: var(--sl-text-lg);
+		font-weight: 600;
+		letter-spacing: -0.01em;
+		color: var(--sl-color-white);
+	}
+	.tile p {
+		margin: 0 0 1.4rem;
+		max-width: 44ch;
+		font-size: var(--sl-text-sm);
+		line-height: 1.6;
+		color: var(--sl-color-gray-2);
+	}
+	.tags {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.4rem;
+		margin-top: auto;
+	}
+	.tag {
+		padding: 0.3rem 0.65rem;
+		border-radius: 999rem;
+		font-family: var(--sl-font-mono);
+		font-size: 0.75rem;
+		line-height: 1.2;
+		color: var(--sl-color-gray-2);
+		background: var(--fill);
+		box-shadow: inset 0 0 0 1px var(--line);
+	}
+	.divider {
+		width: 1px;
+		height: 1rem;
+		margin: 0 0.35rem;
+		background: color-mix(in srgb, var(--sl-color-white) 15%, transparent);
+	}
+	/* No box here: the text sits on the page and the example diff carries the visual weight. */
+	.diff-row {
+		display: flex;
+		flex-direction: column;
+		gap: 2rem;
+	}
+	@media (min-width: 50rem) {
+		.diff-row {
+			flex-direction: row;
+			align-items: center;
+			gap: 3.5rem;
+		}
+		.diff-row > * {
+			flex: 1;
+		}
+	}
+	.diff-text p {
+		margin: 0;
+		max-width: 34ch;
+		font-size: var(--sl-text-xl);
+		line-height: 1.5;
+		letter-spacing: -0.01em;
+		color: var(--sl-color-gray-1);
+	}
+	.legend {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem 1.5rem;
+		margin: 1.5rem 0 0;
+		padding: 0;
+		list-style: none;
+		font-family: var(--sl-font-mono);
+		font-size: 0.8rem;
+		color: var(--sl-color-gray-3);
+	}
+	.legend li {
+		display: flex;
+		gap: 0.5rem;
+		margin: 0;
+	}
+	.legend b,
+	.diff-line b {
+		font-weight: 600;
+	}
+	.legend .add b,
+	.diff-line.add b {
+		color: #f0605d;
+	}
+	.legend .del b,
+	.diff-line.del b {
+		color: #5fae6d;
+	}
+	.legend .mod b,
+	.diff-line.mod b {
+		color: var(--sl-color-gray-3);
+	}
+	.diff {
+		padding: 0.9rem 1rem;
+		border-radius: 0.75rem;
+		font-family: var(--sl-font-mono);
+		font-size: 0.8rem;
+		line-height: 1.9;
+		color: var(--sl-color-gray-2);
+		background: color-mix(in srgb, var(--sl-color-black) 60%, transparent);
+		box-shadow: inset 0 0 0 1px var(--line);
+	}
+	.diff-head {
+		display: flex;
+		gap: 0.6rem;
+		margin-bottom: 0.35rem;
+		padding-bottom: 0.5rem;
+		border-bottom: 1px solid var(--line);
+		font-size: 0.75rem;
+		color: var(--sl-color-gray-3);
+	}
+	.diff-head .example {
+		margin-left: auto;
+		text-transform: uppercase;
+		letter-spacing: 0.12em;
+		font-size: 0.65rem;
+	}
+	.diff-line {
+		display: flex;
+		gap: 0.75rem;
+	}
+	.diff-line b {
+		width: 0.75rem;
+		font-weight: 600;
+	}
+	.diff-line i {
+		margin-left: auto;
+		font-style: normal;
+		color: var(--sl-color-gray-3);
+	}
+	.start {
+		display: grid;
+		grid-template-columns: 1fr;
+		gap: 0.9rem;
+		margin-top: 1rem;
+	}
+	@media (min-width: 50rem) {
+		.start {
+			grid-template-columns: repeat(3, 1fr);
+		}
+	}
+	.start-card {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+		padding: 1.1rem 1.25rem;
+		border-radius: 0.8rem;
+		text-decoration: none;
+		background: var(--fill);
+		box-shadow: inset 0 0 0 1px var(--line);
+	}
+	.start-card:hover {
+		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sl-color-white) 18%, transparent);
+	}
+	.start-card strong {
+		display: flex;
+		justify-content: space-between;
+		color: var(--sl-color-white);
+	}
+	.start-card span {
+		font-size: var(--sl-text-sm);
+		color: var(--sl-color-gray-2);
+	}
+</style>

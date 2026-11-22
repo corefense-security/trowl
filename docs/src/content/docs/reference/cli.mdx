@@ -1,0 +1,51 @@
+---
+title: Command line
+description: Scan images, view reports and extract filesystems.
+sidebar:
+  order: 2
+---
+
+## `trowl scan`
+
+```sh
+trowl scan [options] IMAGE
+```
+
+Scans an image and writes `index.html`, `report.json` and `openvex.json` to the output folder.
+
+| Option | Description |
+| --- | --- |
+| `-o`, `--output DIR` | Output folder. Defaults to `trowl-report` |
+| `--sbom FILE` | SPDX 3.0 JSON-LD or CycloneDX JSON. SPDX 2.2 accepts JSON, tar archives such as `IMAGE.spdx.tar.zst` or a document folder |
+| `--vex FILE` | OpenVEX file, or a separate CycloneDX VEX JSON for `--sbom`. Its statuses override the SBOM's and Trowl's kernel verdicts. See [VEX files](../../features/cves-vex/#vex-files) |
+| `--override` | With `--vex`, Trowl's kernel verdicts replace the file's statuses where they disagree. Userland CVEs keep the file's status. See [Letting Trowl's kernel check win](../../features/cves-vex/#override) |
+| `--kernel-config FILE` | Fallback kernel `.config` when the image has none |
+| `--kernel-tree DIR` | Source tree matching the image's kernel commit and patches. Enables [kernel VEX](../../features/cves-vex/) |
+| `--kernel-policy FILE` | YAML to accept known failures or add config checks. See [Team policy](../../features/hardening/#team-policy) |
+| `--no-network` | Use cached CVE data, KEV, EPSS, advisory links and local model weights without internet requests |
+| `--links MODE` | Advisory link checks for `open` (default, excludes fixed CVEs), `all` or `none` |
+| `--no-llm` | Skip the local AI summary and model download |
+| `--model NAME` | Overview summary model. `qwen3.5-4b` (default), `qwen3.5-9b` or `qwen3-4b` |
+| `--cache-dir DIR` | Cache folder for feeds, link results and models. Defaults to `$XDG_CACHE_HOME/trowl` or `~/.cache/trowl` |
+| `--workdir DIR` | Unpack into `DIR` and keep it after scanning |
+| `--keep` | Keep the temporary unpack folder |
+
+With `--no-network`, missing cached data is omitted and a missing model skips the AI summary. See [Offline scans](../architecture/#offline-scans).
+
+Returns `0` on success, `2` for usage errors or unsupported images and `1` for other failures.
+
+## `trowl view`
+
+```sh
+trowl view [--port 8765] [--host 127.0.0.1] [DIR]
+```
+
+Serves `DIR` at `http://127.0.0.1:8765`. If omitted, `DIR` defaults to `trowl-report`. Each request renders `report.json` with the bundled UI so a reload shows updated results. In Docker, the default host is `0.0.0.0`.
+
+## `trowl unpack`
+
+```sh
+trowl unpack IMAGE DEST
+```
+
+Extracts the image to `DEST` and prints the detected format and rootfs path.

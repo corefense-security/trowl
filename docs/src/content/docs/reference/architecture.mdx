@@ -1,0 +1,85 @@
+---
+title: Architecture
+description: Image analysis, data caching, local AI summaries and reports.
+sidebar:
+  order: 5
+tableOfContents: false
+---
+
+import ArchitectureDiagram from '../../../components/ArchitectureDiagram.astro';
+
+<ArchitectureDiagram />
+
+## Image analysis<span id="analysis"></span>
+
+Trowl unpacks the image into a root filesystem and identifies components from the SBOM, a package database or supported binary fingerprints, in that order. With `--kernel-tree`, the [kcond fork](https://github.com/corefense-security/kcond) reads the kernel's build rules.
+
+CVE analysis matches component versions, checks kernel CVEs against the image's configuration and modules, applies [`--vex` statements](../../features/cves-vex/#vex-files) and adds CISA KEV data and EPSS scores.
+
+Other checks cover ELF hardening, kernel configuration, mounts and secrets, and compare files listed in the SBOM with those in the image.
+
+## Data fetching and caching<span id="network-and-cache"></span><span id="cache"></span>
+
+### Data sources<span id="external-resources"></span>
+
+<div style={{ overflowX: 'auto' }}>
+
+| Data | Links | Refresh interval |
+| --- | --- | --- |
+| NVD and kernel CNA records | [fkie-cad/nvd-json-data-feeds](https://github.com/fkie-cad/nvd-json-data-feeds) | Every 24 hours |
+| CISA KEV | [cisagov/kev-data](https://github.com/cisagov/kev-data), [cisa.gov](https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json) | Daily |
+| EPSS | [empiricalsecurity.com](https://epss.empiricalsecurity.com/epss_scores-current.csv.gz) | Daily |
+| Advisory link results | [NVD](https://nvd.nist.gov/vuln/), [OSV](https://osv.dev/), [cve.org](https://www.cve.org/), [kernel CNA](https://git.kernel.org/pub/scm/linux/security/vulns.git/tree/cve/published) | Every 7 days |
+| AI model weights | [Hugging Face](https://huggingface.co/) | On cache miss |
+
+</div>
+
+> **Note**: Trowl fetches missing or stale data before the stage that needs it. If a refresh fails, it uses the available cache.
+
+### Cache <span id="cache-location"></span>
+
+Native runs, including those installed with the install script, use `$XDG_CACHE_HOME/trowl` when `XDG_CACHE_HOME` is set, or `~/.cache/trowl` otherwise.
+
+The Docker image sets `XDG_CACHE_HOME=/cache`, so its cache is `/cache/trowl` inside the container. See [Docker cache](../../getting-started/docker/#cache) for the host mount.
+
+Use `--cache-dir DIR` to override the default in either case.
+
+### Offline scan<span id="offline-scans"></span>
+
+Pass `--no-network` to use cached CVE data, KEV, EPSS and advisory links without internet requests. Stale entries are used without refreshing the cache. The AI summary uses local model weights if available.
+
+:::note
+Missing cached data is omitted. If the selected model is unavailable locally, the scan continues without an AI summary.
+:::
+
+### Local AI summary<span id="local-summary"></span>
+
+Trowl uses a CPU-based LLM inference to generate impact summaries on the UI overview. The analysis is completely local through `llama-server`, and uses facts computed during the scan. If `llama-server` is unavailable, the scan continues without a summary. 
+
+Following models are currently supported (licenses under `Apache 2.0`):
+
+| Model | Notes |
+| --- | --- |
+| `qwen3.5-4b` | Default, download size is about 2.7 GB |
+| `qwen3.5-9b` | Larger model, takes longer to run |
+| `qwen3-4b` | Older model |
+
+The model runs with these fixed settings:
+
+| Setting | Purpose |
+| --- | --- |
+| Temperature `0`, seed `0` | Greedy decoding and a fixed seed reduce variation between runs. |
+| Thinking disabled | Avoids reasoning overhead and keeps the output budget available for the summary. |
+| Context window `8192` tokens | Holds the instructions, scan facts and generated summary. |
+| Output limit `600` tokens | Keeps the response brief, with at most five summary points. |
+| CPU threads set to the logical CPU count | Uses the available CPU parallelism for local inference. |
+
+## Reporting<span id="outputs"></span>
+
+Each scan writes three files:
+
+- `report.json` contains the scan results as JSON.
+- `index.html` is a self-contained report with the results and an optional local summary.
+- `openvex.json` records each CVE's status in OpenVEX format.
+
+See [Report output](../report/) for details about each format.

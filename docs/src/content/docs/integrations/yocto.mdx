@@ -1,0 +1,133 @@
+---
+title: Yocto
+description: Scan every image BitBake builds with the meta-trowl layer.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+The `meta-trowl` layer scans Yocto images after a successful build. It adds scanner dependencies to `do_build` and leaves image-generation tasks and outputs unchanged. It locates the image, SBOM and kernel inputs automatically.
+
+It is tested on Scarthgap (5.0) and Wrynose with `core-image-minimal` for `qemux86-64`.
+
+## Add the layer
+
+<Steps>
+
+1. Clone Trowl next to your other layers. The layer is in `integrations/meta-trowl`.
+
+   ```sh
+   git clone https://github.com/corefense-security/trowl.git
+   ```
+
+2. From your build directory, add the layer and turn the scan on.
+
+   ```sh
+   bitbake-layers add-layer /path/to/trowl/integrations/meta-trowl
+   echo 'INHERIT += "trowl"' >> conf/local.conf
+   ```
+
+3. Build the image as usual.
+
+   ```sh
+   bitbake core-image-minimal
+   ```
+
+</Steps>
+
+`bitbake` builds Trowl and the image, then runs the scan. By default, an image is rescanned only when newer than its report. When the build finishes, the scan output follows the task summary.
+
+Reports default to `trowl/<image>/` in the build directory, outside `TMPDIR`.
+
+![BitBake build configuration listing the meta-trowl layer, followed by the task summary](../../../assets/screens/yocto-build.png)
+
+![Trowl scan output after the BitBake task summary, ending with the path to the report](../../../assets/screens/yocto-scan.png)
+
+## Toolchain and dependencies
+
+The layer builds the Trowl commit pinned in its recipe (`SRCREV`), whichever branch of the clone is checked out. The recipe pins Go and Node because Scarthgap ships an older Go and neither release ships Node. Go modules and npm packages are downloaded directly and checked against `go.sum` and `package-lock.json`.
+
+## Input discovery
+
+Yocto saves each image's build variables in `testdata.json` in the deploy folder. The layer reads this file for each image on the `bitbake` command line because scanning runs after BitBake finishes, outside the image recipe.
+
+`DEPLOY_DIR_IMAGE` identifies the deploy folder. `IMAGE_LINK_NAME` is the shared filename prefix without the build timestamp.
+
+Example output for `core-image-minimal` on Scarthgap:
+
+```text
+tmp/deploy/images/qemux86-64/
+├── core-image-minimal-qemux86-64.rootfs.testdata.json   variables the layer reads
+├── core-image-minimal-qemux86-64.rootfs.ext4            image
+├── core-image-minimal-qemux86-64.rootfs.tar.bz2         image, not used
+└── core-image-minimal-qemux86-64.rootfs.spdx.tar.zst    SBOM
+```
+
+Image and SBOM filenames use `IMAGE_LINK_NAME` plus a suffix. Kernel paths come from the same JSON. Missing inputs trigger a warning.
+
+| Input | How the layer finds it | When it is missing |
+| --- | --- | --- |
+| Image | The first type in `TROWL_FSTYPES` that the build also lists in `IMAGE_FSTYPES`. Above, that is `ext4` | Scan skipped |
+| SBOM | The first suffix in `TROWL_SBOM_NAMES` that exists: `.sbom-cve-check.spdx.json`, then `.spdx.json` (SPDX 3.0), then `.spdx.tar.zst` (SPDX 2.2) | Image scanned without an SBOM |
+| Kernel config | `TROWL_KERNEL_CONFIG` if set, else `.config` in `STAGING_KERNEL_BUILDDIR`. Used only when the image carries no config | Only the image's config, if any |
+| Kernel source | `TROWL_KERNEL_TREE` if set, else `STAGING_KERNEL_DIR` | Kernel CVEs remain version matches |
+
+`IMAGE_FSTYPES` defines the formats Yocto builds. `TROWL_FSTYPES` sets Trowl's preference order for supported formats and can be overridden in `local.conf`.
+
+Scarthgap defaults to SPDX 2.2 and Wrynose to SPDX 3.0. The layer prefers Wrynose's `sbom-cve-check` SBOM when `core/yocto/sbom-cve-check` is enabled.
+
+### Kernel restored from sstate
+
+A local kernel build provides the config and source under `tmp/work-shared`. These directories may be absent when BitBake restores the kernel from sstate, such as in a fresh `TMPDIR` with a shared cache.
+
+Set either or both paths in `local.conf` to supply the missing inputs. Unset variables keep the defaults listed above. Relative paths are resolved from the build directory.
+
+```sh
+TROWL_KERNEL_TREE = "/path/to/linux"
+TROWL_KERNEL_CONFIG = "/path/to/.config"
+```
+
+The source tree must match the commit and patches used to build the image's kernel so Trowl reads the correct config gates.
+
+## Additional settings
+
+Set these in `local.conf`.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `TROWL_SCAN` | `1` | `0` turns the scan off |
+| `TROWL_REPORT_DIR` | `${TOPDIR}/trowl` | Where reports go, one folder per image |
+| `TROWL_ALWAYS` | `0` | `1` scans after every build, not only when the image changed |
+| `TROWL_FSTYPES` | ext4, squashfs, tar, cpio and wic variants | Image types the layer looks for, in order |
+| `TROWL_SBOM_NAMES` | see above | SBOM names the layer looks for, in order |
+| `TROWL_KERNEL_TREE` | empty | Kernel source tree used instead of `STAGING_KERNEL_DIR` |
+| `TROWL_KERNEL_CONFIG` | empty | Kernel `.config` used instead of the one in `STAGING_KERNEL_BUILDDIR`, when the image carries none |
+| `TROWL_LLM` | `0` | `1` adds the Overview summary |
+| `TROWL_LLM_MODEL` | `qwen3.5-4b` | `qwen3-4b`, `qwen3.5-4b` or `qwen3.5-9b` |
+
+### Local AI summary
+
+LLM inference is off by default. To enable AI-based scan summary, add this to `local.conf`.
+
+```sh
+TROWL_LLM = "1"
+```
+
+:::note
+To add a summary to an existing report, set `TROWL_ALWAYS = "1"` in `local.conf`. The next build rescans the image without forcing an image rebuild.
+:::
+
+The next `bitbake` also builds `llama-server` from [llama.cpp](https://github.com/ggml-org/llama.cpp), and fetches the model into `DL_DIR`, where it is checked against its SHA-256. Both are shared through sstate and `DL_DIR` like any other recipe.
+
+### Offline builds
+
+Set `BB_NO_NETWORK = "1"` for offline scans. CVE feeds must already be cached in `~/.cache/trowl` from an online scan. See [Data fetching and caching](../../reference/architecture/#offline-scans).
+
+## Troubleshooting
+
+### Wrynose rebuild failure
+
+With `rm_work` and the `sbom-cve-check` fragment enabled, Wrynose rebuilds fail in `do_sbom_cve_check`. This occurs with or without `meta-trowl` and prevents scanning. Clean the image before rebuilding.
+
+```sh
+bitbake -c cleansstate core-image-minimal
+```

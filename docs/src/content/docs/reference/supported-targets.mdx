@@ -1,0 +1,72 @@
+---
+title: Supported targets
+description: Build targets, image and filesystem formats, and SBOM formats Trowl reads.
+sidebar:
+  order: 1
+---
+
+## Targets
+
+<div style={{ overflowX: 'auto' }}>
+
+| Target | Status |
+| --- | --- |
+| Yocto | Tested on `scarthgap` and `wrynose` |
+| Buildroot | Tested with its CycloneDX SBOM |
+| OpenWrt | Coming soon |
+| Android | Coming soon |
+
+</div>
+
+## Images
+
+Trowl extracts all supported disk partitions. The first with `/etc` and either `/usr` or `/bin` is scanned as the rootfs. No mounts or root access are needed. Extended MBR partitions are skipped.
+
+<div style={{ overflowX: 'auto' }}>
+
+| Type | Notes |
+| --- | --- |
+| Disk image (`.wic`) | MBR or GPT partition table |
+| tar | ustar archives |
+| cpio | newc archives, such as Yocto's `cpio` images and initramfs. Device nodes are skipped |
+| Unpacked directory | Scanned in place |
+
+</div>
+
+## Filesystems
+
+<div style={{ overflowX: 'auto' }}>
+
+| Type | Reader |
+| --- | --- |
+| ext2, ext3, ext4 | `debugfs` |
+| squashfs | `unsquashfs` |
+
+</div>
+
+## Compression
+
+Images compressed with `zstd`, `xz`, `gzip`, `bzip2` or `lz4` are decompressed automatically. Trowl detects the compression from the file contents, not the extension. This includes Yocto's `cpio.lz4`.
+
+## SBOMs
+
+<div style={{ overflowX: 'auto' }}>
+
+| Format | Input | Tested with |
+| --- | --- | --- |
+| `SPDX 3.0` | One JSON-LD file such as `IMAGE.rootfs.spdx.json` | Yocto with or without `sbom-cve-check` |
+| `SPDX 2.2` | `IMAGE.spdx.tar.zst`, plain tar, document directory or one JSON file | Yocto `create-spdx-2.2` (default on `scarthgap`) |
+| `CycloneDX` | One JSON SBOM plus optional JSON VEX via `--vex` | Buildroot `make generate-cyclonedx` and Yocto `meta-cyclonedx` |
+
+</div>
+
+## VEX files
+
+| Format | Input |
+| --- | --- |
+| `OpenVEX` | v0.2.0 or v0.0.x JSON via `--vex`, with or without `--sbom` |
+| `CycloneDX VEX` | JSON via `--vex`, linked to `--sbom` by BOM-Link |
+
+:::note
+SPDX 2.3, SPDX tag-value, RDF/XML and CycloneDX XML are not supported.
+:::

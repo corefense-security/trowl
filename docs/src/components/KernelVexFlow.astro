@@ -1,0 +1,66 @@
+---
+// Kernel VEX flow: the kernel tree, plus a .config when the image has none, goes into Trowl's kernel
+// tree analysis, which checks the image's config and modules, then gives each kernel CVE a VEX status.
+---
+<figure class="kfig">
+<div class="kflow" role="region" aria-label="Kernel VEX flow" tabindex="0">
+	<svg viewBox="0 0 778 122" role="img" aria-labelledby="kflow-title kflow-desc">
+		<title id="kflow-title">Kernel tree analysis</title>
+		<desc id="kflow-desc">The kernel tree passed with --kernel-tree, and a .config when the image has none, go into Trowl's kernel tree analysis. It finds the config options and module links for each kernel CVE's source files, then checks them against the image's config in /boot and its modules in /lib/modules. Each CVE gets a VEX status and justification: Not affected, Affected or Needs review.</desc>
+
+		<text class="kicker" x="1" y="12">Inputs</text>
+		<rect class="box" x="1" y="24" width="150" height="44" rx="8" />
+		<text class="mono big" x="15" y="50">--kernel-tree</text>
+		<rect class="box dashed" x="1" y="76" width="150" height="44" rx="8" />
+		<text class="mono big" x="15" y="95">.config</text>
+		<text class="sub" x="15" y="111">if the image has none</text>
+		<path class="arrow" d="M153 46c11 0 9 26 20 26M153 98c11 0 9-26 20-26m-5-5 5 5-5 5" />
+
+		<text class="kicker accent" x="177" y="12">Trowl</text>
+		<rect class="box trowl" x="177" y="24" width="202" height="96" rx="10" />
+		<text class="title" x="193" y="58">Kernel tree analysis</text>
+		<text class="sub" x="193" y="78">config options and module</text>
+		<text class="sub" x="193" y="94">links for each CVE's files</text>
+		<path class="arrow" d="M381 72h20m-5-5 5 5-5 5" />
+
+		<text class="kicker" x="405" y="12">Image</text>
+		<rect class="box" x="405" y="24" width="216" height="96" rx="10" />
+		<rect class="chip" x="417" y="39" width="192" height="28" rx="6" />
+		<text class="mono" x="429" y="57">/boot/config-*</text>
+		<rect class="chip" x="417" y="77" width="192" height="28" rx="6" />
+		<text class="mono" x="429" y="95">/lib/modules/&lt;release&gt;*/</text>
+		<path class="arrow" d="M623 72h20m-5-5 5 5-5 5" />
+
+		<text class="kicker" x="645" y="12">VEX status</text>
+		<rect class="box" x="645" y="24" width="132" height="96" rx="10" />
+		<circle class="dot ok" cx="664" cy="42" r="3.5" />
+		<text class="item" x="674" y="46">Not affected</text>
+		<circle class="dot bad" cx="664" cy="62" r="3.5" />
+		<text class="item" x="674" y="66">Affected</text>
+		<circle class="dot warn" cx="664" cy="82" r="3.5" />
+		<text class="item" x="674" y="86">Needs review</text>
+		<text class="sub" x="659" y="106">with justification</text>
+	</svg>
+</div>
+</figure>
+
+<style>
+	.kfig { margin-block: 1.5rem; }
+	.kflow { overflow-x: auto; }
+	svg { font-family: var(--sl-font); display: block; width: 100%; min-width: 38rem; height: auto; }
+	.box { fill: color-mix(in srgb, var(--sl-color-white) 2.5%, transparent); stroke: var(--sl-color-gray-5); }
+	.box.dashed { fill: none; stroke-dasharray: 4 3; }
+	.box.trowl { stroke: color-mix(in srgb, var(--sl-color-accent) 70%, transparent); fill: color-mix(in srgb, var(--sl-color-accent) 7%, transparent); }
+	.kicker { font-family: var(--sl-font-mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; fill: var(--sl-color-gray-3); }
+	.kicker.accent { fill: var(--sl-color-accent-high); }
+	.title { font-size: 15.5px; font-weight: 600; fill: var(--sl-color-white); }
+	.item { font-size: 13px; fill: var(--sl-color-gray-1); }
+	.sub { font-size: 11.5px; fill: var(--sl-color-gray-3); }
+	.mono { font-family: var(--sl-font-mono); font-size: 11.5px; fill: var(--sl-color-gray-1); }
+	.mono.big { font-size: 13px; fill: var(--sl-color-white); }
+	.dot.ok { fill: #0ca30c; }
+	.dot.bad { fill: #ec835a; }
+	.dot.warn { fill: #fab219; }
+	.chip { fill: color-mix(in srgb, var(--sl-color-white) 5%, transparent); }
+	.arrow { fill: none; stroke: var(--sl-color-gray-3); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+</style>

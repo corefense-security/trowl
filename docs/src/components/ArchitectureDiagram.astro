@@ -1,0 +1,195 @@
+---
+// Trowl's architecture, left to right: inputs, then parse, analyse and report inside Trowl, with the
+// cached external data above the stages that read it. Facts here follow internal/scan/scan.go,
+// internal/unpack, internal/sbom, internal/inventory, internal/openvex, internal/llm and ui/src.
+const TOP = 172; // top of the stage cards
+const H = 310; // stage card height
+const parse = { x: 160, w: 214 };
+const analyse = { x: 392, w: 300 };
+const report = { x: 708, w: 172, h: 280, y: (H - 280) / 2 }; // as tall as its contents, centred on the stages
+// Unpack turns the image into a rootfs. Parse then reads the VEX file, the components from the first
+// source found and the kernel tree's build rules, which kcond reads. The input boxes already name each
+// input, so a mini only lists formats. Parse mini positions are relative to its card.
+const unpack = { h: 88 };
+const parseCard = { y: 102 };
+const parsers = [
+	{ y: 54, label: 'OpenVEX, CycloneDX' },
+	{ y: 108, label: 'SPDX 2/3, CycloneDX' },
+	{ y: 162, label: 'Kbuild, .config' },
+];
+// Analyse: one card per analysis. CVE analysis sits on top, under the feeds it reads.
+const analyses = [
+	{ y: 66, title: 'CVE analysis', sub: 'Version match, kernel VEX' },
+	{ y: 126, title: 'SBOM analysis', sub: 'Dependency graphs, enrichment' },
+	{ y: 186, title: 'Hardening', sub: 'Compiler flags, kernel hardening, mount flags' },
+	{ y: 246, title: 'Secrets', sub: 'private keys, API tokens' },
+];
+const outputs = [
+	{ y: 166, title: 'report.json', sub: 'every finding as JSON' },
+	{ y: 222, title: 'openvex.json', sub: 'CVE statuses as VEX' },
+];
+// The feeds go to the CVE engine, each named with the format it is fetched in. The model only reaches
+// the local LLM, which writes the summary.
+const cveX = analyse.x + analyse.w / 2;
+const llm = { x: 742, y: 134, w: 104, h: 24 };
+const cache = { x: 360, w: 520, y: 76, h: 22 }; // the feeds and the model land here before Trowl reads them
+const cveFeeds = [
+	{ label: 'NVD (JSON)', x: 326, w: 100 },
+	{ label: 'CISA KEV (JSON)', x: 432, w: 112 },
+	{ label: 'EPSS (CSV)', x: 550, w: 88 },
+];
+const model = { label: 'Hugging Face (GGUF)', cx: 714, w: 140 };
+const runtime = { label: 'llama.cpp', x: 790, w: 90 };
+const inputs = [
+	{ y: TOP + 42, title: 'Image', sub: 'required' },
+	{ y: TOP + 148, title: '--vex', flag: true, sub: 'optional', optional: true },
+	{ y: TOP + 202, title: '--sbom', flag: true, sub: 'optional', optional: true },
+	{ y: TOP + 256, title: '--kernel-tree', flag: true, sub: '+ optional .config', optional: true },
+];
+---
+<figure class="arch">
+	<div class="scroll" role="region" aria-label="Trowl architecture diagram" tabindex="0">
+		<svg viewBox={`0 0 900 ${TOP + H + 20}`} role="img" aria-labelledby="arch-title arch-desc">
+			<title id="arch-title">Trowl architecture</title>
+			<desc id="arch-desc">The image, an optional VEX file, an optional SBOM and an optional kernel tree with config go into Trowl, which runs locally. Trowl unpacks the image (ext4, squashfs, cpio or disk) into a root filesystem. It parses the VEX file (OpenVEX or CycloneDX) and the kernel tree's Kbuild files with its .config, and takes components from the first source found: the SBOM (SPDX 2, SPDX 3 or CycloneDX), the package database (opkg, dpkg or rpm) or fingerprints of versions in ELF files. It then analyses the image. CVE analysis matches versions, checks kernel CVEs against the kernel tree, applies the VEX file and adds CISA KEV and EPSS. SBOM analysis compares the SBOM's declared files with the image. Hardening covers ELF flags, the kernel config and mounts. Secrets finds private keys and API tokens. The report is index.html, a dashboard built by Vite into one static file with the report data embedded, plus report.json and openvex.json with each CVE's status. An optional local LLM uses llama.cpp and a model from Hugging Face to write a short summary into the dashboard. NVD (JSON), CISA KEV (JSON), EPSS (CSV) and the Hugging Face model (GGUF) are fetched when stale and cached in ~/.cache/trowl. llama.cpp is installed separately.</desc>
+
+			<!-- External sources -->
+			<rect class="band" x="144" y="4" width="752" height="48" rx="10" />
+			<text class="kicker" x="160" y="25">External sources</text>
+			<text class="sub" x="160" y="41">data and runtime</text>
+			{cveFeeds.map((f) => (
+				<g>
+					<rect class="feed" x={f.x} y="15" width={f.w} height="26" rx="13" />
+					<text class="feedtext" x={f.x + f.w / 2} y="32" text-anchor="middle">{f.label}</text>
+				</g>
+			))}
+			<rect class="feed optional" x={model.cx - model.w / 2} y="15" width={model.w} height="26" rx="13" />
+			<text class="feedtext" x={model.cx} y="32" text-anchor="middle">{model.label}</text>
+			<rect class="feed optional" x={runtime.x} y="15" width={runtime.w} height="26" rx="13" />
+			<text class="feedtext" x={runtime.x + runtime.w / 2} y="32" text-anchor="middle">{runtime.label}</text>
+
+			<!-- Local cache, between the sources and the stages that read them -->
+			<path class="cache" d={`M${cache.x} ${cache.y}h${cache.w}v${cache.h}c0 3-${cache.w / 4} 5-${cache.w / 2} 5s-${cache.w / 2}-2-${cache.w / 2}-5v-${cache.h}z`} />
+			<ellipse class="cache" cx={cache.x + cache.w / 2} cy={cache.y} rx={cache.w / 2} ry="4" />
+			<text class="tag" x={cache.x + 14} y={cache.y + 16}>Cache</text>
+			<text class="cachetext" x={cache.x + 62} y={cache.y + 16}>~/.cache/trowl</text>
+
+			<!-- Trowl, local -->
+			<rect class="host" x="144" y="122" width="752" height={TOP + H + 14 - 122} rx="12" />
+			<rect class="llm" x={llm.x} y={llm.y} width={llm.w} height={llm.h} rx="7" />
+			<text class="item" x={llm.x + llm.w / 2} y={llm.y + 16} text-anchor="middle">Local LLM</text>
+
+			<!-- Inputs -->
+			{inputs.map((i) => (
+				<g>
+					<rect class:list={['input', { optional: i.optional }]} x="0" y={i.y} width="126" height="44" rx="8" />
+					<text class:list={['title', { flag: i.flag }]} x="14" y={i.y + 19}>{i.title}</text>
+					<text class="sub" x="14" y={i.y + 35}>{i.sub}</text>
+				</g>
+			))}
+
+			<!-- 01 Unpack and 02 Parse share the first column -->
+			<g transform={`translate(${parse.x} ${TOP})`}>
+				<rect class="stage" width={parse.w} height={unpack.h} rx="10" />
+				<text class="num" x="14" y="20">01</text>
+				<text class="title" x="14" y="38">Unpack</text>
+				<rect class="mini" x="12" y="50" width={parse.w - 24} height="28" rx="7" />
+				<text class="item" x="24" y="69">ext4, squashfs, cpio, disk</text>
+			</g>
+			<g transform={`translate(${parse.x} ${TOP + parseCard.y})`}>
+				<rect class="stage" width={parse.w} height={H - parseCard.y} rx="10" />
+				<text class="num" x="14" y="20">02</text>
+				<text class="title" x="14" y="38">Parse</text>
+				{parsers.map((p) => (
+					<g>
+						<rect class="mini" x="12" y={p.y} width={parse.w - 24} height="28" rx="7" />
+						<text class="item" x="24" y={p.y + 19}>{p.label}</text>
+					</g>
+				))}
+			</g>
+
+			<!-- 03 Analyse -->
+			<g transform={`translate(${analyse.x} ${TOP})`}>
+				<rect class="stage main" width={analyse.w} height={H} rx="10" />
+				<text class="num" x="14" y="24">03</text>
+				<text class="title big" x="14" y="45">Analyse</text>
+				<line class="rule" x1="14" x2={analyse.w - 14} y1="56" y2="56" />
+				{analyses.map((a) => (
+					<g>
+						<rect class="card" x="14" y={a.y} width={analyse.w - 28} height="50" rx="8" />
+						<text class="item strong" x="26" y={a.y + 20}>{a.title}</text>
+						<text class="sub" x="26" y={a.y + 36}>{a.sub}</text>
+					</g>
+				))}
+			</g>
+
+			<!-- 04 Report -->
+			<g transform={`translate(${report.x} ${TOP + report.y})`}>
+				<rect class="stage" width={report.w} height={report.h} rx="10" />
+				<text class="num" x="14" y="24">04</text>
+				<text class="title" x="14" y="44">Report</text>
+				<line class="rule" x1="14" x2={report.w - 14} y1="56" y2="56" />
+				<rect class="mini" x="12" y="66" width={report.w - 24} height="90" rx="7" />
+				<text class="mono" x="24" y="86">index.html</text>
+				<text class="sub" x="24" y="105">React + Cytoscape UI,</text>
+				<text class="sub" x="24" y="120">bundled by Vite into</text>
+				<text class="sub" x="24" y="135">one file with the report</text>
+				{outputs.map((o) => (
+					<g>
+						<rect class="mini" x="12" y={o.y} width={report.w - 24} height="44" rx="7" />
+						<text class="mono" x="24" y={o.y + 19}>{o.title}</text>
+						<text class="sub" x="24" y={o.y + 35}>{o.sub}</text>
+					</g>
+				))}
+			</g>
+
+			<!-- Arrows, drawn over the stage edges -->
+			<!-- Unpack hands the rootfs to Parse and to Analyse. Parse hands its results to Analyse. -->
+			{[[parse.x + parse.w, analyse.x, TOP + 44], [parse.x + parse.w, analyse.x, TOP + parseCard.y + (parsers[0].y + parsers[parsers.length - 1].y + 28) / 2], [analyse.x + analyse.w, report.x, TOP + report.y + 40]].map(([a, b, y]) => (
+				<path class="arrow" d={`M${a} ${y}H${b - 4}m-5-5 5 5-5 5`} />
+			))}
+			<path class="arrow" d={`M${parse.x + parse.w / 2} ${TOP + unpack.h}V${TOP + parseCard.y - 4}m-5-5 5 5 5-5`} />
+			{cveFeeds.map((f) => <path class="dash" d={`M${f.x + f.w / 2} 43V${cache.y - 6}m-4-5 4 5 4-5`} />)}
+			<path class="dash optional" d={`M${model.cx} 43V${cache.y - 6}m-4-5 4 5 4-5`} />
+			<path class="dash" d={`M${cveX} ${cache.y + cache.h + 5}V${TOP - 4}m-4-5 4 5 4-5`} />
+			<path class="dash optional" d={`M${llm.x + llm.w / 2} ${cache.y + cache.h + 5}V${llm.y - 4}m-4-5 4 5 4-5`} />
+			<path class="dash optional" d={`M${runtime.x + runtime.w / 2} 43V60H888V${llm.y + llm.h / 2}H${llm.x + llm.w + 4}m5-5-5 5 5 5`} />
+			<path class="dash optional" d={`M${llm.x + llm.w / 2} ${llm.y + llm.h}V${TOP + report.y - 4}m-4-5 4 5 4-5`} />
+			{inputs.map((i) => (
+				<path class="arrow" d={`M126 ${i.y + 22}H${parse.x + 12 - 4}m-5-5 5 5-5 5`} />
+			))}
+		</svg>
+	</div>
+</figure>
+
+<style>
+	.scroll { overflow-x: auto; }
+	svg { font-family: var(--sl-font); display: block; width: 100%; min-width: 40rem; height: auto; }
+	.band { fill: none; stroke: var(--sl-color-gray-5); stroke-dasharray: 4 4; }
+	.host { fill: color-mix(in srgb, var(--sl-color-white) 1.5%, transparent); stroke: var(--sl-color-gray-5); }
+	.stage, .input { fill: var(--sl-color-bg); stroke: var(--sl-color-gray-5); }
+	.stage.main { stroke: color-mix(in srgb, var(--sl-color-accent) 70%, transparent); fill: color-mix(in srgb, var(--sl-color-accent) 7%, var(--sl-color-bg)); }
+	.input.optional { stroke-dasharray: 4 3; }
+	.mini { fill: color-mix(in srgb, var(--sl-color-white) 4%, transparent); }
+	.card { fill: var(--sl-color-bg); stroke: color-mix(in srgb, var(--sl-color-accent) 35%, transparent); }
+	.llm { fill: var(--sl-color-bg); stroke: var(--sl-color-gray-4); stroke-dasharray: 4 3; }
+	.feed { fill: color-mix(in srgb, var(--sl-color-accent) 8%, transparent); stroke: color-mix(in srgb, var(--sl-color-accent) 45%, transparent); }
+	.feed.optional { stroke-dasharray: 4 3; }
+	.cache { fill: color-mix(in srgb, var(--sl-color-accent) 14%, var(--sl-color-bg)); stroke: color-mix(in srgb, var(--sl-color-accent) 70%, transparent); }
+	.cachetext { font-family: var(--sl-font-mono); font-size: 12px; font-weight: 600; fill: var(--sl-color-accent-high); }
+	.feedtext { font-family: var(--sl-font-mono); font-size: 11px; fill: var(--sl-color-accent-high); }
+	.kicker, .num, .tag { font-family: var(--sl-font-mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; fill: var(--sl-color-gray-3); }
+	.tag { font-size: 9.5px; }
+	.num { fill: var(--sl-color-accent-high); }
+	.title { font-size: 14px; font-weight: 600; fill: var(--sl-color-white); }
+	.title.big { font-size: 16px; }
+	.title.flag { font-family: var(--sl-font-mono); font-size: 13px; }
+	.item { font-size: 12.5px; fill: var(--sl-color-gray-1); }
+	.item.strong { font-size: 12.5px; font-weight: 600; fill: var(--sl-color-white); }
+	.sub { font-size: 11px; fill: var(--sl-color-gray-3); }
+	.mono { font-family: var(--sl-font-mono); font-size: 12px; fill: var(--sl-color-white); }
+	.rule { stroke: var(--sl-color-gray-6); }
+	.arrow, .dash { fill: none; stroke: var(--sl-color-gray-3); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+	.dash { stroke: color-mix(in srgb, var(--sl-color-accent) 55%, transparent); stroke-dasharray: 3 3; }
+	.dash.optional { stroke: var(--sl-color-gray-4); }
+</style>

@@ -1,0 +1,81 @@
+---
+title: Install
+description: Install Trowl natively on Debian or Ubuntu.
+sidebar:
+  order: 2
+---
+
+The script builds Trowl from source and installs it to `/usr/local/bin`, along with necessary tools and dependencies.
+
+## Requirements
+
+- Debian or Ubuntu on `x86-64` or `arm64`
+- `sudo` for system packages and installation.
+
+## Installation
+
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/corefense-security/trowl/main/install.sh | bash -s -- --ref "$REF"
+```
+:::note
+Set `$REF` to a branch name or release tag. Omit `--ref` to build `main`.
+:::
+
+### Verify
+
+```sh
+trowl --version
+```
+
+### Installer options
+
+| Option | Effect |
+| --- | --- |
+| `--with-llm` | Also install `llama-server` for the Overview summary |
+| `--prefix DIR` | Install to `DIR/bin` instead of `/usr/local/bin` |
+| `--ref REF` | Build a branch or tag instead of `main` |
+| `--source DIR` | Build from a local checkout instead of cloning |
+
+### AI summary
+
+The installer leaves out LLM scan summary by default. Pass `--with-llm` to enable it.
+
+See [Local AI summary](../../reference/architecture/#local-summary) for details.
+
+## Scan a Yocto image
+
+```sh
+trowl scan core-image-minimal-qemux86-64.rootfs.ext4.zst \
+  --sbom core-image-minimal-qemux86-64.rootfs.spdx.json \
+  --kernel-config kernel.config \
+  -o report
+```
+
+See [Yocto integration](../../integrations/yocto/) to run Trowl scan inside BitBake.
+
+## Scan a Buildroot image
+
+From your Buildroot directory:
+
+```sh
+trowl scan output/images/rootfs.ext4 -o report
+```
+
+For optional inputs, see [SBOM analysis](../../features/sbom/) and [CVEs and VEX](../../features/cves-vex/).
+
+### Cache
+
+See [Data fetching and caching](../../reference/architecture/#network-and-cache).
+
+## Open the report
+
+Open `report/index.html` directly or serve the report locally:
+
+```sh
+trowl view report  # http://127.0.0.1:8765
+```
+
+Press Ctrl+C to stop the viewer.
+
+See [Report output](../../reference/report/) for more details.
