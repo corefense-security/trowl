@@ -94,7 +94,7 @@ The baseline is growing. More options from both sources are added as each one is
 
 ### Team policy
 
-Some failures are deliberate. Record them in a YAML file and pass it with `--kernel-policy`.
+Teams can add kernel configuration checks and record accepted failures in a YAML policy file passed with `--kernel-policy`. Trowl reports its built-in checks alongside the team's additions.
 
 ```yaml
 accept:
@@ -117,12 +117,11 @@ Trowl lists every module under `/lib/modules`, including compressed `.ko.xz`, `.
 
 | Field | What Trowl reads |
 | --- | --- |
-| `Signed` | Whether a module signature is appended to the file. |
-| `Vermagic` | Whether the module was built for the kernel version in the image. |
-| `License` | The license string from the module's `modinfo`. |
+| `Module` | Module name and path, plus signature type (such as PKCS#7) and length when present. |
 | `Package` | The SBOM package that ships the module. |
-
-The page header shows how the kernel treats signatures. `MODULE_SIG_FORCE=y` means enforced, and every unsigned module is flagged because the kernel will refuse to load it. `MODULE_SIG=y` alone means checked, so unsigned modules still load. Without either, signing is off.
+| `Size` | Module file size and whether it is compressed. |
+| `Signed` | Whether signature metadata is appended (checks the 28-byte `~Module signature appended~\n` end marker and preceding 12-byte trailer after decompression; does not verify the signature). |
+| `Built for` | Kernel version from `vermagic`, with a warning if it differs from the image's kernel. |
 
 ## Mount flags
 
