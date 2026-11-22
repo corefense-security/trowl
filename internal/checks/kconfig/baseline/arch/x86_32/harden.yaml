@@ -1,0 +1,16 @@
+- option: X86_PAE
+  expect: y
+  arch: [x86_32]
+  why: Enables PAE so 32-bit x86 kernels can use non-executable page protections
+  ref: KSPP
+- option: HIGHMEM4G
+  expect: y
+  since: '6.15'
+  arch: [x86_32]
+  why: Selects the current high-memory configuration for 32-bit x86 with PAE
+  ref: KSPP
+- option: M486
+  expect: n
+  arch: [x86_32]
+  why: Targets old x86 processors without the required PAE and NX support
+  ref: KSPP

@@ -1,0 +1,16 @@
+- option: VMSPLIT_3G
+  expect: y
+  arch: [arm]
+  why: Reserves three gigabytes of virtual address space for ARM userspace
+  ref: KSPP
+- option: CPU_SW_DOMAIN_PAN
+  expect: y
+  arch: [arm]
+  why: Restricts kernel access to user memory through ARM software PAN
+  ref: KSPP
+- option: ARM_DEBUG_WX
+  expect: y
+  since: '6.9'
+  arch: [arm]
+  why: Warns about ARM mappings that are both writable and executable
+  ref: KSPP

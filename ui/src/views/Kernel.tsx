@@ -1,7 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { ShieldCheck, Unlock } from "lucide-react";
 import type { KernelEntry, Report } from "../types";
-import { PageHead, usePage } from "../ui";
+import { Dropdown, PageHead, usePage } from "../ui";
 
 // An option missing from the config counts as a fail, since the protection isn't there either
 // way. The row's note still says why it is absent (dependencies off, or no compiler support).
@@ -14,7 +14,12 @@ const STATUS: Record<Shown, { label: string; color: string }> = {
   na: { label: "Not applicable", color: "var(--neutral)" },
   accepted: { label: "Accepted", color: "var(--accent)" },
 };
-const SUBSYSTEM: Record<string, string> = { security: "Security", fs: "Filesystems", mm: "Memory management", net: "Networking", module: "Modules", team: "Team policy" };
+const SUBSYSTEM: Record<string, string> = {
+  security: "Security", fs: "Filesystems", mm: "Memory management", net: "Networking", module: "Modules",
+  kernel: "Kernel", compiler: "Compiler", platform: "Platform", tty: "TTY", arch: "Architecture",
+  "arch/arm": "ARM", "arch/arm64": "ARM64", "arch/x86": "x86",
+  "arch/x86_32": "x86 (32-bit)", "arch/x86_64": "x86 (64-bit)", team: "Team policy",
+};
 
 function show(v: string | number | { min: number } | null) {
   if (v === null || v === undefined) return <span className="muted">absent</span>;
@@ -22,7 +27,7 @@ function show(v: string | number | { min: number } | null) {
   return v === "n" ? "not set" : String(v);
 }
 
-/** Enabling an attack-surface option increases attack surface. Enabling a hardening option increases security. */
+/** The bucket identifies an exposed interface or a recommended protection. */
 const EFFECT = {
   attack_surface: { label: "Increases attack surface", icon: <Unlock size={14} />, cls: "eff-surface" },
   harden: { label: "Increases security", icon: <ShieldCheck size={14} />, cls: "eff-secure" },
@@ -31,14 +36,22 @@ const ORDER: Shown[] = ["fail", "accepted", "pass", "na"];
 
 function Effect({ bucket }: { bucket: KernelEntry["bucket"] }) {
   const e = EFFECT[bucket];
-  return <span className={`eff ${e.cls}`} title={`Enabling it: ${e.label.toLowerCase()}`} aria-label={e.label}>{e.icon}</span>;
+  const title = bucket === "attack_surface" ? "Enabling it increases attack surface" : "The recommended setting increases security";
+  return <span className={`eff ${e.cls}`} title={title} aria-label={e.label}>{e.icon}</span>;
 }
 
 export default function Kernel({ r }: { r: Report }) {
   const k = r.kernel;
+  const [result, setResult] = useState("");
   const rows = useMemo(() => [...(k?.entries ?? [])].sort((a, b) => ORDER.indexOf(shownStatus(a.status)) - ORDER.indexOf(shownStatus(b.status)) ||
     a.subsystem.localeCompare(b.subsystem) || a.option.localeCompare(b.option)), [k]);
-  const page = usePage(rows);
+  const shown = rows.filter((e) => result === "" || shownStatus(e.status) === result);
+  const page = usePage(shown, result);
+  const resultOpts = [
+    { value: "", label: "All", n: rows.length },
+    { value: "pass", label: "Pass", n: rows.filter((e) => shownStatus(e.status) === "pass").length },
+    { value: "fail", label: "Fail", n: rows.filter((e) => shownStatus(e.status) === "fail").length },
+  ];
   if (!k?.source) return null; // the sidebar disables this page
   const file = k.source.path.split("/").pop();
 
@@ -50,6 +63,11 @@ export default function Kernel({ r }: { r: Report }) {
           />
       </section>
       <section className="card span-12">
+        <div className="toolbar">
+          <Dropdown label="Result" value={result} options={resultOpts} onChange={setResult} />
+          <span className="spacer" />
+          <span className="muted">{shown.length} of {rows.length}</span>
+        </div>
         <table className="kt">
           <thead>
             <tr><th>Option</th><th>Subsystem</th><th className="c">Effect</th><th>Recommended</th><th>Observed</th><th>Result</th></tr>

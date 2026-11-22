@@ -1,0 +1,44 @@
+- option: BUG
+  expect: y
+  why: Reports fatal kernel conditions and stops the offending process
+  ref: KSPP
+- option: DEBUG_NOTIFIERS
+  expect: y
+  why: Checks notifier callbacks before they are called
+  ref: KSPP
+- option: DEBUG_LIST
+  expect: y
+  why: Adds consistency checks to linked-list operations
+  ref: KSPP
+- option: DEBUG_SG
+  expect: y
+  why: Checks scatter-gather lists for invalid entries
+  ref: KSPP
+- option: DEBUG_VIRTUAL
+  expect: y
+  why: Checks kernel virtual-to-physical address conversions
+  ref: KSPP
+- option: BUG_ON_DATA_CORRUPTION
+  expect: y
+  why: Stops execution when corruption of kernel structures is detected
+  ref: KSPP
+- option: SCHED_STACK_END_CHECK
+  expect: y
+  why: Checks the kernel stack boundary during scheduling
+  ref: KSPP
+- option: PANIC_ON_OOPS
+  expect: y
+  why: Panics on a kernel oops instead of continuing in a damaged state
+  ref: KSPP
+- option: PANIC_TIMEOUT
+  expect: -1
+  why: Reboots immediately after a kernel panic
+  ref: KSPP
+- option: MAGIC_SYSRQ_DEFAULT_ENABLE
+  expect: 176
+  why: Limits the default SysRq mask to sync, remount read-only and reboot
+  ref: KSPP
+- option: SCHED_CORE
+  expect: y
+  why: Allows processes to request isolation from untrusted SMT siblings
+  ref: KSPP
