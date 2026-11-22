@@ -24,11 +24,60 @@
   ref: mainline
 - option: DEFAULT_MMAP_MIN_ADDR
   expect: {min: 65536}
-  arch: [x86]
+  arch: [x86, arm64]
   why: Keeps low virtual addresses unmappable, so NULL-pointer bugs can't be exploited
   ref: KSPP
 - option: DEFAULT_MMAP_MIN_ADDR
   expect: {min: 32768}
-  arch: [arm64, arm]
+  arch: [arm]
   why: Keeps low virtual addresses unmappable, so NULL-pointer bugs can't be exploited
+  ref: KSPP
+- option: STRICT_KERNEL_RWX
+  expect: y
+  since: '4.11'
+  why: Keeps kernel code read-only and kernel data non-executable
+  ref: KSPP
+- option: DEBUG_WX
+  expect: y
+  arch: [x86, arm64, riscv, powerpc, s390]
+  why: Warns about kernel mappings that are both writable and executable
+  ref: KSPP
+- option: PAGE_TABLE_CHECK
+  expect: y
+  since: '5.17'
+  arch: [x86_64, arm64, riscv]
+  why: Checks user page mappings for unsafe sharing and corruption
+  ref: KSPP
+- option: PAGE_TABLE_CHECK_ENFORCED
+  expect: y
+  since: '5.17'
+  arch: [x86_64, arm64, riscv]
+  why: Enables page table checks by default
+  ref: KSPP
+- option: SLUB_DEBUG
+  expect: y
+  why: Allows SLUB allocation checks to detect memory corruption
+  ref: KSPP
+- option: VMAP_STACK
+  expect: y
+  why: Places guard pages around kernel stacks to catch overflows
+  ref: KSPP
+- option: RANDOMIZE_KSTACK_OFFSET_DEFAULT
+  expect: y
+  since: '5.13'
+  why: Randomises the kernel stack offset on syscall entry
+  ref: KSPP
+- option: KFENCE
+  expect: y
+  since: '5.12'
+  why: Samples allocations to detect heap overflows and use-after-free bugs
+  ref: KSPP
+- option: KFENCE_SAMPLE_INTERVAL
+  expect: 100
+  since: '5.12'
+  why: Sets the default KFENCE allocation sampling interval to 100 milliseconds
+  ref: KSPP
+- option: SLAB_MERGE_DEFAULT
+  expect: n
+  why: Merging slab caches makes it easier to corrupt objects across cache boundaries
   ref: KSPP

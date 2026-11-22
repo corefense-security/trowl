@@ -1,0 +1,5 @@
+- option: COMPAT
+  expect: n
+  arch: [x86_64, arm64]
+  why: Adds compatibility system calls for 32-bit userspace
+  ref: KSPP

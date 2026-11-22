@@ -1,4 +1,4 @@
-import { Check, Download, ExternalLink, X } from "lucide-react";
+import { Check, Download, ExternalLink, TriangleAlert, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { CveAssessment, CveCarrier, CveRow, CveSection, CveStatus, CveVex, FileVerdict } from "../types";
 import { Card, Dropdown, SearchBox, Switch, usePage } from "../ui";
@@ -74,6 +74,21 @@ function SourceNote({ rows, sources }: { rows: CveRow[]; sources: CveSection["so
     <span title={feed ? `Version match: ${feed.source}, updated ${feed.updated.slice(0, 10)}` : undefined}>
       {s.sbom.toLocaleString()} listed in the SBOM · {s.matched.toLocaleString()} by version match (NVD, kernel CNA){kernelNote}
     </span>
+  );
+}
+
+/** Says that an offline scan read KEV, EPSS and advisory links from the cache, and how old they are. */
+function OfflineNote({ sources }: { sources: CveSection["sources"] }) {
+  const parts = [
+    sources.kev ? `KEV from ${sources.kev.released.slice(0, 10)}` : "no cached KEV",
+    sources.epss ? `EPSS from ${sources.epss.date}` : "no cached EPSS",
+  ];
+  if (sources.links_missing) parts.push(`${sources.links_missing.toLocaleString()} CVEs without cached advisory links`);
+  return (
+    <div className="span-12 offline-note" role="note">
+      <TriangleAlert size={14} />
+      <span><b>Offline scan.</b> KEV, EPSS and advisory links come from the cache: {parts.join(", ")}.</span>
+    </div>
   );
 }
 
@@ -508,6 +523,7 @@ export default function Cves({ section, params }: { section: CveSection; params:
 
   return (
     <div className="grid">
+      {section.sources.offline && <OfflineNote sources={section.sources} />}
       <Attention s={section.summary} rows={rows} sources={section.sources} />
       <ByComponent s={section.summary} />
       <div className="span-12">

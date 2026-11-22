@@ -1,0 +1,13 @@
+- option: LDISC_AUTOLOAD
+  expect: n
+  since: '5.1'
+  why: Allows TTY line disciplines to be loaded automatically
+  ref: KSPP
+- option: LEGACY_PTYS
+  expect: n
+  why: Exposes the legacy BSD pseudo-terminal interface
+  ref: KSPP
+- option: LEGACY_TIOCSTI
+  expect: n
+  why: Allows characters to be injected into a terminal input queue
+  ref: KSPP

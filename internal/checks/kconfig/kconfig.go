@@ -36,7 +36,10 @@ import (
 //go:embed baseline
 var baselineFS embed.FS
 
-var Subsystems = []string{"security", "fs", "mm", "net", "module"} // module = kernel/module
+var Subsystems = []string{
+	"security", "fs", "mm", "net", "module", "kernel", "compiler", "platform", "tty",
+	"arch", "arch/arm", "arch/arm64", "arch/x86", "arch/x86_32", "arch/x86_64",
+}
 var Buckets = []string{"harden", "attack_surface"}
 
 var (
@@ -252,6 +255,8 @@ func Parse(text string) (Config, string, string) {
 			arch = "x86"
 		} else if values["ARM64"] == "y" {
 			arch = "arm64"
+		} else if values["ARM"] == "y" {
+			arch = "arm"
 		}
 	}
 	return values, arch, version
@@ -458,6 +463,18 @@ func judge(e Entry, values Config) (string, string) {
 		if x {
 			want = "y"
 		}
+	case int:
+		if !present {
+			return "missing", "not in this config"
+		}
+		n, err := strconv.ParseInt(actual, 0, 64)
+		if err != nil {
+			return "fail", "not a number"
+		}
+		if n == int64(x) {
+			return "pass", ""
+		}
+		return "fail", ""
 	default:
 		want = pyStr(expect)
 	}
@@ -506,11 +523,20 @@ func Check(rootfs, kernelConfig, policyPath string) (*pyjson.Obj, []model.Findin
 		return nil, nil, err
 	}
 	today := time.Now().Format("2006-01-02")
+	// Keep x86 family policies while distinguishing 32-bit and 64-bit checks.
+	target := arch
+	if arch == "x86" {
+		if values["X86_64"] == "y" {
+			target = "x86_64"
+		} else if values["X86_32"] == "y" {
+			target = "x86_32"
+		}
+	}
 
 	entries := []any{}
 	var findings []model.Finding
 	for _, e := range append(LoadBaseline(), pol.add...) {
-		if archs := archList(e["arch"]); len(archs) > 0 && arch != "" && !contains(archs, arch) {
+		if archs := archList(e["arch"]); len(archs) > 0 && arch != "" && !contains(archs, arch) && !contains(archs, target) {
 			continue // the option doesn't exist on this architecture
 		}
 		option := e.str("option")

@@ -1,0 +1,4 @@
+- option: DEVMEM
+  expect: n
+  why: Exposes physical memory through /dev/mem
+  ref: KSPP

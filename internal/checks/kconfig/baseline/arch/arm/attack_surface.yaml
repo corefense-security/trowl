@@ -1,0 +1,5 @@
+- option: OABI_COMPAT
+  expect: n
+  arch: [arm]
+  why: Adds the obsolete ARM userspace ABI
+  ref: KSPP

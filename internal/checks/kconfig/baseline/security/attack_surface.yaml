@@ -1,2 +1,22 @@
-# No entries yet.
-[]
+- option: SECURITY_SELINUX_BOOTPARAM
+  expect: n
+  why: Allows SELinux to be disabled through the kernel command line
+  ref: KSPP
+- option: SECURITY_SELINUX_DEVELOP
+  expect: n
+  why: Allows SELinux enforcement to be disabled at runtime
+  ref: KSPP
+- option: SECURITY_SELINUX_DEBUG
+  expect: n
+  why: Enables SELinux debugging code intended for development
+  ref: KSPP
+- option: KSTACK_ERASE_METRICS
+  expect: n
+  since: '6.17'
+  why: Exposes kernel stack consumption metrics through /proc
+  ref: KSPP
+- option: KSTACK_ERASE_RUNTIME_DISABLE
+  expect: n
+  since: '6.17'
+  why: Allows kernel stack erasing to be disabled at runtime
+  ref: KSPP

@@ -188,6 +188,10 @@ export interface CveSection {
     inventory?: string;
     /** Set when --kernel-tree was given: the tree the kernel CVEs got their VEX status from. */
     kernel_vex?: { tree: string; version: string } | null;
+    /** Set when the scan ran with --no-network. KEV, EPSS and links then came from the cache. */
+    offline?: boolean;
+    /** With offline, the CVEs in the link scope that had no cached advisory links. */
+    links_missing?: number;
     /** What happened to the statements of the OpenVEX file given with --vex. */
     vex?: { file: string; statements: number; applied: number; no_cve: number; no_product: number } | null;
     /** The openvex.json written beside the report. unnamed counts CVEs left out because their

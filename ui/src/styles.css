@@ -443,6 +443,10 @@ tr.sel td { background: var(--accent-soft); }
 .ov-dg { display: flex; align-items: center; gap: 12px; margin-top: 18px; padding: 9px 16px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--grid); font-size: 12.5px; white-space: nowrap; }
 .ov-dg-lead { display: inline-flex; align-items: center; gap: 8px; padding-right: 12px; border-right: 1px solid var(--axis); font-weight: 500; color: color-mix(in srgb, var(--warning) 85%, var(--ink)); }
 .ov-dg-lead svg { color: var(--warning); }
+/* The CVE page's note for a --no-network scan. Only the icon and the lead are amber. */
+.offline-note { display: flex; align-items: center; gap: 10px; padding: 9px 16px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--grid); font-size: 12.5px; color: var(--muted); }
+.offline-note svg { flex: none; color: var(--warning); }
+.offline-note b { font-weight: 600; color: color-mix(in srgb, var(--warning) 85%, var(--ink)); }
 .ov-dg-split { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
 .ov-dg .share-link { margin: 0 0 0 auto; }
 /* Installed packages row. Uses the same columns as the donut and legend above. */

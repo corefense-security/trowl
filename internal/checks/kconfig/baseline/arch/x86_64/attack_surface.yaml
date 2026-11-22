@@ -1,0 +1,15 @@
+- option: IA32_EMULATION
+  expect: n
+  arch: [x86_64]
+  why: Adds support for 32-bit x86 programs on a 64-bit kernel
+  ref: KSPP
+- option: X86_X32_ABI
+  expect: n
+  arch: [x86_64]
+  why: Adds the x32 userspace ABI
+  ref: KSPP
+- option: X86_VSYSCALL_EMULATION
+  expect: n
+  arch: [x86_64]
+  why: Retains the legacy fixed-address vsyscall interface through emulation
+  ref: KSPP

@@ -1,0 +1,8 @@
+- option: KEXEC
+  expect: n
+  why: Allows a running kernel to be replaced without a firmware reboot
+  ref: KSPP
+- option: HIBERNATION
+  expect: n
+  why: Allows kernel memory to be saved and restored through a hibernation image
+  ref: KSPP

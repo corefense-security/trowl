@@ -1,2 +1,4 @@
-# No entries yet.
-[]
+- option: INET_DIAG
+  expect: n
+  why: Exposes socket diagnostic interfaces
+  ref: KSPP

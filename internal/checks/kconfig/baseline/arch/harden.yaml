@@ -1,0 +1,16 @@
+- option: RANDOMIZE_BASE
+  expect: y
+  arch: [x86, arm64]
+  why: Randomises the kernel load address
+  ref: KSPP
+- option: CFI_CLANG
+  expect: y
+  since: '6.1'
+  arch: [x86_64, arm64]
+  why: Checks indirect call targets with Clang control-flow integrity
+  ref: KSPP
+- option: CFI_PERMISSIVE
+  expect: n
+  arch: [x86_64, arm64]
+  why: Allows execution to continue after a control-flow integrity failure
+  ref: KSPP

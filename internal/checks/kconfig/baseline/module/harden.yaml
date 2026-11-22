@@ -8,3 +8,24 @@
   since: "3.7"
   why: Refuses to load modules without a valid signature
   ref: KSPP
+- option: STRICT_MODULE_RWX
+  expect: y
+  since: '4.11'
+  why: Keeps module code read-only and module data non-executable
+  ref: KSPP
+- option: MODULE_SIG_ALL
+  expect: y
+  why: Signs all modules during installation
+  ref: KSPP
+- option: MODULE_SIG_SHA512
+  expect: y
+  why: Uses SHA-512 when signing kernel modules
+  ref: KSPP
+- option: MODULE_SIG_HASH
+  expect: sha512
+  why: Records SHA-512 as the selected module signing hash
+  ref: KSPP
+- option: MODULE_SIG_KEY
+  expect: certs/signing_key.pem
+  why: Uses the KSPP example signing key path; custom paths may also be valid
+  ref: KSPP

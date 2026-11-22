@@ -1,0 +1,49 @@
+- option: X86_64
+  expect: y
+  arch: [x86_64]
+  why: Uses the 64-bit x86 kernel target recommended by KSPP
+  ref: KSPP
+- option: RANDOMIZE_MEMORY
+  expect: y
+  arch: [x86_64]
+  why: Randomises kernel memory regions on x86-64
+  ref: KSPP
+- option: LEGACY_VSYSCALL_NONE
+  expect: y
+  arch: [x86_64]
+  why: Disables the fixed-address legacy vsyscall interface
+  ref: KSPP
+- option: X86_KERNEL_IBT
+  expect: y
+  since: '5.18'
+  arch: [x86_64]
+  why: Checks indirect branch targets with Intel CET
+  ref: KSPP
+- option: X86_USER_SHADOW_STACK
+  expect: y
+  since: '6.6'
+  arch: [x86_64]
+  why: Supports CET shadow stacks for userspace
+  ref: KSPP
+- option: INTEL_IOMMU_SVM
+  expect: y
+  arch: [x86_64]
+  why: Supports shared virtual memory through the Intel IOMMU
+  ref: KSPP
+- option: AMD_IOMMU
+  expect: y
+  arch: [x86_64]
+  why: Supports DMA isolation on AMD platforms
+  ref: KSPP
+- option: MITIGATION_SLS
+  expect: y
+  since: '6.9'
+  arch: [x86_64]
+  why: Mitigates straight-line speculation in kernel code
+  ref: KSPP
+- option: CFI_AUTO_DEFAULT
+  expect: n
+  since: '6.11'
+  arch: [x86_64]
+  why: Prefers FineIBT over the KSPP recommendation of KCFI
+  ref: KSPP
