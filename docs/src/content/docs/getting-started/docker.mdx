@@ -5,61 +5,74 @@ sidebar:
   order: 1
 ---
 
-Trowl's Docker image includes filesystem extraction tools and `llama-server` for the LLM summary. It runs with Docker on Linux, macOS or Windows.
-
 ## Installation
 
-:::note
-Use a preview tag until the first stable release.
+Trowl's Docker image includes filesystem extraction tools and `llama-server` for the LLM summary. It runs with Docker on Linux, macOS or Windows.
 
 ```sh
-REF=v0.1.0-preview.4
+docker pull ghcr.io/corefense-security/trowl:$TAG
 ```
+
+:::note
+Replace `$TAG` with a release tag. Use a preview tag until the first stable release.
 :::
 
+## Scan a Yocto image
+
+Put the Yocto image, its SBOM and `kernel.config` in `~/trowl-in/`, then run:
+
 ```sh
-docker pull ghcr.io/corefense-security/trowl:$REF
+# Create host directories owned by your user.
+mkdir -p ~/trowl-out ~/.cache/trowl
+
+docker run --rm -t \
+  --user "$(id -u):$(id -g)" \
+  -v ~/trowl-in:/in:ro \
+  -v ~/trowl-out:/out \
+  -v ~/.cache/trowl:/cache/trowl \
+  ghcr.io/corefense-security/trowl:$TAG \
+  scan /in/core-image-minimal-qemux86-64.rootfs.ext4.zst \
+    --sbom /in/core-image-minimal-qemux86-64.rootfs.spdx.json \
+    --kernel-config /in/kernel.config \
+    -o /out/report
+```
+> See [Yocto integration](../../integrations/yocto/) to scan images during a build.
+
+## Scan a Buildroot image
+
+Put `output/images/rootfs.ext4` from your Buildroot build in `~/trowl-in/`, then run:
+
+```sh
+mkdir -p ~/trowl-out ~/.cache/trowl
+
+docker run --rm -t \
+  --user "$(id -u):$(id -g)" \
+  -v ~/trowl-in:/in:ro \
+  -v ~/trowl-out:/out \
+  -v ~/.cache/trowl:/cache/trowl \
+  ghcr.io/corefense-security/trowl:$TAG \
+  scan /in/rootfs.ext4 -o /out/report
 ```
 
-## Run a scan
+### Kernel VEX
 
-Only the image is required. [Your first scan](../first-scan/) covers optional inputs and their Yocto build paths.
+Trowl can perform VEX on [kernel CVEs](../../features/cves-vex/#kernel-cves) with or without an SBOM. To enable, mount the source tree with `-v ~/src/linux:/tree:ro` and pass `--kernel-tree /tree`.
 
-1. Put the inputs in one folder.
+### Cache
 
-   ```
-   ~/trowl-in/
-   ├── core-image-minimal-qemux86-64.rootfs.ext4.zst
-   ├── core-image-minimal-qemux86-64.rootfs.spdx.json
-   └── kernel.config
-   ```
+Mount the host cache at `/cache/trowl` to reuse downloads between containers:
 
-2. Create the output and cache folders under your user account.
+```sh
+-v ~/.cache/trowl:/cache/trowl
+```
 
-   ```sh
-   mkdir -p ~/trowl-out ~/.cache/trowl
-   ```
+See [Data fetching and caching](../../reference/architecture/#network-and-cache).
 
-3. Run the scan.
+### Local AI summary
 
-   ```sh
-   docker run --rm -t \
-     --user "$(id -u):$(id -g)" \
-     -v ~/trowl-in:/in:ro \
-     -v ~/trowl-out:/out \
-     -v ~/.cache/trowl:/cache/trowl \
-     ghcr.io/corefense-security/trowl:$REF \
-     scan /in/core-image-minimal-qemux86-64.rootfs.ext4.zst \
-       --sbom /in/core-image-minimal-qemux86-64.rootfs.spdx.json \
-       --kernel-config /in/kernel.config \
-       -o /out/report
-   ```
+Docker mode generates LLM scan summary by default. Pass `--no-llm` after `scan` to skip AI summary and model weight downloads.
 
-Input paths refer to files inside the container and must be mounted. For kernel VEX assessment, also mount the source with `-v ~/src/linux-6.18.52:/tree:ro` and pass `--kernel-tree /tree`.
-
-### Downloads and cache
-
-The mounted cache stores CVE feeds and the summary model in `~/.cache/trowl` on the host. The first scan downloads the model (about 2.7 GB). Later scans reuse cached files. See [Network and cache](../../reference/architecture/#network-and-cache).
+For details, refer to [Local AI summary](../../reference/architecture/#local-summary).
 
 ## Open the report
 
@@ -68,10 +81,10 @@ Open `~/trowl-out/report/index.html` directly or serve the report locally:
 ```sh
 docker run --rm -it -p 8765:8765 \
   -v ~/trowl-out:/out:ro \
-  ghcr.io/corefense-security/trowl:$REF \
+  ghcr.io/corefense-security/trowl:$TAG \
   view /out/report
 ```
 
 Open `http://localhost:8765` and press Ctrl+C to stop the viewer.
 
-See [Report output](../../reference/report/) for JSON contents and static hosting.
+See [Report output](../../reference/report/) for more details.

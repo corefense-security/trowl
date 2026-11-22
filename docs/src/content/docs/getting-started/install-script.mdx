@@ -1,5 +1,5 @@
 ---
-title: Install script
+title: Install
 description: Install Trowl natively on Debian or Ubuntu.
 sidebar:
   order: 2
@@ -14,19 +14,15 @@ The script builds Trowl from source and installs it to `/usr/local/bin`, along w
 
 ## Installation
 
-:::note
-Use a preview tag until the first stable release.
-
-```sh
-REF=v0.1.0-preview.4
-```
-:::
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/corefense-security/trowl/main/install.sh | bash -s -- --ref "$REF"
 ```
+:::note
+Replace `$REF` with a release tag. Use a preview tag until the first stable release.
+:::
 
-Go and Node are downloaded to a temporary folder and removed after the build. Verify the installation:
+### Verify
 
 ```sh
 trowl --version
@@ -41,19 +37,13 @@ trowl --version
 | `--ref REF` | Build a branch or tag instead of `main` |
 | `--source DIR` | Build from a local checkout instead of cloning |
 
-### Overview summary
+### AI summary
 
-Add `--with-llm` to build `llama-server` from llama.cpp for the Overview summary. This adds a few minutes to installation.
+The installer leaves out LLM support for scan summary by default. Pass `--with-llm` to enable it.
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/corefense-security/trowl/main/install.sh | bash -s -- --ref "$REF" --with-llm
-```
+See [Local AI summary](../../reference/architecture/#local-summary) for details.
 
-Without `llama-server`, scans run without the summary.
-
-## Run a scan
-
-Only the image is required. [Your first scan](../first-scan/) covers optional inputs and their Yocto build paths.
+## Scan a Yocto image
 
 ```sh
 trowl scan core-image-minimal-qemux86-64.rootfs.ext4.zst \
@@ -62,7 +52,21 @@ trowl scan core-image-minimal-qemux86-64.rootfs.ext4.zst \
   -o report
 ```
 
-The first scan downloads CVE feeds to `~/.cache/trowl` for reuse. With the summary enabled, it also downloads the model (about 2.7 GB). See [Network and cache](../../reference/architecture/#network-and-cache).
+See [Yocto integration](../../integrations/yocto/) to run Trowl scan inside BitBake.
+
+## Scan a Buildroot image
+
+From your Buildroot directory:
+
+```sh
+trowl scan output/images/rootfs.ext4 -o report
+```
+
+For optional inputs, see [SBOM analysis](../../features/sbom/) and [CVEs and VEX](../../features/cves-vex/).
+
+### Cache
+
+See [Data fetching and caching](../../reference/architecture/#network-and-cache).
 
 ## Open the report
 
@@ -74,4 +78,4 @@ trowl view report  # http://127.0.0.1:8765
 
 Press Ctrl+C to stop the viewer.
 
-See [Report output](../../reference/report/) for JSON contents and static hosting.
+See [Report output](../../reference/report/) for more details.

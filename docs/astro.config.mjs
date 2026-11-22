@@ -43,7 +43,6 @@ export default defineConfig({
 					items: [
 						{ slug: 'getting-started/docker' },
 						{ slug: 'getting-started/install-script' },
-						{ slug: 'getting-started/first-scan' },
 					],
 				},
 				{

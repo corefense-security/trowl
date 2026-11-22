@@ -12,7 +12,7 @@ Each scan writes a JSON report, a static HTML dashboard and an OpenVEX document 
 | Run | Output folder | Set with |
 | --- | --- | --- |
 | [Command line](../cli/#trowl-scan) | `./trowl-report/` by default | `-o DIR` or `--output DIR` |
-| [Docker](../../getting-started/docker/#run-a-scan) | `~/trowl-out/report/` on the host in the example | `-o /out/report` with `~/trowl-out` mounted at `/out` |
+| [Docker](../../getting-started/docker/#scan-a-yocto-image) | `~/trowl-out/report/` on the host in the example | `-o /out/report` with `~/trowl-out` mounted at `/out` |
 | [Yocto](../../integrations/yocto/#additional-settings) | `${TOPDIR}/trowl/<image>/` by default | `TROWL_REPORT_DIR` sets the base folder in `local.conf` |
 
 </div>
@@ -30,7 +30,7 @@ Each scan writes a JSON report, a static HTML dashboard and an OpenVEX document 
 
 Each scan produces `index.html` with the dashboard and report data embedded. No template setup or external dependencies are needed.
 
-Render it locally, or publish it as CI artifacts via GitHub Pages, Cloudflare Pages, S3:
+Keep the report as a CI artifact or publish it statically on S3, Cloudfare and GitHub Pages:
 
 ```sh
 trowl view ./trowl-report  # http://127.0.0.1:8765
@@ -58,7 +58,7 @@ The top-level keys are:
 
 ## OpenVEX output
 
-`openvex.json` is an OpenVEX v0.2.0 document that Trivy, Grype and VulnScout can read. It holds one statement for each CVE on a component that ships in the image. The dashboard's CVE page has a download link for it.
+`openvex.json` is an OpenVEX v0.2.0 document that Trivy, Grype and VulnScout can read. The dashboard's CVE page has a download link for it.
 
 Each statement names the component by its PURL, or by its CPE when it has no PURL. A component with neither is left out, and the report counts it under `cves.sources.openvex.unnamed`. Without an SBOM this applies to most package database entries, because Trowl only makes up a CPE from their names.
 
