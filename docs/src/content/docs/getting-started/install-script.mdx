@@ -19,7 +19,7 @@ The script builds Trowl from source and installs it to `/usr/local/bin`, along w
 curl -fsSL https://raw.githubusercontent.com/corefense-security/trowl/main/install.sh | bash -s -- --ref "$REF"
 ```
 :::note
-Replace `$REF` with a release tag. Use a preview tag until the first stable release.
+Set `$REF` to a branch name or release tag. Omit `--ref` to build `main`.
 :::
 
 ### Verify
@@ -39,7 +39,7 @@ trowl --version
 
 ### AI summary
 
-The installer leaves out LLM support for scan summary by default. Pass `--with-llm` to enable it.
+The installer leaves out LLM scan summary by default. Pass `--with-llm` to enable it.
 
 See [Local AI summary](../../reference/architecture/#local-summary) for details.
 

@@ -5,7 +5,7 @@ description: Scan every image BitBake builds with the meta-trowl layer.
 
 import { Steps } from '@astrojs/starlight/components';
 
-The `meta-trowl` layer scans Yocto images after a successful build without changing image tasks, signatures, sstate or output. It locates the image, SBOM and kernel inputs automatically.
+The `meta-trowl` layer scans Yocto images after a successful build. It adds scanner dependencies to `do_build` and leaves image-generation tasks and outputs unchanged. It locates the image, SBOM and kernel inputs automatically.
 
 It is tested on Scarthgap (5.0) and Wrynose with `core-image-minimal` for `qemux86-64`.
 
@@ -112,7 +112,11 @@ LLM inference is off by default. To enable AI-based scan summary, add this to `l
 TROWL_LLM = "1"
 ```
 
-The next `bitbake` also builds `llama-server` from llama.cpp and fetches the model into `DL_DIR`, where it is checked against its SHA-256. Both are shared through sstate and `DL_DIR` like any other recipe.
+:::note
+To add a summary to an existing report, set `TROWL_ALWAYS = "1"` in `local.conf`. The next build rescans the image without forcing an image rebuild.
+:::
+
+The next `bitbake` also builds `llama-server` from [llama.cpp](https://github.com/ggml-org/llama.cpp), and fetches the model into `DL_DIR`, where it is checked against its SHA-256. Both are shared through sstate and `DL_DIR` like any other recipe.
 
 ### Offline builds
 
