@@ -32,10 +32,14 @@ const outputs = [
 // the local LLM, which writes the summary.
 const cveX = analyse.x + analyse.w / 2;
 const llm = { x: 742, y: 134, w: 104, h: 24 };
-const cache = { x: 372, w: 508, y: 76, h: 22 }; // the feeds and the model land here before Trowl reads them
-const feedW = 112;
-const cveFeeds = ['NVD (JSON)', 'CISA KEV (JSON)', 'EPSS (CSV)'].map((label, i) => ({ label, x: cveX - (feedW * 3 + 12) / 2 + i * (feedW + 6) }));
-const model = { label: 'Hugging Face (GGUF)', cx: llm.x + llm.w / 2, w: 140 };
+const cache = { x: 360, w: 520, y: 76, h: 22 }; // the feeds and the model land here before Trowl reads them
+const cveFeeds = [
+	{ label: 'NVD (JSON)', x: 326, w: 100 },
+	{ label: 'CISA KEV (JSON)', x: 432, w: 112 },
+	{ label: 'EPSS (CSV)', x: 550, w: 88 },
+];
+const model = { label: 'Hugging Face (GGUF)', cx: 714, w: 140 };
+const runtime = { label: 'llama.cpp', x: 790, w: 90 };
 const inputs = [
 	{ y: TOP + 42, title: 'Image', sub: 'required' },
 	{ y: TOP + 148, title: '--vex', flag: true, sub: 'optional', optional: true },
@@ -47,20 +51,22 @@ const inputs = [
 	<div class="scroll" role="region" aria-label="Trowl architecture diagram" tabindex="0">
 		<svg viewBox={`0 0 900 ${TOP + H + 20}`} role="img" aria-labelledby="arch-title arch-desc">
 			<title id="arch-title">Trowl architecture</title>
-			<desc id="arch-desc">The image, an optional VEX file, an optional SBOM and an optional kernel tree with config go into Trowl, which runs locally. Trowl unpacks the image (ext4, squashfs, cpio or disk) into a root filesystem. It parses the VEX file (OpenVEX or CycloneDX) and the kernel tree's Kbuild files with its .config, and takes components from the first source found: the SBOM (SPDX 2, SPDX 3 or CycloneDX), the package database (opkg, dpkg or rpm) or fingerprints of versions in ELF files. It then analyses the image. CVE analysis matches versions, checks kernel CVEs against the kernel tree, applies the VEX file and adds CISA KEV and EPSS. SBOM analysis compares the SBOM's declared files with the image. Hardening covers ELF flags, the kernel config and mounts. Secrets finds private keys and API tokens. The report is index.html, a dashboard built by Vite into one static file with the report data embedded, plus report.json and openvex.json with each CVE's status. An optional local LLM, using a model from Hugging Face, writes a short summary into the dashboard. NVD (JSON), CISA KEV (JSON), EPSS (CSV) and the Hugging Face model (GGUF) are fetched when stale and cached in ~/.cache/trowl.</desc>
+			<desc id="arch-desc">The image, an optional VEX file, an optional SBOM and an optional kernel tree with config go into Trowl, which runs locally. Trowl unpacks the image (ext4, squashfs, cpio or disk) into a root filesystem. It parses the VEX file (OpenVEX or CycloneDX) and the kernel tree's Kbuild files with its .config, and takes components from the first source found: the SBOM (SPDX 2, SPDX 3 or CycloneDX), the package database (opkg, dpkg or rpm) or fingerprints of versions in ELF files. It then analyses the image. CVE analysis matches versions, checks kernel CVEs against the kernel tree, applies the VEX file and adds CISA KEV and EPSS. SBOM analysis compares the SBOM's declared files with the image. Hardening covers ELF flags, the kernel config and mounts. Secrets finds private keys and API tokens. The report is index.html, a dashboard built by Vite into one static file with the report data embedded, plus report.json and openvex.json with each CVE's status. An optional local LLM uses llama.cpp and a model from Hugging Face to write a short summary into the dashboard. NVD (JSON), CISA KEV (JSON), EPSS (CSV) and the Hugging Face model (GGUF) are fetched when stale and cached in ~/.cache/trowl. llama.cpp is installed separately.</desc>
 
-			<!-- External data, cached -->
+			<!-- External sources -->
 			<rect class="band" x="144" y="4" width="752" height="48" rx="10" />
-			<text class="kicker" x="160" y="25">External data</text>
-			<text class="sub" x="160" y="41">fetched when stale</text>
+			<text class="kicker" x="160" y="25">External sources</text>
+			<text class="sub" x="160" y="41">data and runtime</text>
 			{cveFeeds.map((f) => (
 				<g>
-					<rect class="feed" x={f.x} y="15" width={feedW} height="26" rx="13" />
-					<text class="feedtext" x={f.x + feedW / 2} y="32" text-anchor="middle">{f.label}</text>
+					<rect class="feed" x={f.x} y="15" width={f.w} height="26" rx="13" />
+					<text class="feedtext" x={f.x + f.w / 2} y="32" text-anchor="middle">{f.label}</text>
 				</g>
 			))}
 			<rect class="feed optional" x={model.cx - model.w / 2} y="15" width={model.w} height="26" rx="13" />
 			<text class="feedtext" x={model.cx} y="32" text-anchor="middle">{model.label}</text>
+			<rect class="feed optional" x={runtime.x} y="15" width={runtime.w} height="26" rx="13" />
+			<text class="feedtext" x={runtime.x + runtime.w / 2} y="32" text-anchor="middle">{runtime.label}</text>
 
 			<!-- Local cache, between the sources and the stages that read them -->
 			<path class="cache" d={`M${cache.x} ${cache.y}h${cache.w}v${cache.h}c0 3-${cache.w / 4} 5-${cache.w / 2} 5s-${cache.w / 2}-2-${cache.w / 2}-5v-${cache.h}z`} />
@@ -143,9 +149,11 @@ const inputs = [
 				<path class="arrow" d={`M${a} ${y}H${b - 4}m-5-5 5 5-5 5`} />
 			))}
 			<path class="arrow" d={`M${parse.x + parse.w / 2} ${TOP + unpack.h}V${TOP + parseCard.y - 4}m-5-5 5 5 5-5`} />
-			{[cveX, model.cx].map((x, i) => <path class:list={['dash', { optional: i === 1 }]} d={`M${x} 43V${cache.y - 6}m-4-5 4 5 4-5`} />)}
+			{cveFeeds.map((f) => <path class="dash" d={`M${f.x + f.w / 2} 43V${cache.y - 6}m-4-5 4 5 4-5`} />)}
+			<path class="dash optional" d={`M${model.cx} 43V${cache.y - 6}m-4-5 4 5 4-5`} />
 			<path class="dash" d={`M${cveX} ${cache.y + cache.h + 5}V${TOP - 4}m-4-5 4 5 4-5`} />
-			<path class="dash optional" d={`M${model.cx} ${cache.y + cache.h + 5}V${llm.y - 4}m-4-5 4 5 4-5`} />
+			<path class="dash optional" d={`M${llm.x + llm.w / 2} ${cache.y + cache.h + 5}V${llm.y - 4}m-4-5 4 5 4-5`} />
+			<path class="dash optional" d={`M${runtime.x + runtime.w / 2} 43V60H888V${llm.y + llm.h / 2}H${llm.x + llm.w + 4}m5-5-5 5 5 5`} />
 			<path class="dash optional" d={`M${llm.x + llm.w / 2} ${llm.y + llm.h}V${TOP + report.y - 4}m-4-5 4 5 4-5`} />
 			{inputs.map((i) => (
 				<path class="arrow" d={`M126 ${i.y + 22}H${parse.x + 12 - 4}m-5-5 5 5-5 5`} />
