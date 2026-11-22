@@ -49,7 +49,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	r := llm.NewRunner(*model, *cache)
+	r := llm.NewRunner(*model, *cache, true)
 	defer r.Close()
 	points := llm.Summarise(r, facts)
 	if len(points) == 0 {

@@ -289,7 +289,7 @@ func Run(u *unpack.Unpacked, image string, opt Options) (*Result, error) {
 	)
 	if opt.Model != "" && opt.CacheDir != "" {
 		st = status.Start("writing overview")
-		runner := llm.NewRunner(opt.Model, opt.CacheDir)
+		runner := llm.NewRunner(opt.Model, opt.CacheDir, opt.Network)
 		defer runner.Close()
 		if ov := llm.Overview(runner, overviewFacts(findingObjs, binaries, kernelSection, sbomSection, cves)); ov != nil {
 			result.Set("overview", ov)
@@ -863,11 +863,13 @@ func cveSection(sb *sbom.Sbom, presence *sbom.Status, rootfs string, opt Options
 	vexOut := openvex.New(stmts, opt.Started, model.Version)
 	sources := pyjson.O("kev", nil, "epss", nil, "links", "none", "version_match", matched, "kernel_vex", kernelVex,
 		"vex", vexIn, "openvex", pyjson.O("statements", len(stmts), "unnamed", unnamed))
-	if opt.Network && opt.CacheDir != "" {
-		st := status.Start("fetching KEV")
-		kev, kevMeta := feeds.KEV(opt.CacheDir)
+	if opt.CacheDir != "" {
+		st := status.Start("loading KEV")
+		kev, kevMeta := feeds.KEV(opt.CacheDir, opt.Network)
 		if kevMeta != nil {
 			st.Ok(fmt.Sprintf("%d entries", len(kev)))
+		} else if !opt.Network {
+			st.Fail("cache unavailable")
 		} else {
 			st.Fail("unavailable")
 		}
@@ -875,10 +877,12 @@ func cveSection(sb *sbom.Sbom, presence *sbom.Status, rootfs string, opt Options
 		for _, r := range rows {
 			wanted[r.G("id").(string)] = true
 		}
-		st = status.Start("fetching EPSS")
-		scores, epssMeta := feeds.EPSS(opt.CacheDir, wanted)
+		st = status.Start("loading EPSS")
+		scores, epssMeta := feeds.EPSS(opt.CacheDir, wanted, opt.Network)
 		if epssMeta != nil {
 			st.Ok(fmt.Sprintf("%d of %d CVEs scored", len(scores), len(wanted)))
+		} else if !opt.Network {
+			st.Fail("cache unavailable")
 		} else {
 			st.Fail("unavailable")
 		}
@@ -889,6 +893,7 @@ func cveSection(sb *sbom.Sbom, presence *sbom.Status, rootfs string, opt Options
 			r.Set("kev", nilIfNone(kev[id]))
 			r.Set("epss", nilIfNone(scores[id]))
 		}
+		missingLinks := 0
 		if opt.Links != "none" {
 			var scope []string
 			kernel := map[string]bool{}
@@ -901,7 +906,12 @@ func cveSection(sb *sbom.Sbom, presence *sbom.Status, rootfs string, opt Options
 					kernel[id] = true
 				}
 			}
-			found := feeds.CheckLinks(opt.CacheDir, scope, kernel, inFeed)
+			found := feeds.CheckLinks(opt.CacheDir, scope, kernel, inFeed, opt.Network)
+			for _, id := range scope {
+				if _, ok := found[id]; !ok {
+					missingLinks++
+				}
+			}
 			for _, r := range rows {
 				if l, ok := found[r.G("id").(string)]; ok {
 					r.Set("links", l)
@@ -910,6 +920,13 @@ func cveSection(sb *sbom.Sbom, presence *sbom.Status, rootfs string, opt Options
 				}
 			}
 			sources.Set("links", opt.Links)
+			if !opt.Network {
+				sources.Set("links_missing", missingLinks)
+			}
+		}
+		if !opt.Network {
+			sources.Set("offline", true)
+			status.Warn("%s", offlineNote(kevMeta, epssMeta, missingLinks))
 		}
 	}
 	rowsOut := make([]any, len(rows))
@@ -995,6 +1012,29 @@ func assessKernel(sb *sbom.Sbom, feed *nvd.Result, rootfs string, opt Options) (
 		"modules", modulesDir,
 		"sbom_assessed", sb.AssessesKernel(), "not_affected", n.NotAffected, "affected", n.Affected, "undecided", n.Undecided,
 		"no_files", n.NoFiles, "defies_sbom", n.Defies), nil
+}
+
+// offlineNote identifies cached feed dates and missing advisory links.
+func offlineNote(kev, epss *pyjson.Obj, missingLinks int) string {
+	parts := []string{"KEV cache unavailable", "EPSS cache unavailable"}
+	for i, entry := range []struct {
+		name, field string
+		meta        *pyjson.Obj
+	}{{"KEV", "released", kev}, {"EPSS", "date", epss}} {
+		if entry.meta == nil {
+			continue
+		}
+		date, _ := entry.meta.G(entry.field).(string)
+		if date == "" {
+			parts[i] = entry.name + " cached (date unknown)"
+		} else {
+			parts[i] = entry.name + " from " + date[:min(10, len(date))]
+		}
+	}
+	if missingLinks > 0 {
+		parts = append(parts, fmt.Sprintf("%d CVEs without cached advisory links", missingLinks))
+	}
+	return "--no-network: " + strings.Join(parts, "; ")
 }
 
 func nilIfNone(o *pyjson.Obj) any {

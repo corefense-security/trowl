@@ -83,12 +83,16 @@ func get(url string, timeout time.Duration) (int, []byte, error) {
 	return 0, nil, nil
 }
 
-func cached(cache, name string, urls []string, maxAge float64) []byte {
+func cached(cache, name string, urls []string, maxAge float64, network bool) []byte {
 	path := filepath.Join(cache, name)
+	// Offline scans may use stale data, but never refresh the cache.
 	if fi, err := os.Stat(path); err == nil && fi.Mode().IsRegular() &&
-		float64(time.Now().UnixNano()-fi.ModTime().UnixNano())/1e9 < maxAge {
+		(!network || float64(time.Now().UnixNano()-fi.ModTime().UnixNano())/1e9 < maxAge) {
 		b, _ := os.ReadFile(path)
 		return b
+	}
+	if !network {
+		return nil
 	}
 	for _, url := range urls {
 		code, body, err := get(url, 60*time.Second)
@@ -121,8 +125,8 @@ func str(m map[string]any, k string) any {
 }
 
 // KEV returns the CISA KEV entries by CVE and the catalogue's metadata (nil when unavailable).
-func KEV(cache string) (map[string]*pyjson.Obj, *pyjson.Obj) {
-	raw := cached(cache, "kev.json", kevURLs, day)
+func KEV(cache string, network bool) (map[string]*pyjson.Obj, *pyjson.Obj) {
+	raw := cached(cache, "kev.json", kevURLs, day, network)
 	if raw == nil {
 		return map[string]*pyjson.Obj{}, nil
 	}
@@ -143,8 +147,8 @@ func KEV(cache string) (map[string]*pyjson.Obj, *pyjson.Obj) {
 }
 
 // EPSS returns scores for the wanted CVEs and the score file's metadata (nil when unavailable).
-func EPSS(cache string, wanted map[string]bool) (map[string]*pyjson.Obj, *pyjson.Obj) {
-	raw := cached(cache, "epss.csv.gz", []string{epssURL}, day)
+func EPSS(cache string, wanted map[string]bool, network bool) (map[string]*pyjson.Obj, *pyjson.Obj) {
+	raw := cached(cache, "epss.csv.gz", []string{epssURL}, day, network)
 	if raw == nil {
 		return map[string]*pyjson.Obj{}, nil
 	}
@@ -376,12 +380,13 @@ func unanswered(checks []*linkCheck) []*linkCheck {
 // CheckLinks returns confirmed advisory links per CVE. The kernel CNA page is only tried for
 // kernel CVEs. inFeed holds the CVEs with an NVD record, each true when it has a kernel CNA
 // page. It is nil without NVD data.
+// With networking off, cached links are used regardless of age and the cache is left unchanged.
 //
 // A site that doesn't answer clearly is asked again, more slowly, in later rounds (see
 // linkRounds). One burst of rate limiting then doesn't leave CVEs without links. Only a CVE whose
 // every page is answered gets links and is cached. A CVE still unanswered after the last round
 // is left out, named in a warning with the sites, and asked again next scan.
-func CheckLinks(cache string, cves []string, kernel, inFeed map[string]bool) map[string][]any {
+func CheckLinks(cache string, cves []string, kernel, inFeed map[string]bool, network bool) map[string][]any {
 	path := filepath.Join(cache, "links-v2.json")
 	known := map[string]map[string]any{}
 	var order []string
@@ -396,7 +401,7 @@ func CheckLinks(cache string, cves []string, kernel, inFeed map[string]bool) map
 	var checks []*linkCheck
 	for _, c := range cves {
 		_, hasKernel := known[c]["kernel"]
-		if now-tOf(c) > linkTTL || (kernel[c] && !hasKernel) {
+		if network && (now-tOf(c) > linkTTL || (kernel[c] && !hasKernel)) {
 			checks = append(checks, newCheck(c, kernel[c], inFeed))
 		}
 	}

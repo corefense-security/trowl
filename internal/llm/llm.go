@@ -134,7 +134,7 @@ func fileSha256(path string) string {
 // ensureModel returns the model file, downloading it on first use. It returns "" if the file
 // can't be had. TROWL_MODEL_FILE comes from meta-trowl/classes/trowl.bbclass,
 // as model downloading is handled within Yocto
-func ensureModel(name, cache string) string {
+func ensureModel(name, cache string, network bool) string {
 	if p := os.Getenv("TROWL_MODEL_FILE"); p != "" {
 		if py.IsFile(p) {
 			return p
@@ -146,6 +146,11 @@ func ensureModel(name, cache string) string {
 	path := filepath.Join(cache, "models", sp.File)
 	if py.IsFile(path) {
 		return path
+	}
+	// Keep local inference available without downloading missing weights.
+	if !network {
+		warn("%s model not cached; summary skipped", sp.Label)
+		return ""
 	}
 	os.MkdirAll(filepath.Dir(path), 0o755)
 	part := strings.TrimSuffix(path, filepath.Ext(path)) + ".part"
@@ -186,6 +191,7 @@ func ensureModel(name, cache string) string {
 // Runner holds the llama-server process for one scan. The process starts on first use.
 type Runner struct {
 	name, cache string
+	network     bool
 	cmd         *exec.Cmd
 	exited      chan struct{} // closed when the process ends
 	stderr      *tailBuffer
@@ -220,7 +226,9 @@ func (t *tailBuffer) last(n int) string {
 	return strings.Join(lines, "\n")
 }
 
-func NewRunner(name, cache string) *Runner { return &Runner{name: name, cache: cache} }
+func NewRunner(name, cache string, network bool) *Runner {
+	return &Runner{name: name, cache: cache, network: network}
+}
 
 func (r *Runner) Close() {
 	if r.cmd != nil && r.cmd.Process != nil {
@@ -250,7 +258,7 @@ func (r *Runner) start() bool {
 		warn("llama-server (llama.cpp) is not installed; model output skipped")
 		return false
 	}
-	model := ensureModel(r.name, r.cache)
+	model := ensureModel(r.name, r.cache, r.network)
 	if model == "" {
 		return false
 	}
