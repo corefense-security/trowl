@@ -1,7 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { ShieldCheck, Unlock } from "lucide-react";
 import type { KernelEntry, Report } from "../types";
-import { PageHead, usePage } from "../ui";
+import { Dropdown, PageHead, usePage } from "../ui";
 
 // An option missing from the config counts as a fail, since the protection isn't there either
 // way. The row's note still says why it is absent (dependencies off, or no compiler support).
@@ -42,9 +42,16 @@ function Effect({ bucket }: { bucket: KernelEntry["bucket"] }) {
 
 export default function Kernel({ r }: { r: Report }) {
   const k = r.kernel;
+  const [result, setResult] = useState("");
   const rows = useMemo(() => [...(k?.entries ?? [])].sort((a, b) => ORDER.indexOf(shownStatus(a.status)) - ORDER.indexOf(shownStatus(b.status)) ||
     a.subsystem.localeCompare(b.subsystem) || a.option.localeCompare(b.option)), [k]);
-  const page = usePage(rows);
+  const shown = rows.filter((e) => result === "" || shownStatus(e.status) === result);
+  const page = usePage(shown, result);
+  const resultOpts = [
+    { value: "", label: "All", n: rows.length },
+    { value: "pass", label: "Pass", n: rows.filter((e) => shownStatus(e.status) === "pass").length },
+    { value: "fail", label: "Fail", n: rows.filter((e) => shownStatus(e.status) === "fail").length },
+  ];
   if (!k?.source) return null; // the sidebar disables this page
   const file = k.source.path.split("/").pop();
 
@@ -56,6 +63,11 @@ export default function Kernel({ r }: { r: Report }) {
           />
       </section>
       <section className="card span-12">
+        <div className="toolbar">
+          <Dropdown label="Result" value={result} options={resultOpts} onChange={setResult} />
+          <span className="spacer" />
+          <span className="muted">{shown.length} of {rows.length}</span>
+        </div>
         <table className="kt">
           <thead>
             <tr><th>Option</th><th>Subsystem</th><th className="c">Effect</th><th>Recommended</th><th>Observed</th><th>Result</th></tr>
