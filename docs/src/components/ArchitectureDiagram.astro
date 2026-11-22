@@ -3,10 +3,10 @@
 // cached external data above the stages that read it. Facts here follow internal/scan/scan.go,
 // internal/unpack, internal/sbom, internal/inventory, internal/openvex, internal/llm and ui/src.
 const TOP = 172; // top of the stage cards
-const H = 350; // stage card height
+const H = 310; // stage card height
 const parse = { x: 160, w: 214 };
 const analyse = { x: 392, w: 300 };
-const report = { x: 708, w: 172, h: 280, y: 35 }; // as tall as its contents, centred on the stages
+const report = { x: 708, w: 172, h: 280, y: (H - 280) / 2 }; // as tall as its contents, centred on the stages
 // Unpack turns the image into a rootfs. Parse then reads the VEX file, the components from the first
 // source found and the kernel tree's build rules, which kcond reads. The input boxes already name each
 // input, so a mini only lists formats. Parse mini positions are relative to its card.
@@ -15,18 +15,15 @@ const parseCard = { y: 102 };
 const parsers = [
 	{ y: 54, label: 'OpenVEX, CycloneDX' },
 	{ y: 108, label: 'SPDX 2/3, CycloneDX' },
-	{ y: 140, label: 'opkg, dpkg, rpm' },
-	{ y: 172, label: 'ELF fingerprints' },
-	{ y: 212, label: 'Kbuild, .config' },
+	{ y: 162, label: 'Kbuild, .config' },
 ];
 // Analyse: one card per analysis. CVE analysis sits on top, under the feeds it reads.
 const analyses = [
-	{ y: 66, title: 'CVE analysis', sub: 'version match, kernel VEX, KEV, EPSS' },
-	{ y: 130, title: 'SBOM analysis', sub: 'declared files vs the image' },
-	{ y: 194, title: 'Hardening', sub: 'ELF flags, kernel config, mounts' },
-	{ y: 258, title: 'Secrets', sub: 'private keys, API tokens' },
+	{ y: 66, title: 'CVE analysis', sub: 'Version match, kernel VEX' },
+	{ y: 126, title: 'SBOM analysis', sub: 'Dependency graphs, enrichment' },
+	{ y: 186, title: 'Hardening', sub: 'Compiler flags, kernel hardening, mount flags' },
+	{ y: 246, title: 'Secrets', sub: 'private keys, API tokens' },
 ];
-const cve = analyses[0];
 const outputs = [
 	{ y: 166, title: 'report.json', sub: 'every finding as JSON' },
 	{ y: 222, title: 'openvex.json', sub: 'CVE statuses as VEX' },
@@ -43,12 +40,12 @@ const inputs = [
 	{ y: TOP + 42, title: 'Image', sub: 'required' },
 	{ y: TOP + 148, title: '--vex', flag: true, sub: 'optional', optional: true },
 	{ y: TOP + 202, title: '--sbom', flag: true, sub: 'optional', optional: true },
-	{ y: TOP + 306, title: '--kernel-tree', flag: true, sub: '+ optional .config', optional: true },
+	{ y: TOP + 256, title: '--kernel-tree', flag: true, sub: '+ optional .config', optional: true },
 ];
 ---
 <figure class="arch">
 	<div class="scroll" role="region" aria-label="Trowl architecture diagram" tabindex="0">
-		<svg viewBox="0 0 900 542" role="img" aria-labelledby="arch-title arch-desc">
+		<svg viewBox={`0 0 900 ${TOP + H + 20}`} role="img" aria-labelledby="arch-title arch-desc">
 			<title id="arch-title">Trowl architecture</title>
 			<desc id="arch-desc">The image, an optional VEX file, an optional SBOM and an optional kernel tree with config go into Trowl, which runs locally. Trowl unpacks the image (ext4, squashfs, cpio or disk) into a root filesystem. It parses the VEX file (OpenVEX or CycloneDX) and the kernel tree's Kbuild files with its .config, and takes components from the first source found: the SBOM (SPDX 2, SPDX 3 or CycloneDX), the package database (opkg, dpkg or rpm) or fingerprints of versions in ELF files. It then analyses the image. CVE analysis matches versions, checks kernel CVEs against the kernel tree, applies the VEX file and adds CISA KEV and EPSS. SBOM analysis compares the SBOM's declared files with the image. Hardening covers ELF flags, the kernel config and mounts. Secrets finds private keys and API tokens. The report is index.html, a dashboard built by Vite into one static file with the report data embedded, plus report.json and openvex.json with each CVE's status. An optional local LLM, using a model from Hugging Face, writes a short summary into the dashboard. NVD (JSON), CISA KEV (JSON), EPSS (CSV) and the Hugging Face model (GGUF) are fetched when stale and cached in ~/.cache/trowl.</desc>
 
@@ -72,7 +69,7 @@ const inputs = [
 			<text class="cachetext" x={cache.x + 62} y={cache.y + 16}>~/.cache/trowl</text>
 
 			<!-- Trowl, local -->
-			<rect class="host" x="144" y="122" width="752" height="414" rx="12" />
+			<rect class="host" x="144" y="122" width="752" height={TOP + H + 14 - 122} rx="12" />
 			<rect class="llm" x={llm.x} y={llm.y} width={llm.w} height={llm.h} rx="7" />
 			<text class="item" x={llm.x + llm.w / 2} y={llm.y + 16} text-anchor="middle">Local LLM</text>
 
@@ -113,9 +110,9 @@ const inputs = [
 				<line class="rule" x1="14" x2={analyse.w - 14} y1="56" y2="56" />
 				{analyses.map((a) => (
 					<g>
-						<rect class="card" x="14" y={a.y} width={analyse.w - 28} height="54" rx="8" />
-						<text class="item strong" x="26" y={a.y + 22}>{a.title}</text>
-						<text class="sub" x="26" y={a.y + 40}>{a.sub}</text>
+						<rect class="card" x="14" y={a.y} width={analyse.w - 28} height="50" rx="8" />
+						<text class="item strong" x="26" y={a.y + 20}>{a.title}</text>
+						<text class="sub" x="26" y={a.y + 36}>{a.sub}</text>
 					</g>
 				))}
 			</g>
@@ -142,20 +139,19 @@ const inputs = [
 
 			<!-- Arrows, drawn over the stage edges -->
 			<!-- Unpack hands the rootfs to Parse and to Analyse. Parse hands its results to Analyse. -->
-			{[[parse.x + parse.w, analyse.x, TOP + 44], [parse.x + parse.w, analyse.x, TOP + parseCard.y + 124], [analyse.x + analyse.w, report.x, TOP + report.y + 40]].map(([a, b, y]) => (
+			{[[parse.x + parse.w, analyse.x, TOP + 44], [parse.x + parse.w, analyse.x, TOP + parseCard.y + (parsers[0].y + parsers[parsers.length - 1].y + 28) / 2], [analyse.x + analyse.w, report.x, TOP + report.y + 40]].map(([a, b, y]) => (
 				<path class="arrow" d={`M${a} ${y}H${b - 4}m-5-5 5 5-5 5`} />
 			))}
 			<path class="arrow" d={`M${parse.x + parse.w / 2} ${TOP + unpack.h}V${TOP + parseCard.y - 4}m-5-5 5 5 5-5`} />
 			{[cveX, model.cx].map((x, i) => <path class:list={['dash', { optional: i === 1 }]} d={`M${x} 43V${cache.y - 6}m-4-5 4 5 4-5`} />)}
-			<path class="dash" d={`M${cveX} ${cache.y + cache.h + 5}V${TOP + cve.y - 4}m-4-5 4 5 4-5`} />
+			<path class="dash" d={`M${cveX} ${cache.y + cache.h + 5}V${TOP - 4}m-4-5 4 5 4-5`} />
 			<path class="dash optional" d={`M${model.cx} ${cache.y + cache.h + 5}V${llm.y - 4}m-4-5 4 5 4-5`} />
-			<path class="dash optional" d={`M${llm.x + llm.w / 2} ${llm.y + llm.h}V${TOP + report.y + 66 - 4}m-4-5 4 5 4-5`} />
+			<path class="dash optional" d={`M${llm.x + llm.w / 2} ${llm.y + llm.h}V${TOP + report.y - 4}m-4-5 4 5 4-5`} />
 			{inputs.map((i) => (
 				<path class="arrow" d={`M126 ${i.y + 22}H${parse.x + 12 - 4}m-5-5 5 5-5 5`} />
 			))}
 		</svg>
 	</div>
-	<figcaption>Analysis runs on your machine. Only the vulnerability feeds and the optional model are fetched, then cached. The model writes the dashboard's summary.</figcaption>
 </figure>
 
 <style>

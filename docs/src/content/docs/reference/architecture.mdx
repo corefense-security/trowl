@@ -1,83 +1,85 @@
 ---
 title: Architecture
-description: Local analysis, external resources, caching and report outputs.
+description: Image analysis, data caching, local AI summaries and reports.
 sidebar:
   order: 5
 tableOfContents: false
 ---
 
 import ArchitectureDiagram from '../../../components/ArchitectureDiagram.astro';
-import ResourceDiagram from '../../../assets/diagrams/resources.svg';
-
-Trowl unpacks and analyses the image locally. It fetches and caches external data before each stage that needs it.
 
 <ArchitectureDiagram />
 
-## Analysis
+## Image analysis<span id="analysis"></span>
 
-Trowl unpacks the image into a root filesystem, then parses the other inputs. Components come from the SBOM, a package database or supported binary fingerprints, in that order. With `--kernel-tree`, the [kcond fork](https://github.com/corefense-security/kcond) reads the kernel's build rules.
+Trowl unpacks the image into a root filesystem and identifies components from the SBOM, a package database or supported binary fingerprints, in that order. With `--kernel-tree`, the [kcond fork](https://github.com/corefense-security/kcond) reads the kernel's build rules.
 
-CVE analysis matches component versions, checks kernel CVEs against the config and shipped modules, applies the [`--vex` file](../../features/cves-vex/#vex-files) and adds CISA KEV and EPSS. Image checks cover ELF hardening, kernel config, mounts and secrets, and compare the SBOM's declared files with the image.
+CVE analysis matches component versions, checks kernel CVEs against the image's configuration and modules, applies [`--vex` statements](../../features/cves-vex/#vex-files) and adds CISA KEV data and EPSS scores.
 
-## Network and cache<span id="cache"></span>
+Other checks cover ELF hardening, kernel configuration, mounts and secrets, and compare files listed in the SBOM with those in the image.
 
-<figure>
-  <div style={{ overflowX: 'auto' }} tabIndex={0} role="region" aria-label="External resources and cache diagram">
-    <ResourceDiagram style={{ width: '100%', maxWidth: '38rem', minWidth: '30rem', height: 'auto', display: 'block' }} />
-  </div>
-  <figcaption>Fetch missing or stale data before use</figcaption>
-</figure>
+## Data fetching and caching<span id="network-and-cache"></span><span id="cache"></span>
 
-### External resources
+### Data sources<span id="external-resources"></span>
 
 <div style={{ overflowX: 'auto' }}>
 
-| Data | Source | Refreshed |
+| Data | Links | Refresh interval |
 | --- | --- | --- |
-| NVD and kernel CNA records | NVD JSON feed mirror on GitHub | Every 24 hours |
-| CISA KEV | GitHub mirror, then cisa.gov | Daily |
-| EPSS | empiricalsecurity.com | Daily |
-| Advisory link results | NVD, OSV, cve.org and the kernel CNA | Every 7 days |
-| Summary model | Pinned Hugging Face revision with SHA-256 verification | On cache miss |
+| NVD and kernel CNA records | [fkie-cad/nvd-json-data-feeds](https://github.com/fkie-cad/nvd-json-data-feeds) | Every 24 hours |
+| CISA KEV | [cisagov/kev-data](https://github.com/cisagov/kev-data), [cisa.gov](https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json) | Daily |
+| EPSS | [empiricalsecurity.com](https://epss.empiricalsecurity.com/epss_scores-current.csv.gz) | Daily |
+| Advisory link results | [NVD](https://nvd.nist.gov/vuln/), [OSV](https://osv.dev/), [cve.org](https://www.cve.org/), [kernel CNA](https://git.kernel.org/pub/scm/linux/security/vulns.git/tree/cve/published) | Every 7 days |
+| AI model weights | [Hugging Face](https://huggingface.co/) | On cache miss |
 
 </div>
 
-If a refresh fails, Trowl uses the cached copy when available.
+> **Note**: Trowl fetches missing or stale data before the stage that needs it. If a refresh fails, it uses the available cache.
 
-### Cache location
+### Cache <span id="cache-location"></span>
 
-Trowl uses `$XDG_CACHE_HOME/trowl` when `XDG_CACHE_HOME` is set and `~/.cache/trowl` otherwise. Override it with `--cache-dir DIR`. In Docker, mount it at `/cache/trowl`:
+Native runs, including those installed with the install script, use `$XDG_CACHE_HOME/trowl` when `XDG_CACHE_HOME` is set, or `~/.cache/trowl` otherwise.
 
-```sh
--v ~/.cache/trowl:/cache/trowl
-```
+The Docker image sets `XDG_CACHE_HOME=/cache`, so its cache is `/cache/trowl` inside the container. See [Docker cache](../../getting-started/docker/#cache) for the host mount.
 
-Without the mount, each new container downloads the feeds and model again.
+Use `--cache-dir DIR` to override the default in either case.
 
-### Offline scans
+### Offline scan<span id="offline-scans"></span>
 
-```sh
-trowl scan image.ext4 --no-network -o report
-```
+Pass `--no-network` to use cached CVE data, KEV, EPSS and advisory links without internet requests. Stale entries are used without refreshing the cache. The AI summary uses local model weights if available.
 
 :::note
-`--no-network` uses cached NVD data and skips KEV, EPSS and advisory links even when cached. Run an online scan first to fill the cache.
-
-Cache the selected model before running the summary offline. Model downloads do not follow `--no-network`.
+Missing cached data is omitted. If the selected model is unavailable locally, the scan continues without an AI summary.
 :::
 
-## Local summary
+### Local AI summary<span id="local-summary"></span>
 
-The Overview summary runs locally through `llama-server` using only computed scan facts. Scan data is not uploaded. Scans continue without a summary if `llama-server` is unavailable.
+Trowl uses a CPU-based LLM inference to generate impact summaries on the UI overview. The analysis is completely local through `llama-server`, and uses facts computed during the scan. If `llama-server` is unavailable, the scan continues without a summary. 
+
+Following models are currently supported (licenses under `Apache 2.0`):
 
 | Model | Notes |
 | --- | --- |
-| `qwen3.5-4b` | Default (about 2.7 GB download) |
-| `qwen3.5-9b` | Larger and slower |
-| `qwen3-4b` | Older |
+| `qwen3.5-4b` | Default, download size is about 2.7 GB |
+| `qwen3.5-9b` | Larger model, takes longer to run |
+| `qwen3-4b` | Older model |
 
-The listed model weights use the Apache 2.0 licence.
+The model runs with these fixed settings:
 
-## Outputs
+| Setting | Purpose |
+| --- | --- |
+| Temperature `0`, seed `0` | Greedy decoding and a fixed seed reduce variation between runs. |
+| Thinking disabled | Avoids reasoning overhead and keeps the output budget available for the summary. |
+| Context window `8192` tokens | Holds the instructions, scan facts and generated summary. |
+| Output limit `600` tokens | Keeps the response brief, with at most five summary points. |
+| CPU threads set to the logical CPU count | Uses the available CPU parallelism for local inference. |
 
-Scans write `report.json`, a self-contained `index.html` with the results and optional local summary, and `openvex.json` with each CVE's status as OpenVEX. See [Report output](../report/).
+## Reporting<span id="outputs"></span>
+
+Each scan writes three files:
+
+- `report.json` contains the scan results as JSON.
+- `index.html` is a self-contained report with the results and an optional local summary.
+- `openvex.json` records each CVE's status in OpenVEX format.
+
+See [Report output](../report/) for details about each format.
