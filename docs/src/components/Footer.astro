@@ -1,0 +1,58 @@
+---
+import DefaultFooter from '@astrojs/starlight/components/Footer.astro';
+import { REPO } from '../lib/release';
+
+const isOverview = Astro.locals.starlightRoute.entry.data.template === 'splash';
+const repository = `https://github.com/${REPO}`;
+const links = [
+	{ label: 'Source', href: repository },
+	{ label: 'Releases', href: `${repository}/releases` },
+	{ label: 'Report a bug', href: `${repository}/issues` },
+	{ label: 'Security', href: `${repository}/security/policy` },
+	{ label: 'Code of conduct', href: `${repository}/blob/main/CODE_OF_CONDUCT.md` },
+];
+---
+
+{
+	isOverview ? (
+		<footer class="project-footer">
+			<a href={`${repository}/blob/main/LICENSE`}>Apache 2.0</a>
+			<nav aria-label="Project">
+				{links.map(({ label, href }) => <a {href}>{label}</a>)}
+			</nav>
+		</footer>
+	) : <DefaultFooter />
+}
+
+<style>
+	.project-footer {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1.5rem 3rem;
+		margin-top: 4rem;
+		padding-block: 2rem;
+		border-top: 1px solid color-mix(in srgb, var(--sl-color-white) 8%, transparent);
+	}
+	nav {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.75rem 1.5rem;
+	}
+	a {
+		font-family: var(--sl-font-mono);
+		font-size: 0.75rem;
+		letter-spacing: 0.08em;
+		text-decoration: none;
+		color: var(--sl-color-gray-3);
+		transition: color 0.15s;
+	}
+	nav a {
+		text-transform: uppercase;
+	}
+	a:hover,
+	a:focus-visible {
+		color: var(--sl-color-white);
+	}
+</style>

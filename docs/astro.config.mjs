@@ -5,6 +5,10 @@ import starlight from '@astrojs/starlight';
 // Served from GitHub Pages on the custom domain set in the repo's Pages settings.
 export default defineConfig({
 	site: 'https://trowl.dev',
+	prefetch: {
+		prefetchAll: true,
+		defaultStrategy: 'viewport',
+	},
 	redirects: {
 		'/reference/network-cache/': '/reference/architecture/#network-and-cache',
 	},
@@ -26,6 +30,7 @@ export default defineConfig({
 			},
 			customCss: ['@fontsource/jetbrains-mono/400.css', '@fontsource/jetbrains-mono/500.css', './src/styles/custom.css'],
 			components: {
+				Footer: './src/components/Footer.astro',
 				Header: './src/components/Header.astro',
 				Hero: './src/components/Hero.astro',
 				Pagination: './src/components/Pagination.astro',

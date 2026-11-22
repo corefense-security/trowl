@@ -18,21 +18,21 @@ const capabilities = [
 	{
 		icon: 'box',
 		title: 'SBOM and CVE analysis',
-		text: 'Verifies image against the SBOM, dependency graphs and VEX disagreements.',
+		text: 'Dependency graphs, CVE and VEX assessments.',
 		tags: [['VEX Assessment', 'SPDX 3.0 JSON-LD', 'SPDX 2.2', 'CycloneDX']],
 		href: '/features/sbom/',
 	},
 	{
 		icon: 'layers',
 		title: 'Multi-format support',
-		text: 'Unpacks the rootfs across several image formats (with or without compression).',
-		tags: [['ext2', 'ext3', 'ext4', 'squashfs', 'wic', 'tar', 'cpio']],
+		text: 'Image and filesystems across several formats (with or without compression).',
+		tags: [['ext2/3/4', 'squashfs', 'wic', 'tar', 'cpio']],
 		href: '/reference/supported-targets/',
 	},
 	{
 		icon: 'output',
 		title: 'Reports',
-		text: 'A self-contained HTML report you can render statically, along with JSON and OpenVEX outputs.',
+		text: 'Embedded static HTML report, JSON and OpenVEX output compatible with standard VEX tools.',
 		tags: [['Dashboard UI', 'OpenVEX', 'JSON {}']],
 		href: '/reference/report/',
 	},
@@ -56,7 +56,7 @@ const legend = [
 
 const start = [
 	{ title: 'Docker', text: 'Quick start without any installation.', href: '/getting-started/docker/' },
-	{ title: 'Install script', text: 'Native binary on Debian or Ubuntu.', href: '/getting-started/install-script/' },
+	{ title: 'Install', text: 'Native binary on Debian or Ubuntu.', href: '/getting-started/install-script/' },
 	{ title: 'Yocto layer', text: 'Scan BitBake builds with meta-trowl.', href: '/integrations/yocto/' },
 ];
 ---
@@ -91,7 +91,7 @@ const start = [
 	</section>
 
 	<section>
-		<h2>Semantic Diffing</h2>
+		<h2>Semantic Diffing <em>Soon</em></h2>
 		<p class="lede">Track how security evolves across builds</p>
 		<div class="diff-row">
 			<div class="diff-text">
