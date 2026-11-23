@@ -11,6 +11,8 @@ It unpacks the image to detect hardening gaps, misconfigurations and known CVEs 
 
 Given a source tree (`--kernel-tree`), it further assigns VEX statuses to kernel CVEs and surfaces disagreements with the SBOM.
 
+Read the [documentation](https://trowl.dev) for installation, integrations and usage guides.
+
 <p align="center">
   <img src="assets/overview.png" alt="Trowl report overview of a Yocto core-image-minimal scan: key summary, unpatched CVEs, mounts, SBOM vs image and hardening coverage" width="900">
 </p>
@@ -70,6 +72,20 @@ For example:
 
 ```sh
 python3 -m http.server 8765 --directory /path/to/output/report
+```
+
+### Verify the image
+
+Release images are signed with [Cosign](https://docs.sigstore.dev/cosign/system_config/installation/). With Cosign 3+ and Docker Buildx installed, replace `vX.Y.Z` with your release tag:
+
+```sh
+REF='vX.Y.Z'
+IMAGE='ghcr.io/corefense-security/trowl'
+DIGEST="$(docker buildx imagetools inspect "$IMAGE:$REF" --format '{{.Manifest.Digest}}')"
+
+cosign verify "$IMAGE@$DIGEST" \
+  --certificate-identity "https://github.com/corefense-security/trowl/.github/workflows/build-release-trowl.yml@refs/tags/$REF" \
+  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com'
 ```
 
 ## Install
