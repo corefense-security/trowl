@@ -16,7 +16,7 @@ B = "${WORKDIR}/build"
 # A pinned Trowl commit. files/package-lock.json and TROWL_GOMODS come from the same commit,
 # so a bump updates all three.
 SRC_URI = "git://github.com/corefense-security/trowl.git;protocol=https;branch=main;destsuffix=trowl"
-SRCREV = "8572172e4f157b4308f096829064fabf98a0e02a"
+SRCREV = "36dd6c81821a56f42be9e061b0dfe6e9b629a447"
 TROWL_VERSION = "0.1.0-dev+${@d.getVar('SRCREV')[:7]}"
 
 # Trowl needs Go 1.26 and Scarthgap ships 1.22, while neither release ships Node.
