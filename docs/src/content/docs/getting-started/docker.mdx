@@ -17,6 +17,22 @@ docker pull ghcr.io/corefense-security/trowl:$TAG
 Replace `$TAG` with a release tag. Use a preview tag until the first stable release.
 :::
 
+### Verify the image
+
+Release images are signed with [Cosign](https://docs.sigstore.dev/cosign/system_config/installation/) using GitHub Actions.
+
+With Cosign 3+ and Docker Buildx installed, replace `vX.Y.Z` with the release tag, including any preview suffix. Keep both certificate flags as shown, as they identify Trowl's release workflow and GitHub Actions as its identity provider.
+
+```sh
+TAG='vX.Y.Z'
+IMAGE="ghcr.io/corefense-security/trowl"
+DIGEST="$(docker buildx imagetools inspect "$IMAGE:$TAG" --format '{{.Manifest.Digest}}')"
+
+cosign verify "$IMAGE@$DIGEST" \
+  --certificate-identity "https://github.com/corefense-security/trowl/.github/workflows/build-release-trowl.yml@refs/tags/$TAG" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+```
+
 ## Scan a Yocto image
 
 Put the Yocto image, its SBOM and `kernel.config` in `~/trowl-in/`, then run:

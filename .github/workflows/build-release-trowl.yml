@@ -43,7 +43,7 @@ jobs:
     name: Docker Image
     runs-on: ubuntu-24.04
     needs: [scanner, dashboard]
-    permissions: { contents: read, packages: write }
+    permissions: { contents: read, packages: write, id-token: write }
     steps:
       - uses: actions/checkout@v4
       - name: Set up Buildx
@@ -52,7 +52,11 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: docker/login-action@v3
         with: { registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}" }
+      - name: Install Cosign
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
       - name: ${{ startsWith(github.ref, 'refs/tags/v') && 'Build and push image' || 'Build image' }}
+        id: image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -62,3 +66,18 @@ jobs:
           # On a v* tag this stamps the binary with that tag. Otherwise it stays the dev version.
           build-args: |
             TROWL_VERSION=${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+      - name: Sign and verify image
+        if: startsWith(github.ref, 'refs/tags/v')
+        timeout-minutes: 5
+        shell: bash
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}
+          DIGEST: ${{ steps.image.outputs.digest }}
+          CERTIFICATE_IDENTITY: ${{ github.server_url }}/${{ github.workflow_ref }}
+        run: |
+          # Sign the exact published manifest, so every tag for this digest is covered.
+          # Cosign uses the job's GitHub OIDC identity; no signing key secret is needed.
+          cosign sign --yes "${IMAGE}@${DIGEST}"
+          cosign verify "${IMAGE}@${DIGEST}" \
+            --certificate-identity "$CERTIFICATE_IDENTITY" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
