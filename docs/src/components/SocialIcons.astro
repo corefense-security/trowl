@@ -1,19 +1,71 @@
 ---
-// Starlight's social links with a larger, brighter icon.
+// Starlight's social links with a GitHub star button.
 import config from 'virtual:starlight/user-config';
 import { Icon } from '@astrojs/starlight/components';
+import { REPO } from '../lib/release';
+import { githubStars } from '../lib/github-stars';
 
 const links = config.social || [];
+const repository = `https://github.com/${REPO}`;
+const stars = links.some(({ href }) => href === repository) ? await githubStars() : null;
+const starLabel = stars === null ? 'Star Trowl on GitHub' : `Star Trowl on GitHub (${stars.toLocaleString('en-US')} stars)`;
 ---
 
 {
 	links.map(({ label, href, icon }) => (
-		<a {href} rel="me" class="social" title={label}>
-			<span class="sr-only">{label}</span>
-			<Icon name={icon} size="1.6rem" />
-		</a>
+		href === repository ? (
+			<a {href} rel="me" class="social github-stars" title={starLabel} aria-label={starLabel} data-github-stars>
+				<Icon name={icon} size="1.4rem" />
+				<span>Star</span>
+				<Icon name="star" size="1rem" />
+				<span class="star-count" hidden={stars === null}>{stars?.toLocaleString('en-US')}</span>
+			</a>
+		) : (
+			<a {href} rel="me" class="social" title={label}>
+				<span class="sr-only">{label}</span>
+				<Icon name={icon} size="1.6rem" />
+			</a>
+		)
 	))
 }
+
+<script>
+	import { REPO } from '../lib/release';
+
+	// Refresh after deployment; reuse the count as visitors move through the docs.
+	async function refreshStars() {
+		const buttons = document.querySelectorAll<HTMLAnchorElement>('[data-github-stars]');
+		if (!buttons.length) return;
+		const key = 'trowl-github-stars';
+		let stars: number | null = null;
+		try {
+			const cached = sessionStorage.getItem(key);
+			if (cached !== null) stars = Number(cached);
+		} catch {}
+		if (stars === null || !Number.isSafeInteger(stars) || stars < 0) {
+			try {
+				const res = await fetch(`https://api.github.com/repos/${REPO}`, {
+					headers: { Accept: 'application/vnd.github+json' },
+					signal: AbortSignal.timeout(5000),
+				});
+				if (!res.ok) return;
+				const { stargazers_count: count } = await res.json();
+				if (!Number.isSafeInteger(count) || count < 0) return;
+				stars = count;
+				try { sessionStorage.setItem(key, String(stars)); } catch {}
+			} catch { return; }
+		}
+		for (const button of buttons) {
+			const count = button.querySelector<HTMLElement>('.star-count');
+			if (!count) continue;
+			count.textContent = stars!.toLocaleString('en-US');
+			count.hidden = false;
+			button.title = `Star Trowl on GitHub (${count.textContent} stars)`;
+			button.setAttribute('aria-label', button.title);
+		}
+	}
+	refreshStars();
+</script>
 
 <style>
 	.social {
@@ -24,5 +76,24 @@ const links = config.social || [];
 	}
 	.social:hover {
 		background: var(--sl-color-gray-6);
+	}
+	.github-stars {
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.35rem 0.65rem;
+		border: 1px solid var(--sl-color-gray-5);
+		border-radius: 0.5rem;
+		font-size: 0.875rem;
+		font-weight: 500;
+		text-decoration: none;
+		white-space: nowrap;
+	}
+	.star-count {
+		font-variant-numeric: tabular-nums;
+		color: var(--sl-color-gray-2);
+	}
+	.social:focus-visible {
+		outline: 2px solid var(--sl-color-accent-high);
+		outline-offset: 3px;
 	}
 </style>
