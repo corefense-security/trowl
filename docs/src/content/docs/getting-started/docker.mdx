@@ -17,6 +17,33 @@ docker pull ghcr.io/corefense-security/trowl:$TAG
 Replace `$TAG` with a release tag. Use a preview tag until the first stable release.
 :::
 
+### Verify the image signature
+
+Images published by the signing-enabled release workflow are signed with [Cosign](https://docs.sigstore.dev/cosign/system_config/installation/) using GitHub Actions' OIDC identity. No long-lived signing key is stored in GitHub. The signature and certificate are attached to the image in GHCR, and signing is recorded in Sigstore's public transparency log. Earlier releases may be unsigned.
+
+Trowl's expected signer is defined by these public values. Use them as published here when verifying an image:
+
+| Cosign flag | Expected value |
+| --- | --- |
+| `--certificate-oidc-issuer` | `https://token.actions.githubusercontent.com` |
+| `--certificate-identity` | `https://github.com/corefense-security/trowl/.github/workflows/build-release-trowl.yml@refs/tags/$TAG` |
+
+The issuer identifies GitHub Actions as the service that authenticated the signing job. The certificate identity identifies [Trowl's release workflow](https://github.com/corefense-security/trowl/blob/main/.github/workflows/build-release-trowl.yml) running for the selected release tag. Only `$TAG` changes between releases; the repository, workflow path and issuer stay the same. These flags check the expected signer against the certificate attached to the image.
+
+Install [Cosign 3 or later](https://docs.sigstore.dev/cosign/system_config/installation/) and Docker with Buildx, then copy the command below. Replace `vX.Y.Z` with the signed release tag you want to verify, including its `v` prefix and any preview suffix:
+
+```sh
+TAG='vX.Y.Z'
+IMAGE="ghcr.io/corefense-security/trowl"
+DIGEST="$(docker buildx imagetools inspect "$IMAGE:$TAG" --format '{{.Manifest.Digest}}')"
+
+cosign verify "$IMAGE@$DIGEST" \
+  --certificate-identity "https://github.com/corefense-security/trowl/.github/workflows/build-release-trowl.yml@refs/tags/$TAG" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+```
+
+After verification succeeds, use `"$IMAGE@$DIGEST"` as the image in the `docker run` commands below to run the verified content. Pulling or running a tag with Docker does not verify its signature automatically.
+
 ## Scan a Yocto image
 
 Put the Yocto image, its SBOM and `kernel.config` in `~/trowl-in/`, then run:
