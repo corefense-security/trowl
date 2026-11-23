@@ -1,6 +1,7 @@
 ---
 // Starlight's header with the site links added before the social icons.
 import config from 'virtual:starlight/user-config';
+import MobileMenuToggle from 'virtual:starlight/components/MobileMenuToggle';
 import Search from 'virtual:starlight/components/Search';
 import SiteTitle from 'virtual:starlight/components/SiteTitle';
 import SocialIcons from 'virtual:starlight/components/SocialIcons';
@@ -17,6 +18,7 @@ const path = Astro.url.pathname;
 // The browser selects section links because the server cannot see URL fragments.
 const hasSectionLinks = links.some(({ href }) => href.startsWith(`${path}#`));
 const shouldRenderSearch = config.pagefind;
+const { hasSidebar } = Astro.locals.starlightRoute;
 ---
 
 <div class="header">
@@ -39,20 +41,34 @@ const shouldRenderSearch = config.pagefind;
 			<ThemeSelect />
 		</div>
 	</div>
+	{
+		!hasSidebar && (
+			<div class="overview-menu print:hidden">
+				<MobileMenuToggle />
+				<nav id="starlight__sidebar" class="site-nav mobile-site-nav" popover="auto" aria-label="Site">
+					{links.map(({ text, href, match }) => (
+						<a {href} data-match={match}>{text}</a>
+					))}
+				</nav>
+			</div>
+		)
+	}
 </div>
 
 <script>
 	function updateCurrentLink() {
-		const links = [...document.querySelectorAll<HTMLAnchorElement>('.site-nav a')];
-		const current = links.find((link) => {
-			const url = new URL(link.href);
-			return url.hash && url.pathname === location.pathname && url.hash === location.hash;
-		}) ?? links.find((link) => {
-			const url = new URL(link.href);
-			return !url.hash && location.pathname.startsWith(link.dataset.match ?? url.pathname);
-		});
-		for (const link of links) link.removeAttribute('aria-current');
-		current?.setAttribute('aria-current', 'page');
+		for (const nav of document.querySelectorAll<HTMLElement>('.site-nav')) {
+			const links = [...nav.querySelectorAll<HTMLAnchorElement>('a')];
+			const current = links.find((link) => {
+				const url = new URL(link.href);
+				return url.hash && url.pathname === location.pathname && url.hash === location.hash;
+			}) ?? links.find((link) => {
+				const url = new URL(link.href);
+				return !url.hash && location.pathname.startsWith(link.dataset.match ?? url.pathname);
+			});
+			for (const link of links) link.removeAttribute('aria-current');
+			current?.setAttribute('aria-current', 'page');
+		}
 	}
 	updateCurrentLink();
 	window.addEventListener('hashchange', updateCurrentLink);
@@ -120,6 +136,21 @@ const shouldRenderSearch = config.pagefind;
 		align-items: center;
 		gap: 0.75rem;
 	}
+	.overview-menu {
+		display: none;
+	}
+	.mobile-site-nav {
+		inset: var(--sl-nav-height) 0 auto;
+		width: 100%;
+		margin: 0;
+		padding: 1.5rem var(--sl-nav-pad-x);
+		border: 0;
+		border-bottom: 1px solid var(--sl-color-hairline-shade);
+		background: var(--sl-color-bg-nav);
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 1.5rem;
+	}
 	/* A compact search button next to the links instead of a wide box in the middle. */
 	@media (min-width: 50rem) {
 		.search :global(button[data-open-modal]) {
@@ -127,7 +158,7 @@ const shouldRenderSearch = config.pagefind;
 			max-width: 11rem;
 		}
 	}
-	/* Below this width the links don't fit. The sidebar menu has them. */
+	/* Splash pages need a menu because they have no sidebar. */
 	@media (max-width: 68rem) {
 		.site-nav {
 			display: none;
@@ -136,6 +167,16 @@ const shouldRenderSearch = config.pagefind;
 			margin-inline-start: auto;
 			border: 0;
 			padding: 0;
+		}
+		.overview-menu {
+			display: block;
+		}
+		.overview-menu :global(.sl-menu-button) {
+			display: flex;
+			position: static;
+		}
+		.mobile-site-nav:popover-open {
+			display: flex;
 		}
 	}
 </style>

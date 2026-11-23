@@ -11,7 +11,7 @@ const capabilities = [
 	{
 		icon: 'shield',
 		title: 'Hardening checks',
-		text: 'Unhardened binaries, leaked secrets, or other weaknesses that increase the attack surface.',
+		text: 'Missing compiler protections, leaked secrets, and other weaknesses that increase the attack surface.',
 		tags: [['compiler flags', 'secrets', 'mount flags', 'kernel hardening']],
 		href: '/features/hardening/',
 	},
@@ -25,14 +25,14 @@ const capabilities = [
 	{
 		icon: 'layers',
 		title: 'Multi-format support',
-		text: 'Image and filesystems across several formats (with or without compression).',
+		text: 'Scan compressed or uncompressed images and filesystems.',
 		tags: [['ext2/3/4', 'squashfs', 'wic', 'tar', 'cpio']],
 		href: '/reference/supported-targets/',
 	},
 	{
 		icon: 'output',
 		title: 'Reports',
-		text: 'Embedded static HTML report, JSON and OpenVEX output compatible with standard VEX tools.',
+		text: 'Self-contained static HTML, JSON and VEX exports.',
 		tags: [['Dashboard UI', 'OpenVEX', 'JSON {}']],
 		href: '/reference/report/',
 	},
