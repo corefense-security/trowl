@@ -13,16 +13,16 @@ It is tested on Scarthgap (5.0) and Wrynose with `core-image-minimal` for `qemux
 
 <Steps>
 
-1. Clone Trowl next to your other layers. The layer is in `integrations/meta-trowl`.
+1. Clone the layer next to your other layers.
 
    ```sh
-   git clone https://github.com/corefense-security/trowl.git
+   git clone https://github.com/corefense-security/meta-trowl.git
    ```
 
 2. From your build directory, add the layer and turn the scan on.
 
    ```sh
-   bitbake-layers add-layer /path/to/trowl/integrations/meta-trowl
+   bitbake-layers add-layer /path/to/meta-trowl
    echo 'INHERIT += "trowl"' >> conf/local.conf
    ```
 
@@ -44,7 +44,33 @@ Reports default to `trowl/<image>/` in the build directory, outside `TMPDIR`.
 
 ## Toolchain and dependencies
 
-The layer builds the Trowl commit pinned in its recipe (`SRCREV`), whichever branch of the clone is checked out. The recipe pins Go and Node because Scarthgap ships an older Go and neither release ships Node. Go modules and npm packages are downloaded directly and checked against `go.sum` and `package-lock.json`.
+The `trowl` recipe pins the release with `TROWL_TAG` and its commit with `SRCREV`. The same recipe supports both Yocto releases on x86-64 or aarch64 build hosts.
+
+The scan runs on the build host, so the class uses only native recipes:
+
+| Recipe | Provides | Used by the class |
+| --- | --- | --- |
+| `trowl` | Trowl, versioned by release | `trowl-native` |
+| `trowl-llama` | llama.cpp's `llama-server` | `trowl-llama-native` when `TROWL_LLM = "1"` |
+| `trowl-model-native` | Selected model weights | `trowl-model-native:do_fetch` when `TROWL_LLM = "1"` |
+
+`trowl` and `trowl-llama` are programs, so they set `BBCLASSEXTEND = "native"` and also build for the target. The model is data for the build host only, so its recipe is native only. `trowl-llama` and `trowl-model-native` are excluded from `bitbake world` because only the optional summary needs them, and the model is a multi-gigabyte download.
+
+Trowl doesn't appear in the image's SBOM. The class adds `trowl-native` to the image's `do_build` only, so no shipped package depends on it.
+
+Build dependencies are pinned separately:
+
+- Go 1.26 and Node 22 match the versions in `install.sh`. Scarthgap ships Go 1.22, and neither supported Yocto release ships Node.
+- Go modules are downloaded from the Go proxy with pinned checksums and verified against `go.sum`. Scarthgap has no gomod fetcher.
+- Dashboard dependencies use `files/package-lock.json`, copied from the pinned commit's `ui/package-lock.json`. Each tarball is checked against its SHA-512. Wrynose disables the npmsw fetcher, so tarballs are fetched individually.
+
+### Updating the Trowl recipe
+
+In the layer repository:
+
+1. Rename the recipe for the new release version and update `TROWL_TAG` and `SRCREV`.
+2. Copy that release's `ui/package-lock.json` to `recipes-devtools/trowl/files/package-lock.json`.
+3. Update `TROWL_GOMODS` if `go.sum` changed.
 
 ## Input discovery
 
@@ -116,7 +142,7 @@ TROWL_LLM = "1"
 To add a summary to an existing report, set `TROWL_ALWAYS = "1"` in `local.conf`. The next build rescans the image without forcing an image rebuild.
 :::
 
-The next `bitbake` also builds `llama-server` from [llama.cpp](https://github.com/ggml-org/llama.cpp), and fetches the model into `DL_DIR`, where it is checked against its SHA-256. Both are shared through sstate and `DL_DIR` like any other recipe.
+The next `bitbake` also builds `trowl-llama-native` from [llama.cpp](https://github.com/ggml-org/llama.cpp) and fetches the model into `DL_DIR`, checked against its SHA-256. The server build is shared through sstate. The model is read directly from `DL_DIR` and never copied into a sysroot.
 
 ### Offline builds
 
@@ -126,7 +152,18 @@ Set `BB_NO_NETWORK = "1"` for offline scans. CVE feeds must already be cached in
 
 ### Wrynose rebuild failure
 
-With `rm_work` and the `sbom-cve-check` fragment enabled, Wrynose rebuilds fail in `do_sbom_cve_check`. This occurs with or without `meta-trowl` and prevents scanning. Clean the image before rebuilding.
+Wrynose's `do_sbom_cve_check` can fail after CVE database updates, with or without `meta-trowl` or `rm_work`. Failed builds are not scanned.
+
+The `core/yocto/sbom-cve-check` fragment sets its database recipes to `AUTOREV`. A database update reruns `do_sbom_cve_check` without rebuilding the image. The task then looks for `${IMAGE_NAME}.spdx.json` with the current build's `DATETIME`, while the deployed SBOM still has the original image's timestamp.
+
+Pin both databases in `local.conf` to control updates. The fragment is parsed after `local.conf`, so the overrides need `:forcevariable`:
+
+```text
+SRCREV:pn-sbom-cve-check-update-nvd-native:forcevariable = "<commit>"
+SRCREV:pn-sbom-cve-check-update-cvelist-native:forcevariable = "<commit>"
+```
+
+Alternatively, clean the image after a failure, then rebuild:
 
 ```sh
 bitbake -c cleansstate core-image-minimal

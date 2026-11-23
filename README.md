@@ -27,7 +27,7 @@ Read the [documentation](https://trowl.dev) for installation, integrations and u
 - SBOM VEX disagreements (e.g. code compiled but `.ko` module not shipped)
 
 ## Currently supported
-- **Targets:** Yocto
+- **Targets:** Yocto, Buildroot
 - **Filesystems:** ext2/3/4, squashfs, tar, cpio (newc), or an unpacked directory.
 - **Disk images:** `.wic` and other MBR/GPT images (ext or squashfs partitions). Scans the detected rootfs only.
 - **Compression:** zstd, xz, gzip, bzip2, lz4.
