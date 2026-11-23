@@ -5,7 +5,7 @@ description: Scan every image BitBake builds with the meta-trowl layer.
 
 import { Steps } from '@astrojs/starlight/components';
 
-The `meta-trowl` layer scans Yocto images after a successful build. It adds scanner dependencies to `do_build` and leaves image-generation tasks and outputs unchanged. It locates the image, SBOM and kernel inputs automatically.
+The [meta-trowl](https://github.com/corefense-security/meta-trowl) layer scans Yocto images after a successful build. It adds scanner dependencies to `do_build` and leaves image-generation tasks and outputs unchanged. It locates the image, SBOM and kernel inputs automatically.
 
 It is tested on Scarthgap (5.0) and Wrynose with `core-image-minimal` for `qemux86-64`.
 
@@ -44,7 +44,7 @@ Reports default to `trowl/<image>/` in the build directory, outside `TMPDIR`.
 
 ## Toolchain and dependencies
 
-The `trowl` recipe pins the release with `TROWL_TAG` and its commit with `SRCREV`. The same recipe supports both Yocto releases on x86-64 or aarch64 build hosts.
+The `trowl` recipe pins the release with `TROWL_TAG` and its commit with `SRCREV`. The same recipe supports both Yocto releases on `x86-64` or `aarch64` build hosts.
 
 The scan runs on the build host, so the class uses only native recipes:
 
@@ -54,15 +54,22 @@ The scan runs on the build host, so the class uses only native recipes:
 | `trowl-llama` | llama.cpp's `llama-server` | `trowl-llama-native` when `TROWL_LLM = "1"` |
 | `trowl-model-native` | Selected model weights | `trowl-model-native:do_fetch` when `TROWL_LLM = "1"` |
 
-`trowl` and `trowl-llama` are programs, so they set `BBCLASSEXTEND = "native"` and also build for the target. The model is data for the build host only, so its recipe is native only. `trowl-llama` and `trowl-model-native` are excluded from `bitbake world` because only the optional summary needs them, and the model is a multi-gigabyte download.
+`trowl` and `trowl-llama` are programs, so they set `BBCLASSEXTEND = "native"` as Yocto recipes usually do. The model is data for the build host, so its recipe is native only.
 
-Trowl doesn't appear in the image's SBOM. The class adds `trowl-native` to the image's `do_build` only, so no shipped package depends on it.
+Both `trowl-llama` and `trowl-model-native` are excluded from `bitbake world` because only the optional summary needs them, and the model is a multi-GB download. 
 
-Build dependencies are pinned separately:
+No Trowl package appears in the image, or its SBOM.
 
-- Go 1.26 and Node 22 match the versions in `install.sh`. Scarthgap ships Go 1.22, and neither supported Yocto release ships Node.
+:::note
+`meta-trowl` doesn't build or install the device versions unless you add them to `IMAGE_INSTALL`.
+:::
+
+
+**Build dependencies are pinned separately:**
+
+- Go `1.26` and Node `22` match the versions in `install.sh`. Scarthgap ships Go `1.22`, and neither supported Yocto release ships Node.
 - Go modules are downloaded from the Go proxy with pinned checksums and verified against `go.sum`. Scarthgap has no gomod fetcher.
-- Dashboard dependencies use `files/package-lock.json`, copied from the pinned commit's `ui/package-lock.json`. Each tarball is checked against its SHA-512. Wrynose disables the npmsw fetcher, so tarballs are fetched individually.
+- Dashboard dependencies use `files/package-lock.json`, copied from the pinned commit's `ui/package-lock.json`. Each tarball is checked against its `SHA-512`. Wrynose disables the npmsw fetcher, so tarballs are fetched individually.
 
 ### Updating the Trowl recipe
 
@@ -142,7 +149,7 @@ TROWL_LLM = "1"
 To add a summary to an existing report, set `TROWL_ALWAYS = "1"` in `local.conf`. The next build rescans the image without forcing an image rebuild.
 :::
 
-The next `bitbake` also builds `trowl-llama-native` from [llama.cpp](https://github.com/ggml-org/llama.cpp) and fetches the model into `DL_DIR`, checked against its SHA-256. The server build is shared through sstate. The model is read directly from `DL_DIR` and never copied into a sysroot.
+The next `bitbake` also builds `trowl-llama-native` from [llama.cpp](https://github.com/ggml-org/llama.cpp) and fetches the model into `DL_DIR`, checked against its SHA-256. The server includes every CPU variant as a backend and loads the best one at runtime, so one build is shared through sstate across build hosts. The model is read directly from `DL_DIR` and never copied into a sysroot.
 
 ### Offline builds
 

@@ -132,8 +132,8 @@ func fileSha256(path string) string {
 }
 
 // ensureModel returns the model file, downloading it on first use. It returns "" if the file
-// can't be had. TROWL_MODEL_FILE comes from meta-trowl/classes/trowl.bbclass,
-// as model downloading is handled within Yocto
+// can't be had. TROWL_MODEL_FILE comes from classes/trowl.bbclass in
+// https://github.com/corefense-security/meta-trowl, as model downloading is handled within Yocto
 func ensureModel(name, cache string, network bool) string {
 	if p := os.Getenv("TROWL_MODEL_FILE"); p != "" {
 		if py.IsFile(p) {
