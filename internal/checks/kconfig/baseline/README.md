@@ -1,5 +1,7 @@
 # Kernel config baseline
 
+Trowl uses these baselines to check the image's kernel configurations for missing hardening protections and enabled features that increase the attack surface.
+
 Checks are grouped by purpose under `security/`, `fs/`, `mm/` (memory), `net/`, `module/`,
 `kernel/`, `compiler/`, `platform/` and `tty/`. Architecture checks live under `arch/`,
 with separate directories for ARM, ARM64 and x86 variants. Each directory can hold two lists:
