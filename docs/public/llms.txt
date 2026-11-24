@@ -1,0 +1,28 @@
+# Trowl
+
+> Trowl is an open-source (Apache-2.0), post-build security scanner for embedded Linux images. It unpacks an image to find hardening gaps, misconfigurations, secrets and known CVEs across the kernel and userland. It can analyse the image's SBOM, and with the kernel source tree it assigns VEX statuses to kernel CVEs. It runs as a Docker image or a local binary, and scans Yocto builds automatically through the meta-trowl layer.
+
+Source: https://github.com/corefense-security/trowl
+Yocto layer: https://github.com/corefense-security/meta-trowl
+
+## Getting started
+
+- [Run with Docker](https://trowl.dev/getting-started/docker/): scan an image with the published container
+- [Install script](https://trowl.dev/getting-started/install-script/): install Trowl natively on Debian or Ubuntu
+
+## Integrations
+
+- [Yocto](https://trowl.dev/integrations/yocto/): scan every image BitBake builds with the meta-trowl layer
+
+## Capabilities
+
+- [Hardening](https://trowl.dev/features/hardening/): binary, kernel, mount and secrets checks
+- [SBOM analysis](https://trowl.dev/features/sbom/): compare the SBOM with what the image ships
+- [CVEs and VEX](https://trowl.dev/features/cves-vex/): known CVEs, kernel VEX statuses and VEX files
+
+## Reference
+
+- [Supported targets](https://trowl.dev/reference/supported-targets/)
+- [CLI](https://trowl.dev/reference/cli/)
+- [Report](https://trowl.dev/reference/report/)
+- [Architecture](https://trowl.dev/reference/architecture/): data flow, network use and caching

@@ -1,9 +1,39 @@
 ---
 title: Trowl
-description: Static security scanner for embedded Linux images.
+description: Trowl is an open-source, post-build security scanner for embedded Linux images. It finds hardening gaps, known CVEs and SBOM discrepancies in Yocto images, and assigns VEX statuses to kernel CVEs.
 head:
   - tag: title
-    content: Trowl | Security scanner for embedded Linux images.
+    content: Trowl - Security scanner for embedded Linux images.
+  - tag: meta
+    attrs:
+      property: og:type
+      content: website
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "name": "Trowl",
+            "url": "https://trowl.dev/"
+          },
+          {
+            "@type": "SoftwareApplication",
+            "name": "Trowl",
+            "description": "Open-source, post-build security scanner for embedded Linux images. Finds hardening gaps, known CVEs and SBOM discrepancies, and assigns VEX statuses to kernel CVEs.",
+            "url": "https://trowl.dev/",
+            "applicationCategory": "SecurityApplication",
+            "operatingSystem": "Linux",
+            "license": "https://www.apache.org/licenses/LICENSE-2.0",
+            "codeRepository": "https://github.com/corefense-security/trowl",
+            "sameAs": ["https://github.com/corefense-security/trowl"],
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+          }
+        ]
+      }
 template: splash
 editUrl: false
 hero:
