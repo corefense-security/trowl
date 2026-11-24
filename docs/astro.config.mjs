@@ -22,6 +22,13 @@ export default defineConfig({
 				replacesTitle: true,
 			},
 			favicon: '/favicon.svg',
+			// PNG and ICO fallbacks for Google's favicon fetcher (wants a square multiple of 48px).
+			head: [
+				{ tag: 'link', attrs: { rel: 'icon', type: 'image/png', sizes: '96x96', href: '/favicon-96x96.png' } },
+				{ tag: 'link', attrs: { rel: 'icon', type: 'image/png', sizes: '48x48', href: '/favicon-48x48.png' } },
+				{ tag: 'link', attrs: { rel: 'icon', type: 'image/png', sizes: '192x192', href: '/favicon-192x192.png' } },
+				{ tag: 'link', attrs: { rel: 'apple-touch-icon', sizes: '180x180', href: '/apple-touch-icon.png' } },
+			],
 			social: [
 				{ icon: 'github', label: 'GitHub', href: 'https://github.com/corefense-security/trowl' },
 			],
