@@ -155,23 +155,19 @@ The next `bitbake` also builds `trowl-llama-native` from [llama.cpp](https://git
 
 Set `BB_NO_NETWORK = "1"` for offline scans. CVE feeds must already be cached in `~/.cache/trowl` from an online scan. See [Data fetching and caching](../../reference/architecture/#offline-scans).
 
-## Troubleshooting
+## Known issues
 
 ### Wrynose rebuild failure
 
-Wrynose's `do_sbom_cve_check` can fail after CVE database updates, with or without `meta-trowl` or `rm_work`. Failed builds are not scanned.
+With the [sbom-cve-check fragment](https://git.openembedded.org/openembedded-core/tree/meta/conf/fragments/yocto/sbom-cve-check.conf?id=16a03ed6c2db2fa1d7edac4f288a74958a00eb9f#n14) enabled, Wrynose's `do_sbom_cve_check` fails when its CVE database updates but the image doesn't change. It looks for the SBOM under the new build's timestamp. The issue is in OE-Core and occurs with or without meta-trowl.
 
-The `core/yocto/sbom-cve-check` fragment sets its database recipes to `AUTOREV`. A database update reruns `do_sbom_cve_check` without rebuilding the image. The task then looks for `${IMAGE_NAME}.spdx.json` with the current build's `DATETIME`, while the deployed SBOM still has the original image's timestamp.
+The build fails causing Trowl to skip the scan.
 
-Pin both databases in `local.conf` to control updates. The fragment is parsed after `local.conf`, so the overrides need `:forcevariable`:
+To avoid it, pin both databases in `local.conf` with `:forcevariable`, which the fragment can't override:
 
 ```text
 SRCREV:pn-sbom-cve-check-update-nvd-native:forcevariable = "<commit>"
 SRCREV:pn-sbom-cve-check-update-cvelist-native:forcevariable = "<commit>"
 ```
 
-Alternatively, clean the image after a failure, then rebuild:
-
-```sh
-bitbake -c cleansstate core-image-minimal
-```
+After a failure, run `bitbake -c cleansstate <image>` to rebuild the image and clear the error.
