@@ -34,7 +34,9 @@ Other checks cover ELF hardening, kernel configuration, mounts and secrets, and 
 
 </div>
 
-> **Note**: Trowl fetches missing or stale data before the stage that needs it. If a refresh fails, it uses the available cache.
+:::note
+Trowl fetches missing or stale data before the stage that needs it. If a refresh fails, it uses the available cache.
+:::
 
 ### Cache <span id="cache-location"></span>
 
@@ -49,20 +51,14 @@ Use `--cache-dir DIR` to override the default in either case.
 Pass `--no-network` to use cached CVE data, KEV, EPSS and advisory links without internet requests. Stale entries are used without refreshing the cache. The AI summary uses local model weights if available.
 
 :::note
-Missing cached data is omitted. If the selected model is unavailable locally, the scan continues without an AI summary.
+If the selected model is not cached locally, the scan continues without an AI summary.
 :::
 
 ### Local AI summary<span id="local-summary"></span>
 
 Trowl uses a CPU-based LLM inference to generate impact summaries on the UI overview. The analysis is completely local through `llama-server`, and uses facts computed during the scan. If `llama-server` is unavailable, the scan continues without a summary. 
 
-Following models are currently supported (licenses under `Apache 2.0`):
-
-| Model | Notes |
-| --- | --- |
-| `qwen3.5-4b` | Default, download size is about 2.7 GB |
-| `qwen3.5-9b` | Larger model, takes longer to run |
-| `qwen3-4b` | Older model |
+Supported models are `qwen3.5-4b` (default), `qwen3.5-9b` and `qwen3-4b`, all licensed under Apache 2.0.
 
 The model runs with these fixed settings:
 
