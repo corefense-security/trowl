@@ -69,7 +69,7 @@ docker run --rm -t \
 > [!NOTE]
 > `--kernel-tree`, `--kernel-config` and `--sbom` are optional, but enrich Trowl's VEX analysis.
 
-Reports are saved under `/path/to/output/report/` (`index.html` and `report.json`). HTML reports can be viewed locally or via static hosting (GitHub Pages, Cloudflare Pages, S3).
+Reports are saved under `/path/to/output/report/` (`index.html`, `openvex.json` and `report.json`). HTML reports can be viewed locally or via static hosting (GitHub Pages, Cloudflare Pages, S3).
 
 For example:
 
@@ -126,7 +126,7 @@ Trowl queries and caches relevant external resources:
 - Build diffing for security regression
 - License scanning
 - Terminal reporting
-- SBOM/VEX report generation
+- SBOM generation
 - More targets (Android, OpenWrt) and filesystems (EROFS, btrfs)
 
 ## Community
