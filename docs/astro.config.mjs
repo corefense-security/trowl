@@ -15,7 +15,7 @@ export default defineConfig({
 	integrations: [
 		starlight({
 			title: 'Trowl',
-			description: 'Static security scanner for embedded Linux images.',
+			description: 'Trowl is an open-source, post-build security scanner for embedded Linux images. It finds hardening gaps, known CVEs and SBOM discrepancies in Yocto images.',
 			logo: {
 				light: './src/assets/trowl-logo.svg',
 				dark: './src/assets/trowl-logo-dark.svg',
