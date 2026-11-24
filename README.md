@@ -5,13 +5,16 @@
   </picture>
 </p>
 
-Trowl is a post-build security scanner for embedded Linux images.
+<p align="center">
+  <a href="https://trowl.dev"><img src="https://img.shields.io/badge/docs-trowl.dev-2f8cf0?style=flat" alt="Documentation"></a>
+  <a href="https://github.com/corefense-security/trowl/tags"><img src="https://img.shields.io/github/v/tag/corefense-security/trowl?sort=semver&style=flat&label=release" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/corefense-security/trowl?style=flat" alt="License"></a>
+  <a href="https://trowl.dev/getting-started/docker/#verify-the-image"><img src="https://img.shields.io/badge/signed%20with-cosign-4b5563?style=flat" alt="Signed with Cosign"></a>
+</p>
 
-It unpacks the image to detect hardening gaps, misconfigurations and known CVEs across kernel and userland. It can also analyse an SBOM when available.
+Trowl is a post-build security scanner for embedded Linux images. It unpacks the image and checks the kernel and userland for hardening gaps, misconfigurations and known CVEs.
 
-Given a source tree (`--kernel-tree`), it further assigns VEX statuses to kernel CVEs and surfaces disagreements with the SBOM.
-
-Read the [documentation](https://trowl.dev) for installation, integrations and usage guides.
+Given an SBOM (`--sbom`), it compares its contents against what the image ships. With the matching kernel source (`--kernel-tree`), Trowl assigns VEX statuses to kernel CVEs and flags where they disagree with the SBOM.
 
 <p align="center">
   <img src="assets/overview.png" alt="Trowl report overview of a Yocto core-image-minimal scan: key summary, unpatched CVEs, mounts, SBOM vs image and hardening coverage" width="900">
